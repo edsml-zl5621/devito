@@ -58,6 +58,9 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
     def _hashable_content(self):
         return (self.name, self.dtype)
 
+    def _hello(self):
+        print('hello')
+
     @property
     def dtype(self):
         return self._dtype
