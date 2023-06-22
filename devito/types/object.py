@@ -58,9 +58,6 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
     def _hashable_content(self):
         return (self.name, self.dtype)
 
-    def _hello(self):
-        print('hello')
-
     @property
     def dtype(self):
         return self._dtype
@@ -238,6 +235,18 @@ class PetscObject(AbstractObject):
     """
     PetscObjects encode their dtype as a class attribute.
     """
+    __rargs__ = ('name',)
+    __rkwargs__ = ('is_const')
+
+    def __init__(self, name, **kwargs):
+        self.name = name
+
+        self._is_const = kwargs.get('is_const', False)
+
+    @property
+    def is_const(self):
+        return self._is_const
+
 
 
 
