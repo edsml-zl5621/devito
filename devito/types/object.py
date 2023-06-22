@@ -240,7 +240,6 @@ class PetscObject(AbstractObject):
 
     def __init__(self, name, **kwargs):
         self.name = name
-
         self._is_const = kwargs.get('is_const', False)
 
     @property
