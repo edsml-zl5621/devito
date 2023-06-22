@@ -248,6 +248,7 @@ class Basic(CodeSymbol):
     is_Bundle = False
     is_Object = False
     is_LocalObject = False
+    is_PetscObject = False
 
     # Created by the user
     is_Input = False
