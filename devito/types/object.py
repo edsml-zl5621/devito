@@ -225,3 +225,19 @@ class LocalObject(AbstractObject):
     @property
     def _mem_internal_lazy(self):
         return self._liveness == 'lazy'
+    
+
+class PetscObject(AbstractObject):
+
+    """
+    """
+
+    is_PetscObject = True
+
+    dtype = None
+    """
+    PetscObjects encode their dtype as a class attribute.
+    """
+
+
+
