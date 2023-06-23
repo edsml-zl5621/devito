@@ -1,14 +1,16 @@
 import pytest
 
-from ctypes import c_void_p
+from ctypes import c_void_p, POINTER, c_int
 import cgen
 import sympy
+from sympy import Expr
 
 from devito import (Eq, Grid, Function, TimeFunction, Operator, Dimension,  # noqa
                     switchconfig)
 from devito.ir.iet import (Call, Callable, Conditional, DummyExpr, Iteration, List,
                            Lambda, ElementalFunction, CGen, FindSymbols,
-                           filter_iterations, make_efunc, retrieve_iteration_tree)
+                           filter_iterations, make_efunc, retrieve_iteration_tree,
+                           Definition)
 from devito.ir import SymbolRegistry
 from devito.passes.iet.engine import Graph
 from devito.passes.iet.languages.C import CDataManager
@@ -354,6 +356,44 @@ def test_codegen_quality0():
 
 def test_petsc_object():
 
-    class PetscInt(PetscObject):
-        dtype = 
+    # pointer
+    class PetscIntPtr(PetscObject):
+        dtype = POINTER(type('PetscInt', (c_int,), {}))
+
+    # pointer to pointer
+    class PetscIntPPtr(PetscObject):
+        dtype = POINTER(POINTER(type('PetscInt', (c_int,), {})))
+
+    # PetscInts that allow for algebraic expressions
+    class PetscInt(PetscObject, Expr):
+        dtype = type('PetscInt', (c_int,), {})
+
+    # pointer and const functionality
+    ptr1 = PetscIntPtr(name='ptr1', is_const=True)
+    ptr2 = PetscIntPtr(name='ptr2')
+    pptr = PetscIntPPtr(name='pptr')
+
+    defn1 = Definition(ptr1)
+    defn2 = Definition(ptr2)
+    defn3 = Definition(pptr)
+
+    # algebraic expressions
+    nx = PetscInt(name='nx')
+    x_M = PetscInt(name='x_M')
+
+    expr1 = DummyExpr(nx, 15, init=True)
+    expr2 = DummyExpr(x_M, nx-1)
+
+    assert str(defn1) == "const PetscInt * ptr1;"
+    assert str(defn2) == "PetscInt * ptr2;"
+    assert str(defn3) == "PetscInt ** pptr;"
+    assert str(expr1) == "PetscInt nx = 15;"
+    assert str(expr2) == "x_M = -1 + nx;"
+
+
+
+
+
+
+    
 
