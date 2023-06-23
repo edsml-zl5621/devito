@@ -227,6 +227,7 @@ class LocalObject(AbstractObject):
 class PetscObject(AbstractObject):
 
     """
+    
     """
 
     is_PetscObject = True
