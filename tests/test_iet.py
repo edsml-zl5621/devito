@@ -389,11 +389,3 @@ def test_petsc_object():
     assert str(defn3) == "PetscInt ** pptr;"
     assert str(expr1) == "PetscInt x = 15;"
     assert str(expr2) == "x = -1 + y;"
-
-
-
-
-
-
-    
-
