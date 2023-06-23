@@ -378,17 +378,17 @@ def test_petsc_object():
     defn3 = Definition(pptr)
 
     # algebraic expressions
-    nx = PetscInt(name='nx')
-    x_M = PetscInt(name='x_M')
+    x = PetscInt(name='x')
+    y = PetscInt(name='y')
 
-    expr1 = DummyExpr(nx, 15, init=True)
-    expr2 = DummyExpr(x_M, nx-1)
+    expr1 = DummyExpr(x, 15, init=True)
+    expr2 = DummyExpr(x, y-1)
 
     assert str(defn1) == "const PetscInt * ptr1;"
     assert str(defn2) == "PetscInt * ptr2;"
     assert str(defn3) == "PetscInt ** pptr;"
-    assert str(expr1) == "PetscInt nx = 15;"
-    assert str(expr2) == "x_M = -1 + nx;"
+    assert str(expr1) == "PetscInt x = 15;"
+    assert str(expr2) == "x = -1 + y;"
 
 
 
