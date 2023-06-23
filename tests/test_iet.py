@@ -14,7 +14,7 @@ from devito.passes.iet.engine import Graph
 from devito.passes.iet.languages.C import CDataManager
 from devito.symbolics import Byref, FieldFromComposite, InlineIf, Macro
 from devito.tools import as_tuple
-from devito.types import Array, LocalObject, Symbol
+from devito.types import Array, LocalObject, Symbol, PetscObject
 
 
 @pytest.fixture
@@ -350,3 +350,10 @@ def test_codegen_quality0():
     assert len(foo.parameters) == 3
     assert len(foo1.parameters) == 1
     assert foo1.parameters[0] is a
+
+
+def test_petsc_object():
+
+    class PetscInt(PetscObject):
+        dtype = 
+
