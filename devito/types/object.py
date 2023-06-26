@@ -1,14 +1,92 @@
 from ctypes import byref
+from ctypes import POINTER
 
 import sympy
+from sympy import Expr
 
 from devito.tools import Pickable, as_tuple, sympy_mutex
 from devito.types.args import ArgProvider
 from devito.types.caching import Uncached
 from devito.types.basic import Basic
 from devito.types.utils import CtypesFactory
+from devito.tools import dtype_to_cstr, dtype_to_ctype
+from devito.types.utils import DimensionTuple
 
 __all__ = ['Object', 'LocalObject', 'CompositeObject', 'PetscObject']
+
+# original
+# you have to define a dtype for this to be initialised 
+# class AbstractObject(Basic, sympy.Basic, Pickable):
+
+#     """
+#     Base class for objects with derived type.
+
+#     The hierarchy is structured as follows
+
+#                          AbstractObject
+#                                 |
+#                  ---------------------------------
+#                  |                               |
+#               Object                       LocalObject
+#                  |
+#           CompositeObject
+
+#     Warnings
+#     --------
+#     AbstractObjects are created and managed directly by Devito.
+#     """
+
+#     is_AbstractObject = True
+
+#     __rargs__ = ('name', 'dtype')
+
+#     def __new__(cls, *args, **kwargs):
+#         with sympy_mutex:
+#             obj = sympy.Basic.__new__(cls)
+#         obj.__init__(*args, **kwargs)
+#         return obj
+
+#     def __init__(self, name, dtype):
+#         self.name = name
+#         self._dtype = dtype
+
+#     def __repr__(self):
+#         return self.name
+
+#     __str__ = __repr__
+
+#     def _sympystr(self, printer):
+#         return str(self)
+
+#     def _hashable_content(self):
+#         return (self.name, self.dtype)
+
+#     @property
+#     def dtype(self):
+#         return self._dtype
+
+#     @property
+#     def free_symbols(self):
+#         return {self}
+
+#     @property
+#     def _C_name(self):
+#         return self.name
+
+#     @property
+#     def _C_ctype(self):
+#         return self.dtype
+
+#     @property
+#     def base(self):
+#         return self
+
+#     @property
+#     def function(self):
+#         return self
+
+#     # Pickling support
+#     __reduce_ex__ = Pickable.__reduce_ex__
 
 
 class AbstractObject(Basic, sympy.Basic, Pickable):
@@ -36,14 +114,52 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
     __rargs__ = ('name', 'dtype')
 
     def __new__(cls, *args, **kwargs):
+
+        # Preprocess arguments
+        args, kwargs = cls.__args_setup__(*args, **kwargs)
+
+        name = kwargs.get('name')
+        dtype = kwargs.get('dtype')
+        dimensions, indices = cls.__indices_setup__(**kwargs)
+
         with sympy_mutex:
-            obj = sympy.Basic.__new__(cls)
-        obj.__init__(*args, **kwargs)
+            obj = sympy.Basic.__new__(cls, *indices)
+
+        obj._name = name
+        obj._dtype = dtype
+        obj._dimensions = dimensions
+        obj._shape = cls.__shape_setup__(**kwargs)
+        obj.__init_finalize__(*args, **kwargs)
+
         return obj
 
-    def __init__(self, name, dtype):
-        self.name = name
-        self._dtype = dtype
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __init_finalize__(self, *args, **kwargs):
+        pass
+
+    @classmethod
+    def __args_setup__(cls, *args, **kwargs):
+        """
+        Preprocess *args and **kwargs before object initialization.
+
+        Notes
+        -----
+        This stub is invoked only if a look up in the cache fails.
+        """
+        return args, kwargs
+
+
+    @classmethod
+    def __indices_setup__(cls, **kwargs):
+        """Extract the object indices from ``kwargs``."""
+        return (), ()
+
+    @classmethod
+    def __shape_setup__(cls, **kwargs):
+        """Extract the object shape from ``kwargs``."""
+        return ()
 
     def __repr__(self):
         return self.name
@@ -57,6 +173,11 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
 
     def _hashable_content(self):
         return (self.name, self.dtype)
+    
+    @property
+    def name(self):
+        """The name of the object."""
+        return self._name
 
     @property
     def dtype(self):
@@ -73,6 +194,26 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
     @property
     def _C_ctype(self):
         return self.dtype
+    
+    @property
+    def indices(self):
+        """The indices of the object."""
+        return DimensionTuple(*self.args, getters=self.dimensions)
+
+    @property
+    def dimensions(self):
+        """Tuple of Dimensions representing the object indices."""
+        return self._dimensions
+
+    @property
+    def shape(self):
+        """The shape of the object."""
+        return self._shape
+    
+    @property
+    def ndim(self):
+        """The rank of the object."""
+        return len(self.indices)
 
     @property
     def base(self):
@@ -227,25 +368,41 @@ class LocalObject(AbstractObject):
 class PetscObject(AbstractObject):
 
     """
-    
+
     """
 
     is_PetscObject = True
 
-    dtype = None
-    """
-    PetscObjects encode their dtype as a class attribute.
-    """
-    __rargs__ = ('name',)
-    __rkwargs__ = ('is_const')
-
-    def __init__(self, name, **kwargs):
-        self.name = name
+    def __init__(self, **kwargs):
         self._is_const = kwargs.get('is_const', False)
 
+    # perhaps this functionality should be inside AbstractObject but not sure?
+    # since composite objects do not need this function?
     @property
     def is_const(self):
         return self._is_const
+    
+    @classmethod
+    def __shape_setup__(cls, **kwargs):
+        shape = kwargs.get('shape')
+        return shape
+    
+    @classmethod
+    def __indices_setup__(cls, **kwargs):
+        grid = kwargs.get('grid')
+        dimensions = kwargs.get('dimensions')
+        if grid is None:
+            if dimensions is None:
+                raise TypeError("Need either `grid` or `dimensions`")
+        elif dimensions is None:
+            dimensions = grid.dimensions
+    
+
+    
+
+
+
+
 
 
 
