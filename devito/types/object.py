@@ -11,6 +11,7 @@ from devito.types.basic import Basic
 from devito.types.utils import CtypesFactory
 from devito.tools import dtype_to_cstr, dtype_to_ctype
 from devito.types.utils import DimensionTuple
+from devito.types.utils import Buffer, DimensionTuple, NODE, CELL
 
 __all__ = ['Object', 'LocalObject', 'CompositeObject', 'PetscObject']
 
@@ -123,7 +124,7 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
         dimensions, indices = cls.__indices_setup__(**kwargs)
 
         with sympy_mutex:
-            obj = sympy.Basic.__new__(cls, *indices)
+            obj = sympy.Basic.__new__(cls)
 
         obj._name = name
         obj._dtype = dtype
@@ -396,6 +397,14 @@ class PetscObject(AbstractObject):
                 raise TypeError("Need either `grid` or `dimensions`")
         elif dimensions is None:
             dimensions = grid.dimensions
+
+        return tuple(dimensions), tuple(dimensions)
+
+    @property
+    def _C_ctype(self):
+        name = dtype_to_cstr(self._dtype).capitalize()
+        return type('Petsc%s' % name, (dtype_to_ctype(self._dtype),), {})
+
     
 
     
