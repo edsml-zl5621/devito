@@ -419,20 +419,18 @@ class PetscObject(AbstractObjectWithShape):
         elif dimensions is None:
             dimensions = grid.dimensions
 
-        # else:
-        #     if grid is None:
-        #         if dimensions is None:
-        #             raise TypeError("Need either `grid` or `dimensions`")
-        #     elif dimensions is None:
-        #         dimensions = grid.dimensions
-
         return dimensions, dimensions
 
     @property
     def _C_ctype(self):
+        """
+        Default type is scalar. 
+        Based on len(dimensions), 
+        """
         ctypename = 'Petsc%s' % dtype_to_cstr(self.dtype).capitalize()
         ctype = dtype_to_ctype(self.dtype)
         r = type(ctypename, (ctype,), {})
+        # could maybe change this to ndim (function already defined)?
         for n in range(len(self.dimensions)):
             r = POINTER(r)
         return r
