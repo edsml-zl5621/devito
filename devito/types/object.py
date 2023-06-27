@@ -7,11 +7,11 @@ from sympy import Expr
 from devito.tools import Pickable, as_tuple, sympy_mutex
 from devito.types.args import ArgProvider
 from devito.types.caching import Uncached
-from devito.types.basic import Basic
+from devito.types.basic import Basic, Indexed, IndexedData
 from devito.types.utils import CtypesFactory
 from devito.tools import dtype_to_cstr, dtype_to_ctype
 from devito.types.utils import DimensionTuple
-from devito.types.utils import Buffer, DimensionTuple, NODE, CELL
+from devito.types.dimension import Dimension
 
 __all__ = ['Object', 'LocalObject', 'CompositeObject', 'PetscObject']
 
@@ -123,16 +123,21 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
         dtype = kwargs.get('dtype')
         dimensions, indices = cls.__indices_setup__(**kwargs)
 
+        # not sure I NEED THIS LINE?
+        # go through this 
+        newobj = type(name, (cls,), dict(cls.__dict__))
+
         with sympy_mutex:
-            obj = sympy.Basic.__new__(cls)
+            # go through the args here
+            newobj = sympy.Basic.__new__(newobj, *indices)
 
-        obj._name = name
-        obj._dtype = dtype
-        obj._dimensions = dimensions
-        obj._shape = cls.__shape_setup__(**kwargs)
-        obj.__init_finalize__(*args, **kwargs)
+        newobj._name = name
+        newobj._dimensions = dimensions
+        newobj._shape = cls.__shape_setup__(**kwargs)
+        newobj._dtype = dtype
+        newobj.__init_finalize__(*args, **kwargs)
 
-        return obj
+        return newobj
 
     def __init__(self, *args, **kwargs):
         pass
@@ -140,17 +145,13 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
     def __init_finalize__(self, *args, **kwargs):
         pass
 
+            
     @classmethod
     def __args_setup__(cls, *args, **kwargs):
         """
         Preprocess *args and **kwargs before object initialization.
-
-        Notes
-        -----
-        This stub is invoked only if a look up in the cache fails.
         """
         return args, kwargs
-
 
     @classmethod
     def __indices_setup__(cls, **kwargs):
@@ -162,6 +163,7 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
         """Extract the object shape from ``kwargs``."""
         return ()
 
+    # WHY THIS? WHY is the function one obj(i,j)
     def __repr__(self):
         return self.name
 
@@ -175,11 +177,6 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
     def _hashable_content(self):
         return (self.name, self.dtype)
     
-    @property
-    def name(self):
-        """The name of the object."""
-        return self._name
-
     @property
     def dtype(self):
         return self._dtype
@@ -368,13 +365,10 @@ class LocalObject(AbstractObject):
 
 class PetscObject(AbstractObject):
 
-    """
-
-    """
-
     is_PetscObject = True
 
-    def __init__(self, **kwargs):
+    def __init__(self, name, **kwargs):
+        self.name = name
         self._is_const = kwargs.get('is_const', False)
 
     # perhaps this functionality should be inside AbstractObject but not sure?
@@ -390,20 +384,28 @@ class PetscObject(AbstractObject):
     
     @classmethod
     def __indices_setup__(cls, **kwargs):
-        grid = kwargs.get('grid')
-        dimensions = kwargs.get('dimensions')
-        if grid is None:
-            if dimensions is None:
-                raise TypeError("Need either `grid` or `dimensions`")
-        elif dimensions is None:
-            dimensions = grid.dimensions
+        dimensions = kwargs.get('dimensions', None)
+        shape = kwargs.get('shape', None)
 
-        return tuple(dimensions), tuple(dimensions)
+        if dimensions is None and shape is None:
+            return (), ()
+        
+        # THIS I NEED TO CHANGE
+        if shape is not None:
+            i = Dimension(name='i')
+            j = Dimension(name='j')
+            dimensions = tuple((i,j))
+
+        return dimensions, dimensions
 
     @property
     def _C_ctype(self):
-        name = dtype_to_cstr(self._dtype).capitalize()
-        return type('Petsc%s' % name, (dtype_to_ctype(self._dtype),), {})
+        ctypename = 'Petsc%s' % dtype_to_cstr(self.dtype).capitalize()
+        ctype = dtype_to_ctype(self.dtype)
+        r = type(ctypename, (ctype,), {})
+        for n in range(len(self.dimensions)):
+            r = POINTER(r)
+        return r
 
     
 
