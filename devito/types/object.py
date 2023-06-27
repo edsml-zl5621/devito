@@ -7,90 +7,89 @@ from sympy import Expr
 from devito.tools import Pickable, as_tuple, sympy_mutex
 from devito.types.args import ArgProvider
 from devito.types.caching import Uncached
-from devito.types.basic import Basic, Indexed, IndexedData
-from devito.types.utils import CtypesFactory
+from devito.types.basic import Basic
+from devito.types.utils import CtypesFactory, DimensionTuple
 from devito.tools import dtype_to_cstr, dtype_to_ctype
-from devito.types.utils import DimensionTuple
 from devito.types.dimension import Dimension
+
 
 __all__ = ['Object', 'LocalObject', 'CompositeObject', 'PetscObject']
 
-# original
-# you have to define a dtype for this to be initialised 
-# class AbstractObject(Basic, sympy.Basic, Pickable):
-
-#     """
-#     Base class for objects with derived type.
-
-#     The hierarchy is structured as follows
-
-#                          AbstractObject
-#                                 |
-#                  ---------------------------------
-#                  |                               |
-#               Object                       LocalObject
-#                  |
-#           CompositeObject
-
-#     Warnings
-#     --------
-#     AbstractObjects are created and managed directly by Devito.
-#     """
-
-#     is_AbstractObject = True
-
-#     __rargs__ = ('name', 'dtype')
-
-#     def __new__(cls, *args, **kwargs):
-#         with sympy_mutex:
-#             obj = sympy.Basic.__new__(cls)
-#         obj.__init__(*args, **kwargs)
-#         return obj
-
-#     def __init__(self, name, dtype):
-#         self.name = name
-#         self._dtype = dtype
-
-#     def __repr__(self):
-#         return self.name
-
-#     __str__ = __repr__
-
-#     def _sympystr(self, printer):
-#         return str(self)
-
-#     def _hashable_content(self):
-#         return (self.name, self.dtype)
-
-#     @property
-#     def dtype(self):
-#         return self._dtype
-
-#     @property
-#     def free_symbols(self):
-#         return {self}
-
-#     @property
-#     def _C_name(self):
-#         return self.name
-
-#     @property
-#     def _C_ctype(self):
-#         return self.dtype
-
-#     @property
-#     def base(self):
-#         return self
-
-#     @property
-#     def function(self):
-#         return self
-
-#     # Pickling support
-#     __reduce_ex__ = Pickable.__reduce_ex__
-
 
 class AbstractObject(Basic, sympy.Basic, Pickable):
+
+    """
+    Base class for objects with derived type.
+
+    The hierarchy is structured as follows
+
+                         AbstractObject
+                                |
+                 ---------------------------------
+                 |                               |
+              Object                       LocalObject
+                 |
+          CompositeObject
+
+    Warnings
+    --------
+    AbstractObjects are created and managed directly by Devito.
+    """
+
+    is_AbstractObject = True
+
+    __rargs__ = ('name', 'dtype')
+
+    def __new__(cls, *args, **kwargs):
+        with sympy_mutex:
+            obj = sympy.Basic.__new__(cls)
+        obj.__init__(*args, **kwargs)
+        return obj
+
+    def __init__(self, name, dtype):
+        self.name = name
+        self._dtype = dtype
+
+    def __repr__(self):
+        return self.name
+
+    __str__ = __repr__
+
+    def _sympystr(self, printer):
+        return str(self)
+
+    def _hashable_content(self):
+        return (self.name, self.dtype)
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @property
+    def free_symbols(self):
+        return {self}
+
+    @property
+    def _C_name(self):
+        return self.name
+
+    @property
+    def _C_ctype(self):
+        return self.dtype
+
+    @property
+    def base(self):
+        return self
+
+    @property
+    def function(self):
+        return self
+
+    # Pickling support
+    __reduce_ex__ = Pickable.__reduce_ex__
+
+
+class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
     """
     Base class for objects with derived type.
@@ -131,7 +130,7 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
         return obj
 
     def __init__(self, *args, **kwargs):
-        # nothing else needs to be initalised 
+        # nothing else needs to be initalised after __new__?
         pass
 
     @classmethod
@@ -343,7 +342,7 @@ class LocalObject(AbstractObject):
         return self._liveness == 'lazy'
     
 
-class PetscObject(AbstractObject):
+class PetscObject(AbstractObjectWithShape):
 
     is_PetscObject = True
 
@@ -352,8 +351,6 @@ class PetscObject(AbstractObject):
         self._dtype = dtype
         self._is_const = kwargs.get('is_const', False)
 
-    # perhaps this functionality should be inside AbstractObject but not sure?
-    # since composite objects do not need this function?
     @property
     def is_const(self):
         return self._is_const
