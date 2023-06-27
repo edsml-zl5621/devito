@@ -116,42 +116,23 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
 
     def __new__(cls, *args, **kwargs):
 
-        # Preprocess arguments
-        args, kwargs = cls.__args_setup__(*args, **kwargs)
-
         name = kwargs.get('name')
         dtype = kwargs.get('dtype')
         dimensions, indices = cls.__indices_setup__(**kwargs)
 
-        # not sure I NEED THIS LINE?
-        # go through this 
-        newobj = type(name, (cls,), dict(cls.__dict__))
-
         with sympy_mutex:
-            # go through the args here
-            newobj = sympy.Basic.__new__(newobj, *indices)
+            obj = sympy.Basic.__new__(cls, *indices)
 
-        newobj._name = name
-        newobj._dimensions = dimensions
-        newobj._shape = cls.__shape_setup__(**kwargs)
-        newobj._dtype = dtype
-        newobj.__init_finalize__(*args, **kwargs)
+        obj._name = name
+        obj._dtype = dtype
+        obj._dimensions = dimensions
+        obj._shape = cls.__shape_setup__(**kwargs)
 
-        return newobj
+        return obj
 
     def __init__(self, *args, **kwargs):
+        # nothing else needs to be initalised 
         pass
-
-    def __init_finalize__(self, *args, **kwargs):
-        pass
-
-            
-    @classmethod
-    def __args_setup__(cls, *args, **kwargs):
-        """
-        Preprocess *args and **kwargs before object initialization.
-        """
-        return args, kwargs
 
     @classmethod
     def __indices_setup__(cls, **kwargs):
@@ -162,13 +143,12 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
     def __shape_setup__(cls, **kwargs):
         """Extract the object shape from ``kwargs``."""
         return ()
-
-    # WHY THIS? WHY is the function one obj(i,j)
+    
     def __repr__(self):
         return self.name
 
     __str__ = __repr__
-
+    
     def _sympystr(self, printer):
         return str(self)
 
@@ -367,8 +347,9 @@ class PetscObject(AbstractObject):
 
     is_PetscObject = True
 
-    def __init__(self, name, **kwargs):
+    def __init__(self, name, dtype, **kwargs):
         self.name = name
+        self._dtype = dtype
         self._is_const = kwargs.get('is_const', False)
 
     # perhaps this functionality should be inside AbstractObject but not sure?
@@ -387,14 +368,23 @@ class PetscObject(AbstractObject):
         dimensions = kwargs.get('dimensions', None)
         shape = kwargs.get('shape', None)
 
-        if dimensions is None and shape is None:
+        # if dimensions are provided but no shape then what?
+        # also need to check that dimensions match len(shape)
+
+        if dimensions is None and (shape is None or len(shape)==0):
             return (), ()
         
-        # THIS I NEED TO CHANGE
+        # THIS I NEED TO CHANGE?
         if shape is not None:
+            
             i = Dimension(name='i')
             j = Dimension(name='j')
-            dimensions = tuple((i,j))
+            k = Dimension(name='k')
+
+            dims_dict = {1: (i,), 2: (i, j), 3: (i, j, k)}
+
+            if len(shape) in dims_dict:
+                dimensions = dims_dict[len(shape)]
 
         return dimensions, dimensions
 
