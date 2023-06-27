@@ -96,22 +96,13 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
     The hierarchy is structured as follows
 
-                         AbstractObject
-                                |
-                 ---------------------------------
-                 |                               |
-              Object                       LocalObject
-                 |
-          CompositeObject
-
-    Warnings
-    --------
-    AbstractObjects are created and managed directly by Devito.
+                         AbstractObjectWithShape
+                                  |
+                             PetscObject
     """
 
     AbstractObjectWithShape = True
 
-    __rargs__ = ('name', 'dtype')
 
     def __new__(cls, *args, **kwargs):
 
@@ -126,12 +117,19 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         obj._dtype = dtype
         obj._dimensions = dimensions
         obj._shape = cls.__shape_setup__(**kwargs)
+        obj.__init_finalize__(*args, **kwargs)
 
         return obj
 
     def __init__(self, *args, **kwargs):
         # nothing else needs to be initalised after __new__?
         pass
+
+    def __init_finalize__(self, *args, **kwargs):
+        self._is_const = kwargs.get('is_const', False)
+
+        # There may or may not be a `Grid`
+        self._grid = kwargs.get('grid')
 
     @classmethod
     def __indices_setup__(cls, **kwargs):
@@ -173,6 +171,10 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         return self.dtype
     
     @property
+    def is_const(self):
+        return self._is_const
+    
+    @property
     def indices(self):
         """The indices of the object."""
         return DimensionTuple(*self.args, getters=self.dimensions)
@@ -199,6 +201,11 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     @property
     def function(self):
         return self
+
+    @property
+    def grid(self):
+        """The Grid on which the discretization occurred."""
+        return self._grid
 
     # Pickling support
     __reduce_ex__ = Pickable.__reduce_ex__
@@ -351,37 +358,73 @@ class PetscObject(AbstractObjectWithShape):
         self._dtype = dtype
         self._is_const = kwargs.get('is_const', False)
 
-    @property
-    def is_const(self):
-        return self._is_const
-    
+    # taken exactly from Function class but removed the "shape_global"
+    #  # and also added the option for all dimensions, shape and grid to be None
     @classmethod
     def __shape_setup__(cls, **kwargs):
+        grid = kwargs.get('grid')
+        dimensions = kwargs.get('dimensions')
         shape = kwargs.get('shape')
+
+        if dimensions is None and shape is None and grid is None:
+            return None
+
+        if grid is None:
+            if shape is None:
+                raise TypeError("Need either `grid` or `shape`")
+        elif shape is None:
+            if dimensions is not None and dimensions != grid.dimensions:
+                raise TypeError("Need `shape` as not all `dimensions` are in `grid`")
+            shape = grid.shape_local
+        elif dimensions is None:
+            raise TypeError("`dimensions` required if both `grid` and "
+                            "`shape` are provided")
+        else:
+            # Got `grid`, `dimensions`, and `shape`. We sanity-check that the
+            # Dimensions in `dimensions` also appearing in `grid` have same size
+            # (given by `shape`) as that provided in `grid`
+            if len(shape) != len(dimensions):
+                raise ValueError("`shape` and `dimensions` must have the "
+                                 "same number of entries")
+            loc_shape = []
+            for d, s in zip(dimensions, shape):
+                if d in grid.dimensions:
+                    size = grid.dimension_map[d]
+                    if size.glb != s and s is not None:
+                        raise ValueError("Dimension `%s` is given size `%d`, "
+                                         "while `grid` says `%s` has size `%d` "
+                                         % (d, s, d, size.glb))
+                    else:
+                        loc_shape.append(size.loc)
+                else:
+                    loc_shape.append(s)
+            shape = tuple(loc_shape)
         return shape
-    
+
+    # taken from Function class but removed staggered indices
+    # and also added the option for all dimensions, shape and grid to be None
     @classmethod
     def __indices_setup__(cls, **kwargs):
-        dimensions = kwargs.get('dimensions', None)
-        shape = kwargs.get('shape', None)
+        grid = kwargs.get('grid')
+        # shape = kwargs.get('shape', None)
+        shape = kwargs.get('shape')
+        dimensions = kwargs.get('dimensions')
 
-        # if dimensions are provided but no shape then what?
-        # also need to check that dimensions match len(shape)
-
-        if dimensions is None and (shape is None or len(shape)==0):
+        if dimensions is None and shape is None and grid is None:
             return (), ()
-        
-        # THIS I NEED TO CHANGE?
-        if shape is not None:
-            
-            i = Dimension(name='i')
-            j = Dimension(name='j')
-            k = Dimension(name='k')
 
-            dims_dict = {1: (i,), 2: (i, j), 3: (i, j, k)}
+        if grid is None:
+                if dimensions is None:
+                    raise TypeError("Need either `grid` or `dimensions`")
+        elif dimensions is None:
+            dimensions = grid.dimensions
 
-            if len(shape) in dims_dict:
-                dimensions = dims_dict[len(shape)]
+        # else:
+        #     if grid is None:
+        #         if dimensions is None:
+        #             raise TypeError("Need either `grid` or `dimensions`")
+        #     elif dimensions is None:
+        #         dimensions = grid.dimensions
 
         return dimensions, dimensions
 
