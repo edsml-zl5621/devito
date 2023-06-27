@@ -109,7 +109,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     AbstractObjects are created and managed directly by Devito.
     """
 
-    is_AbstractObject = True
+    AbstractObjectWithShape = True
 
     __rargs__ = ('name', 'dtype')
 

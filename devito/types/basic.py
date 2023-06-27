@@ -240,6 +240,7 @@ class Basic(CodeSymbol):
     # Top hierarchy
     is_AbstractFunction = False
     is_AbstractObject = False
+    is_AbstractObjectWithShape = False
 
     # Symbolic objects created internally by Devito
     is_Symbol = False
