@@ -20,7 +20,6 @@ from devito.tools import as_tuple
 from devito.types import Array, LocalObject, Symbol, PetscObject
 
 
-
 @pytest.fixture
 def grid():
     return Grid((3, 3, 3))
@@ -362,13 +361,13 @@ def test_petsc_object():
     obj2 = PetscObject(name='obj2', dtype=np.int32, is_const=True)
     obj3 = PetscObject(name='obj3', dtype=np.int32, grid=Grid((2,)))
     obj4 = PetscObject(name='obj4', dtype=np.int32, grid=Grid((5,)))
-    obj5 = PetscObject(name='obj5', dtype=np.int32, grid=Grid((5,5)))
-    obj6 = PetscObject(name='obj6', dtype=np.int32, grid=Grid((5,5)), is_const=True)
-    obj7 = PetscObject(name='obj7', dtype=np.int32, grid=Grid((10,20,30)))
+    obj5 = PetscObject(name='obj5', dtype=np.int32, grid=Grid((5, 5)))
+    obj6 = PetscObject(name='obj6', dtype=np.int32, grid=Grid((5, 5)), is_const=True)
+    obj7 = PetscObject(name='obj7', dtype=np.int32, grid=Grid((10, 20, 30)))
 
-    i,j,k = dimensions('i j k')
-    obj8 = PetscObject(name='obj8', dtype=np.int32, shape=(1,1), dimensions=(i,j))
-    obj9 = PetscObject(name='obj9', dtype=np.int32, shape=(1,1,1), dimensions=(i,j,k))
+    i, j, k = dimensions('i j k')
+    obj8 = PetscObject(name='obj8', dtype=np.int32, shape=(1, 1), dimensions=(i, j))
+    obj9 = PetscObject(name='obj9', dtype=np.int32, shape=(1, 1, 1), dimensions=(i, j, k))
 
     defn1 = Definition(obj1)
     defn2 = Definition(obj2)

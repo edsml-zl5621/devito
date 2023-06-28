@@ -2,7 +2,6 @@ from ctypes import byref
 from ctypes import POINTER
 
 import sympy
-from sympy import Expr
 
 from devito.tools import Pickable, as_tuple, sympy_mutex
 from devito.types.args import ArgProvider
@@ -10,7 +9,6 @@ from devito.types.caching import Uncached
 from devito.types.basic import Basic
 from devito.types.utils import CtypesFactory, DimensionTuple
 from devito.tools import dtype_to_cstr, dtype_to_ctype
-from devito.types.dimension import Dimension
 
 
 __all__ = ['Object', 'LocalObject', 'CompositeObject', 'PetscObject']
@@ -139,12 +137,12 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     def __shape_setup__(cls, **kwargs):
         """Extract the object shape from ``kwargs``."""
         return ()
-    
+
     def __repr__(self):
         return self.name
 
     __str__ = __repr__
-    
+
     def _sympystr(self, printer):
         return str(self)
 
@@ -152,7 +150,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
     def _hashable_content(self):
         return (self.name, self.dtype)
-    
+
     @property
     def dtype(self):
         return self._dtype
@@ -168,11 +166,11 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     @property
     def _C_ctype(self):
         return self.dtype
-    
+
     @property
     def is_const(self):
         return self._is_const
-    
+
     @property
     def indices(self):
         """The indices of the object."""
@@ -187,7 +185,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     def shape(self):
         """The shape of the object."""
         return self._shape
-    
+
     @property
     def ndim(self):
         """The rank of the object."""
@@ -345,7 +343,7 @@ class LocalObject(AbstractObject):
     @property
     def _mem_internal_lazy(self):
         return self._liveness == 'lazy'
-    
+
 
 class PetscObject(AbstractObjectWithShape):
 
@@ -412,8 +410,8 @@ class PetscObject(AbstractObjectWithShape):
             return (), ()
 
         if grid is None:
-                if dimensions is None:
-                    raise TypeError("Need either `grid` or `dimensions`")
+            if dimensions is None:
+                raise TypeError("Need either `grid` or `dimensions`")
         elif dimensions is None:
             dimensions = grid.dimensions
 
@@ -429,15 +427,3 @@ class PetscObject(AbstractObjectWithShape):
         for n in range(self.ndim):
             r = POINTER(r)
         return r
-
-    
-
-    
-
-
-
-
-
-
-
-
