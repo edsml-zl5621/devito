@@ -1,12 +1,13 @@
 import pytest
 
-from ctypes import c_void_p, POINTER, c_int
+from ctypes import c_void_p
 import cgen
 import sympy
-from sympy import Expr
+import numpy as np
+
 
 from devito import (Eq, Grid, Function, TimeFunction, Operator, Dimension,  # noqa
-                    switchconfig)
+                    switchconfig, dimensions)
 from devito.ir.iet import (Call, Callable, Conditional, DummyExpr, Iteration, List,
                            Lambda, ElementalFunction, CGen, FindSymbols,
                            filter_iterations, make_efunc, retrieve_iteration_tree,
@@ -17,6 +18,7 @@ from devito.passes.iet.languages.C import CDataManager
 from devito.symbolics import Byref, FieldFromComposite, InlineIf, Macro
 from devito.tools import as_tuple
 from devito.types import Array, LocalObject, Symbol, PetscObject
+
 
 
 @pytest.fixture
@@ -354,38 +356,76 @@ def test_codegen_quality0():
     assert foo1.parameters[0] is a
 
 
+# def test_petsc_object():
+
+#     # pointer
+#     class PetscIntPtr(PetscObject):
+#         dtype = POINTER(type('PetscInt', (c_int,), {}))
+
+#     # pointer to pointer
+#     class PetscIntPPtr(PetscObject):
+#         dtype = POINTER(POINTER(type('PetscInt', (c_int,), {})))
+
+#     # PetscInts that allow for algebraic expressions
+#     class PetscInt(PetscObject, Expr):
+#         dtype = type('PetscInt', (c_int,), {})
+
+#     # pointer and const functionality
+#     ptr1 = PetscIntPtr(name='ptr1', is_const=True)
+#     ptr2 = PetscIntPtr(name='ptr2')
+#     pptr = PetscIntPPtr(name='pptr')
+
+#     defn1 = Definition(ptr1)
+#     defn2 = Definition(ptr2)
+#     defn3 = Definition(pptr)
+
+#     # algebraic expressions
+#     x = PetscInt(name='x')
+#     y = PetscInt(name='y')
+
+#     expr1 = DummyExpr(x, 15, init=True)
+#     expr2 = DummyExpr(x, y-1)
+
+#     assert str(defn1) == "const PetscInt * ptr1;"
+#     assert str(defn2) == "PetscInt * ptr2;"
+#     assert str(defn3) == "PetscInt ** pptr;"
+#     assert str(expr1) == "PetscInt x = 15;"
+#     assert str(expr2) == "x = -1 + y;"
+
+
 def test_petsc_object():
 
-    # pointer
-    class PetscIntPtr(PetscObject):
-        dtype = POINTER(type('PetscInt', (c_int,), {}))
+    obj1 = PetscObject(name='obj1', dtype=np.int32)
+    obj2 = PetscObject(name='obj2', dtype=np.int32, is_const=True)
+    obj3 = PetscObject(name='obj3', dtype=np.int32, grid=Grid((2,)))
+    obj4 = PetscObject(name='obj4', dtype=np.int32, grid=Grid((5,)))
+    obj5 = PetscObject(name='obj5', dtype=np.int32, grid=Grid((5,5)))
+    obj6 = PetscObject(name='obj6', dtype=np.int32, grid=Grid((5,5)), is_const=True)
+    obj7 = PetscObject(name='obj7', dtype=np.int32, grid=Grid((10,20,30)))
 
-    # pointer to pointer
-    class PetscIntPPtr(PetscObject):
-        dtype = POINTER(POINTER(type('PetscInt', (c_int,), {})))
 
-    # PetscInts that allow for algebraic expressions
-    class PetscInt(PetscObject, Expr):
-        dtype = type('PetscInt', (c_int,), {})
+    i,j,k = dimensions('i j k')
+    obj8 = PetscObject(name='obj8', dtype=np.int32, shape=(1,1), dimensions=(i,j))
+    obj9 = PetscObject(name='obj9', dtype=np.int32, shape=(1,1,1), dimensions=(i,j,k))
 
-    # pointer and const functionality
-    ptr1 = PetscIntPtr(name='ptr1', is_const=True)
-    ptr2 = PetscIntPtr(name='ptr2')
-    pptr = PetscIntPPtr(name='pptr')
 
-    defn1 = Definition(ptr1)
-    defn2 = Definition(ptr2)
-    defn3 = Definition(pptr)
+    defn1 = Definition(obj1)
+    defn2 = Definition(obj2)
+    defn3 = Definition(obj3)
+    defn4 = Definition(obj4)
+    defn5 = Definition(obj5)
+    defn6 = Definition(obj6)
+    defn7 = Definition(obj7)
+    defn8 = Definition(obj8)
+    defn9 = Definition(obj9)
 
-    # algebraic expressions
-    x = PetscInt(name='x')
-    y = PetscInt(name='y')
 
-    expr1 = DummyExpr(x, 15, init=True)
-    expr2 = DummyExpr(x, y-1)
-
-    assert str(defn1) == "const PetscInt * ptr1;"
-    assert str(defn2) == "PetscInt * ptr2;"
-    assert str(defn3) == "PetscInt ** pptr;"
-    assert str(expr1) == "PetscInt x = 15;"
-    assert str(expr2) == "x = -1 + y;"
+    assert str(defn1) == "PetscInt obj1;"
+    assert str(defn2) == "const PetscInt obj2;"
+    assert str(defn3) == "PetscInt * obj3;"
+    assert str(defn4) == "PetscInt * obj4;"
+    assert str(defn5) == "PetscInt ** obj5;"
+    assert str(defn6) == "const PetscInt ** obj6;"
+    assert str(defn7) == "PetscInt *** obj7;"
+    assert str(defn8) == "PetscInt ** obj8;"
+    assert str(defn9) == "PetscInt *** obj9;"

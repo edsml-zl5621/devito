@@ -204,7 +204,6 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
     @property
     def grid(self):
-        """The Grid on which the discretization occurred."""
         return self._grid
 
     # Pickling support
@@ -424,13 +423,11 @@ class PetscObject(AbstractObjectWithShape):
     @property
     def _C_ctype(self):
         """
-        Default type is scalar. 
-        Based on len(dimensions), 
         """
         ctypename = 'Petsc%s' % dtype_to_cstr(self.dtype).capitalize()
         ctype = dtype_to_ctype(self.dtype)
         r = type(ctypename, (ctype,), {})
-        # could maybe change this to ndim (function already defined)?
+        # could maybe change this to ndim (already defined)?
         for n in range(len(self.dimensions)):
             r = POINTER(r)
         return r
