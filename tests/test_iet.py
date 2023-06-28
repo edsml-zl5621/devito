@@ -356,43 +356,6 @@ def test_codegen_quality0():
     assert foo1.parameters[0] is a
 
 
-# def test_petsc_object():
-
-#     # pointer
-#     class PetscIntPtr(PetscObject):
-#         dtype = POINTER(type('PetscInt', (c_int,), {}))
-
-#     # pointer to pointer
-#     class PetscIntPPtr(PetscObject):
-#         dtype = POINTER(POINTER(type('PetscInt', (c_int,), {})))
-
-#     # PetscInts that allow for algebraic expressions
-#     class PetscInt(PetscObject, Expr):
-#         dtype = type('PetscInt', (c_int,), {})
-
-#     # pointer and const functionality
-#     ptr1 = PetscIntPtr(name='ptr1', is_const=True)
-#     ptr2 = PetscIntPtr(name='ptr2')
-#     pptr = PetscIntPPtr(name='pptr')
-
-#     defn1 = Definition(ptr1)
-#     defn2 = Definition(ptr2)
-#     defn3 = Definition(pptr)
-
-#     # algebraic expressions
-#     x = PetscInt(name='x')
-#     y = PetscInt(name='y')
-
-#     expr1 = DummyExpr(x, 15, init=True)
-#     expr2 = DummyExpr(x, y-1)
-
-#     assert str(defn1) == "const PetscInt * ptr1;"
-#     assert str(defn2) == "PetscInt * ptr2;"
-#     assert str(defn3) == "PetscInt ** pptr;"
-#     assert str(expr1) == "PetscInt x = 15;"
-#     assert str(expr2) == "x = -1 + y;"
-
-
 def test_petsc_object():
 
     obj1 = PetscObject(name='obj1', dtype=np.int32)
@@ -403,11 +366,9 @@ def test_petsc_object():
     obj6 = PetscObject(name='obj6', dtype=np.int32, grid=Grid((5,5)), is_const=True)
     obj7 = PetscObject(name='obj7', dtype=np.int32, grid=Grid((10,20,30)))
 
-
     i,j,k = dimensions('i j k')
     obj8 = PetscObject(name='obj8', dtype=np.int32, shape=(1,1), dimensions=(i,j))
     obj9 = PetscObject(name='obj9', dtype=np.int32, shape=(1,1,1), dimensions=(i,j,k))
-
 
     defn1 = Definition(obj1)
     defn2 = Definition(obj2)
@@ -418,7 +379,6 @@ def test_petsc_object():
     defn7 = Definition(obj7)
     defn8 = Definition(obj8)
     defn9 = Definition(obj9)
-
 
     assert str(defn1) == "PetscInt obj1;"
     assert str(defn2) == "const PetscInt obj2;"
