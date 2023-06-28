@@ -97,12 +97,11 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     The hierarchy is structured as follows
 
                          AbstractObjectWithShape
-                                  |
-                             PetscObject
+                                   |
+                              PetscObject
     """
 
     AbstractObjectWithShape = True
-
 
     def __new__(cls, *args, **kwargs):
 
@@ -427,8 +426,7 @@ class PetscObject(AbstractObjectWithShape):
         ctypename = 'Petsc%s' % dtype_to_cstr(self.dtype).capitalize()
         ctype = dtype_to_ctype(self.dtype)
         r = type(ctypename, (ctype,), {})
-        # could maybe change this to ndim (already defined)?
-        for n in range(len(self.dimensions)):
+        for n in range(self.ndim):
             r = POINTER(r)
         return r
 
