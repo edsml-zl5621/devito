@@ -7,7 +7,6 @@ from devito.types.args import ArgProvider
 from devito.types.caching import Uncached
 from devito.types.basic import Basic
 from devito.types.utils import CtypesFactory, DimensionTuple
-from devito.tools import dtype_to_cstr, dtype_to_ctype
 
 
 __all__ = ['Object', 'LocalObject', 'CompositeObject', 'AbstractObjectWithShape']
@@ -91,14 +90,12 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     def __new__(cls, *args, **kwargs):
 
         name = kwargs.get('name')
-        dtype = kwargs.get('dtype')
         dimensions, indices = cls.__indices_setup__(**kwargs)
 
         with sympy_mutex:
             obj = sympy.Basic.__new__(cls, *indices)
 
         obj._name = name
-        obj._dtype = dtype
         obj._dimensions = dimensions
         obj._shape = cls.__shape_setup__(**kwargs)
         obj.__init_finalize__(*args, **kwargs)
@@ -106,7 +103,6 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         return obj
 
     def __init__(self, *args, **kwargs):
-        # nothing else needs to be initalised after __new__?
         pass
 
     def __init_finalize__(self, *args, **kwargs):
@@ -180,10 +176,6 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     @property
     def _C_name(self):
         return self.name
-
-    @property
-    def _C_ctype(self):
-        return self.dtype
 
     @property
     def is_const(self):

@@ -3,6 +3,7 @@ Machinery to lower np.dtypes and ctypes into strings
 """
 
 import ctypes
+from ctypes import c_int, c_void_p, c_float
 
 import numpy as np
 from cgen import dtype_to_ctype as cgen_dtype_to_ctype
@@ -11,7 +12,7 @@ __all__ = ['int2', 'int3', 'int4', 'float2', 'float3', 'float4', 'double2',  # n
            'double3', 'double4', 'dtypes_vector_mapper', 'dtype_to_mpidtype',
            'dtype_to_cstr', 'dtype_to_ctype', 'dtype_to_mpitype', 'dtype_len',
            'ctypes_to_cstr', 'c_restrict_void_p', 'ctypes_vector_mapper',
-           'is_external_ctype', 'infer_dtype']
+           'is_external_ctype', 'infer_dtype', 'petsc_name_to_ctype']
 
 
 # *** Custom np.dtypes
@@ -279,3 +280,15 @@ def infer_dtype(dtypes):
     else:
         # E.g., mixed integer arithmetic
         return max(dtypes, key=lambda i: np.dtype(i).itemsize, default=None)
+
+
+# this probably shouldn't be in this folder?
+def petsc_name_to_ctype(petsc_name):
+
+    return {
+        'PetscInt': c_int,
+        # note these are probably wrong
+        'PetscScalar' : c_float,
+        'Mat' : c_void_p,
+        'Vec' : c_void_p
+    }[petsc_name]

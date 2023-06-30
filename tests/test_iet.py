@@ -358,17 +358,21 @@ def test_codegen_quality0():
 
 def test_petsc_object():
 
-    obj1 = PetscObject(name='obj1', dtype=np.int32)
-    obj2 = PetscObject(name='obj2', dtype=np.int32, is_const=True)
-    obj3 = PetscObject(name='obj3', dtype=np.int32, grid=Grid((2,)))
-    obj4 = PetscObject(name='obj4', dtype=np.int32, grid=Grid((5,)))
-    obj5 = PetscObject(name='obj5', dtype=np.int32, grid=Grid((5, 5)))
-    obj6 = PetscObject(name='obj6', dtype=np.int32, grid=Grid((5, 5)), is_const=True)
-    obj7 = PetscObject(name='obj7', dtype=np.int32, grid=Grid((10, 20, 30)))
+    obj1 = PetscObject(name='obj1', petsc_name='PetscInt')
+    obj2 = PetscObject(name='obj2', petsc_name='PetscScalar')
+    obj3 = PetscObject(name='obj3', petsc_name='Mat')
+    obj4 = PetscObject(name='obj4', petsc_name='Vec')
+
+    obj5 = PetscObject(name='obj5', petsc_name='PetscInt', is_const=True)
+    obj6 = PetscObject(name='obj6', petsc_name='PetscScalar', grid=Grid((2,)))
+    obj7 = PetscObject(name='obj7', petsc_name='PetscInt', grid=Grid((5,)))
+    obj8 = PetscObject(name='obj8', petsc_name='PetscScalar', grid=Grid((5, 5)))
+    obj9 = PetscObject(name='obj9', petsc_name='PetscInt', grid=Grid((5, 5)), is_const=True)
+    obj10 = PetscObject(name='obj10', petsc_name='PetscScalar', grid=Grid((10, 20, 30)))
 
     i, j, k = dimensions('i j k')
-    obj8 = PetscObject(name='obj8', dtype=np.int32, shape=(1, 1), dimensions=(i, j))
-    obj9 = PetscObject(name='obj9', dtype=np.int32, shape=(1, 1, 1), dimensions=(i, j, k))
+    obj11 = PetscObject(name='obj11', petsc_name='PetscInt', shape=(1, 1), dimensions=(i, j))
+    obj12 = PetscObject(name='obj12', petsc_name='PetscScalar', shape=(1, 1, 1), dimensions=(i, j, k))
 
     defn1 = Definition(obj1)
     defn2 = Definition(obj2)
@@ -379,13 +383,23 @@ def test_petsc_object():
     defn7 = Definition(obj7)
     defn8 = Definition(obj8)
     defn9 = Definition(obj9)
+    defn10 = Definition(obj10)
+    defn11 = Definition(obj11)
+    defn12 = Definition(obj12)
 
     assert str(defn1) == "PetscInt obj1;"
-    assert str(defn2) == "const PetscInt obj2;"
-    assert str(defn3) == "PetscInt * obj3;"
-    assert str(defn4) == "PetscInt * obj4;"
-    assert str(defn5) == "PetscInt ** obj5;"
-    assert str(defn6) == "const PetscInt ** obj6;"
-    assert str(defn7) == "PetscInt *** obj7;"
-    assert str(defn8) == "PetscInt ** obj8;"
-    assert str(defn9) == "PetscInt *** obj9;"
+    assert str(defn2) == "PetscScalar obj2;"
+    assert str(defn3) == "Mat obj3;"
+    assert str(defn4) == "Vec obj4;"
+    assert str(defn5) == "const PetscInt obj5;"
+    assert str(defn6) == "PetscScalar * obj6;"
+    assert str(defn7) == "PetscInt * obj7;"
+    assert str(defn8) == "PetscScalar ** obj8;"
+    assert str(defn9) == "const PetscInt ** obj9;"
+    assert str(defn10) == "PetscScalar *** obj10;"
+    assert str(defn11) == "PetscInt ** obj11;"
+    assert str(defn12) == "PetscScalar *** obj12;"
+
+
+def test_petsc_indexify():
+    return NotImplementedError
