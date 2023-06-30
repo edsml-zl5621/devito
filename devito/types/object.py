@@ -1,4 +1,4 @@
-from ctypes import byref, POINTER
+from ctypes import byref
 
 import sympy
 
@@ -10,7 +10,7 @@ from devito.types.utils import CtypesFactory, DimensionTuple
 from devito.tools import dtype_to_cstr, dtype_to_ctype
 
 
-__all__ = ['Object', 'LocalObject', 'CompositeObject', 'PetscObject']
+__all__ = ['Object', 'LocalObject', 'CompositeObject', 'AbstractObjectWithShape']
 
 
 class AbstractObject(Basic, sympy.Basic, Pickable):
@@ -88,16 +88,6 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
 
 class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
-    """
-    Base class for objects with derived type.
-
-    The hierarchy is structured as follows
-
-                         AbstractObjectWithShape
-                                   |
-                              PetscObject
-    """
-
     def __new__(cls, *args, **kwargs):
 
         name = kwargs.get('name')
@@ -125,15 +115,66 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         # There may or may not be a `Grid`
         self._grid = kwargs.get('grid')
 
+    # taken from Function class but removed staggered indices
+    # and also added the option for all dimensions, shape and grid to be None
     @classmethod
     def __indices_setup__(cls, **kwargs):
-        """Extract the object indices from ``kwargs``."""
-        return (), ()
+        grid = kwargs.get('grid')
+        # shape = kwargs.get('shape', None)
+        shape = kwargs.get('shape')
+        dimensions = kwargs.get('dimensions')
+
+        if dimensions is None and shape is None and grid is None:
+            return (), ()
+
+        if grid is None:
+            if dimensions is None:
+                raise TypeError("Need either `grid` or `dimensions`")
+        elif dimensions is None:
+            dimensions = grid.dimensions
+
+        return dimensions, dimensions
 
     @classmethod
     def __shape_setup__(cls, **kwargs):
-        """Extract the object shape from ``kwargs``."""
-        return ()
+        grid = kwargs.get('grid')
+        dimensions = kwargs.get('dimensions')
+        shape = kwargs.get('shape')
+
+        if dimensions is None and shape is None and grid is None:
+            return None
+
+        if grid is None:
+            if shape is None:
+                raise TypeError("Need either `grid` or `shape`")
+        elif shape is None:
+            if dimensions is not None and dimensions != grid.dimensions:
+                raise TypeError("Need `shape` as not all `dimensions` are in `grid`")
+            shape = grid.shape_local
+        elif dimensions is None:
+            raise TypeError("`dimensions` required if both `grid` and "
+                            "`shape` are provided")
+        else:
+            # Got `grid`, `dimensions`, and `shape`. We sanity-check that the
+            # Dimensions in `dimensions` also appearing in `grid` have same size
+            # (given by `shape`) as that provided in `grid`
+            if len(shape) != len(dimensions):
+                raise ValueError("`shape` and `dimensions` must have the "
+                                 "same number of entries")
+            loc_shape = []
+            for d, s in zip(dimensions, shape):
+                if d in grid.dimensions:
+                    size = grid.dimension_map[d]
+                    if size.glb != s and s is not None:
+                        raise ValueError("Dimension `%s` is given size `%d`, "
+                                         "while `grid` says `%s` has size `%d` "
+                                         % (d, s, d, size.glb))
+                    else:
+                        loc_shape.append(size.loc)
+                else:
+                    loc_shape.append(s)
+            shape = tuple(loc_shape)
+        return shape
 
     def __repr__(self):
         return self.name
@@ -340,85 +381,3 @@ class LocalObject(AbstractObject):
     @property
     def _mem_internal_lazy(self):
         return self._liveness == 'lazy'
-
-
-class PetscObject(AbstractObjectWithShape):
-
-    def __init__(self, name, dtype, **kwargs):
-        self.name = name
-        self._dtype = dtype
-        self._is_const = kwargs.get('is_const', False)
-
-    # taken exactly from Function class but removed the "shape_global"
-    #  # and also added the option for all dimensions, shape and grid to be None
-    @classmethod
-    def __shape_setup__(cls, **kwargs):
-        grid = kwargs.get('grid')
-        dimensions = kwargs.get('dimensions')
-        shape = kwargs.get('shape')
-
-        if dimensions is None and shape is None and grid is None:
-            return None
-
-        if grid is None:
-            if shape is None:
-                raise TypeError("Need either `grid` or `shape`")
-        elif shape is None:
-            if dimensions is not None and dimensions != grid.dimensions:
-                raise TypeError("Need `shape` as not all `dimensions` are in `grid`")
-            shape = grid.shape_local
-        elif dimensions is None:
-            raise TypeError("`dimensions` required if both `grid` and "
-                            "`shape` are provided")
-        else:
-            # Got `grid`, `dimensions`, and `shape`. We sanity-check that the
-            # Dimensions in `dimensions` also appearing in `grid` have same size
-            # (given by `shape`) as that provided in `grid`
-            if len(shape) != len(dimensions):
-                raise ValueError("`shape` and `dimensions` must have the "
-                                 "same number of entries")
-            loc_shape = []
-            for d, s in zip(dimensions, shape):
-                if d in grid.dimensions:
-                    size = grid.dimension_map[d]
-                    if size.glb != s and s is not None:
-                        raise ValueError("Dimension `%s` is given size `%d`, "
-                                         "while `grid` says `%s` has size `%d` "
-                                         % (d, s, d, size.glb))
-                    else:
-                        loc_shape.append(size.loc)
-                else:
-                    loc_shape.append(s)
-            shape = tuple(loc_shape)
-        return shape
-
-    # taken from Function class but removed staggered indices
-    # and also added the option for all dimensions, shape and grid to be None
-    @classmethod
-    def __indices_setup__(cls, **kwargs):
-        grid = kwargs.get('grid')
-        # shape = kwargs.get('shape', None)
-        shape = kwargs.get('shape')
-        dimensions = kwargs.get('dimensions')
-
-        if dimensions is None and shape is None and grid is None:
-            return (), ()
-
-        if grid is None:
-            if dimensions is None:
-                raise TypeError("Need either `grid` or `dimensions`")
-        elif dimensions is None:
-            dimensions = grid.dimensions
-
-        return dimensions, dimensions
-
-    @property
-    def _C_ctype(self):
-        """
-        """
-        ctypename = 'Petsc%s' % dtype_to_cstr(self.dtype).capitalize()
-        ctype = dtype_to_ctype(self.dtype)
-        r = type(ctypename, (ctype,), {})
-        for n in range(self.ndim):
-            r = POINTER(r)
-        return r

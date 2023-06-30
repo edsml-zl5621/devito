@@ -17,7 +17,8 @@ from devito.passes.iet.engine import Graph
 from devito.passes.iet.languages.C import CDataManager
 from devito.symbolics import Byref, FieldFromComposite, InlineIf, Macro
 from devito.tools import as_tuple
-from devito.types import Array, LocalObject, Symbol, PetscObject
+from devito.types import Array, LocalObject, Symbol
+from devito.passes.iet.petsc import PetscObject
 
 
 @pytest.fixture
