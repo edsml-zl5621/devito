@@ -240,7 +240,6 @@ class Basic(CodeSymbol):
     # Top hierarchy
     is_AbstractFunction = False
     is_AbstractObject = False
-    is_AbstractObjectWithShape = False
 
     # Symbolic objects created internally by Devito
     is_Symbol = False
@@ -251,7 +250,6 @@ class Basic(CodeSymbol):
     is_Bundle = False
     is_Object = False
     is_LocalObject = False
-    is_PetscObject = False
 
     # Created by the user
     is_Input = False

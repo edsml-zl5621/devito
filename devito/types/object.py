@@ -1,5 +1,4 @@
-from ctypes import byref
-from ctypes import POINTER
+from ctypes import byref, POINTER
 
 import sympy
 
@@ -98,8 +97,6 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
                                    |
                               PetscObject
     """
-
-    AbstractObjectWithShape = True
 
     def __new__(cls, *args, **kwargs):
 
@@ -346,8 +343,6 @@ class LocalObject(AbstractObject):
 
 
 class PetscObject(AbstractObjectWithShape):
-
-    is_PetscObject = True
 
     def __init__(self, name, dtype, **kwargs):
         self.name = name
