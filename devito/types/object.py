@@ -120,14 +120,13 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     @classmethod
     def __indices_setup__(cls, **kwargs):
         grid = kwargs.get('grid')
-        # shape = kwargs.get('shape', None)
         shape = kwargs.get('shape')
         dimensions = kwargs.get('dimensions')
 
         if dimensions is None and shape is None and grid is None:
             return (), ()
 
-        if grid is None:
+        elif grid is None:
             if dimensions is None:
                 raise TypeError("Need either `grid` or `dimensions`")
         elif dimensions is None:
@@ -144,36 +143,17 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         if dimensions is None and shape is None and grid is None:
             return None
 
-        if grid is None:
+        elif grid is None:
             if shape is None:
                 raise TypeError("Need either `grid` or `shape`")
         elif shape is None:
             if dimensions is not None and dimensions != grid.dimensions:
                 raise TypeError("Need `shape` as not all `dimensions` are in `grid`")
-            shape = grid.shape_local
+            shape = grid.shape
         elif dimensions is None:
             raise TypeError("`dimensions` required if both `grid` and "
                             "`shape` are provided")
-        else:
-            # Got `grid`, `dimensions`, and `shape`. We sanity-check that the
-            # Dimensions in `dimensions` also appearing in `grid` have same size
-            # (given by `shape`) as that provided in `grid`
-            if len(shape) != len(dimensions):
-                raise ValueError("`shape` and `dimensions` must have the "
-                                 "same number of entries")
-            loc_shape = []
-            for d, s in zip(dimensions, shape):
-                if d in grid.dimensions:
-                    size = grid.dimension_map[d]
-                    if size.glb != s and s is not None:
-                        raise ValueError("Dimension `%s` is given size `%d`, "
-                                         "while `grid` says `%s` has size `%d` "
-                                         % (d, s, d, size.glb))
-                    else:
-                        loc_shape.append(size.loc)
-                else:
-                    loc_shape.append(s)
-            shape = tuple(loc_shape)
+   
         return shape
 
     def __repr__(self):
