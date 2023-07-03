@@ -282,12 +282,13 @@ def infer_dtype(dtypes):
         return max(dtypes, key=lambda i: np.dtype(i).itemsize, default=None)
 
 
-# this probably shouldn't be in this folder?
+# this probably shouldn't be in this file
 def petsc_name_to_ctype(petsc_name):
 
     return {
         'PetscInt': c_int,
-        # note these are probably wrong
+        # note these are probably wrong,
+        # but just putting these for now
         'PetscScalar' : c_float,
         'Mat' : c_void_p,
         'Vec' : c_void_p

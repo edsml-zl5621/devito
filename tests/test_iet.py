@@ -399,7 +399,7 @@ def test_petsc_object():
     assert str(defn10) == "PetscScalar *** obj10;"
     assert str(defn11) == "PetscInt ** obj11;"
     assert str(defn12) == "PetscScalar *** obj12;"
-
+    
 
 def test_petsc_indexify():
     return NotImplementedError
