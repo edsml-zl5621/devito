@@ -147,7 +147,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         elif dimensions is None:
             raise TypeError("`dimensions` required if both `grid` and "
                             "`shape` are provided")
-   
+
         return shape
 
     def __repr__(self):
@@ -189,11 +189,6 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         return self._is_const
 
     @property
-    def indices(self):
-        """The indices of the object."""
-        return DimensionTuple(*self.args, getters=self.dimensions)
-
-    @property
     def dimensions(self):
         """Tuple of Dimensions representing the object indices."""
         return self._dimensions
@@ -219,7 +214,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     @property
     def grid(self):
         return self._grid
-    
+
     # properties to enable indexification
     @property
     def indices(self):

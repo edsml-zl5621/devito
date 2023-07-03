@@ -3,7 +3,6 @@ import pytest
 from ctypes import c_void_p
 import cgen
 import sympy
-import numpy as np
 
 
 from devito import (Eq, Grid, Function, TimeFunction, Operator, Dimension,  # noqa
@@ -358,21 +357,24 @@ def test_codegen_quality0():
 
 def test_petsc_object():
 
-    obj1 = PetscObject(name='obj1', petsc_name='PetscInt')
-    obj2 = PetscObject(name='obj2', petsc_name='PetscScalar')
-    obj3 = PetscObject(name='obj3', petsc_name='Mat')
-    obj4 = PetscObject(name='obj4', petsc_name='Vec')
+    obj1 = PetscObject(name='obj1', petsc_type='PetscInt')
+    obj2 = PetscObject(name='obj2', petsc_type='PetscScalar')
+    obj3 = PetscObject(name='obj3', petsc_type='Mat')
+    obj4 = PetscObject(name='obj4', petsc_type='Vec')
 
-    obj5 = PetscObject(name='obj5', petsc_name='PetscInt', is_const=True)
-    obj6 = PetscObject(name='obj6', petsc_name='PetscScalar', grid=Grid((2,)))
-    obj7 = PetscObject(name='obj7', petsc_name='PetscInt', grid=Grid((5,)))
-    obj8 = PetscObject(name='obj8', petsc_name='PetscScalar', grid=Grid((5, 5)))
-    obj9 = PetscObject(name='obj9', petsc_name='PetscInt', grid=Grid((5, 5)), is_const=True)
-    obj10 = PetscObject(name='obj10', petsc_name='PetscScalar', grid=Grid((10, 20, 30)))
+    obj5 = PetscObject(name='obj5', petsc_type='PetscInt', is_const=True)
+    obj6 = PetscObject(name='obj6', petsc_type='PetscScalar', grid=Grid((2,)))
+    obj7 = PetscObject(name='obj7', petsc_type='PetscInt', grid=Grid((5,)))
+    obj8 = PetscObject(name='obj8', petsc_type='PetscScalar', grid=Grid((5, 5)))
+    obj9 = PetscObject(name='obj9', petsc_type='PetscInt', grid=Grid((5, 5)),
+                       is_const=True)
+    obj10 = PetscObject(name='obj10', petsc_type='PetscScalar', grid=Grid((10, 20, 30)))
 
     i, j, k = dimensions('i j k')
-    obj11 = PetscObject(name='obj11', petsc_name='PetscInt', shape=(1, 1), dimensions=(i, j))
-    obj12 = PetscObject(name='obj12', petsc_name='PetscScalar', shape=(1, 1, 1), dimensions=(i, j, k))
+    obj11 = PetscObject(name='obj11', petsc_type='PetscInt', shape=(1, 1),
+                        dimensions=(i, j))
+    obj12 = PetscObject(name='obj12', petsc_type='PetscScalar', shape=(1, 1, 1),
+                        dimensions=(i, j, k))
 
     defn1 = Definition(obj1)
     defn2 = Definition(obj2)
@@ -399,7 +401,54 @@ def test_petsc_object():
     assert str(defn10) == "PetscScalar *** obj10;"
     assert str(defn11) == "PetscInt ** obj11;"
     assert str(defn12) == "PetscScalar *** obj12;"
-    
+
 
 def test_petsc_indexify():
-    return NotImplementedError
+
+    retval = PetscObject(name='retval', petsc_type='PetscErrorCode')
+    A_matfree = PetscObject(name='A_matfree', petsc_type='Mat')
+    xvec = PetscObject(name='xvec', petsc_type='Vec')
+    yvec = PetscObject(name='yvec', petsc_type='Vec')
+    i, j, k = dimensions('i j k')
+    xarr = PetscObject(name='xarr', petsc_type='PetscScalar', shape=(1,),
+                       dimensions=(i,), is_const=True)
+    yarr = PetscObject(name='yarr', petsc_type='PetscScalar', shape=(1,),
+                       dimensions=(i,))
+    nx = PetscObject(name='nx', petsc_type='PetscInt')
+    tmp = PetscObject(name='tmp', petsc_type='PetscScalar')
+
+    line1 = Definition(xarr)
+    line2 = Definition(yarr)
+    line3 = DummyExpr(nx, 15, init=True)
+    line4 = Definition(tmp)
+
+    # The VecGetArrayRead function provides a way to access the underlying
+    # array of values stored in a 'Vec' object without making a copy of the data.
+    line5 = Call('PetscCall', [Call('VecGetArrayRead', arguments=[xvec, Byref(xarr)])])
+    line6 = Call('PetscCall', [Call('VecGetArray', arguments=[yvec, Byref(yarr)])])
+    line7 = DummyExpr(tmp, xarr.indexify(indices=(50,)))
+    line8 = DummyExpr(yarr.indexify(indices=(50,)), tmp)
+    line9 = Call('PetscCall', [Call('VecRestoreArrayRead',
+                                    arguments=[xvec, Byref(xarr)])])
+    line10 = Call('PetscCall', [Call('VecRestoreArray', arguments=[yvec, Byref(yarr)])])
+    line11 = Call('PetscFunctionReturn', 0)
+
+    iet = [line1, line2, line3, line4, line5, line6, line7, line8, line9, line10, line11]
+
+    MyMatShellMult = Callable('MyMatShellMult', iet, retval=retval,
+                              parameters=(A_matfree, xvec, yvec))
+    assert str(MyMatShellMult) == """\
+PetscErrorCode MyMatShellMult(Mat A_matfree, Vec xvec, Vec yvec)
+{
+  const PetscScalar * xarr;
+  PetscScalar * yarr;
+  PetscInt nx = 15;
+  PetscScalar tmp;
+  PetscCall(VecGetArrayRead(xvec,&xarr));
+  PetscCall(VecGetArray(yvec,&yarr));
+  tmp = xarr[50];
+  yarr[50] = tmp;
+  PetscCall(VecRestoreArrayRead(xvec,&xarr));
+  PetscCall(VecRestoreArray(yvec,&yarr));
+  PetscFunctionReturn(0);
+}"""

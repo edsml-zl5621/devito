@@ -12,7 +12,7 @@ __all__ = ['int2', 'int3', 'int4', 'float2', 'float3', 'float4', 'double2',  # n
            'double3', 'double4', 'dtypes_vector_mapper', 'dtype_to_mpidtype',
            'dtype_to_cstr', 'dtype_to_ctype', 'dtype_to_mpitype', 'dtype_len',
            'ctypes_to_cstr', 'c_restrict_void_p', 'ctypes_vector_mapper',
-           'is_external_ctype', 'infer_dtype', 'petsc_name_to_ctype']
+           'is_external_ctype', 'infer_dtype', 'petsc_type_to_ctype']
 
 
 # *** Custom np.dtypes
@@ -283,13 +283,14 @@ def infer_dtype(dtypes):
 
 
 # this probably shouldn't be in this file
-def petsc_name_to_ctype(petsc_name):
+def petsc_type_to_ctype(petsc_type):
     "Map Petsc types to ctypes type"
     return {
         'PetscInt': c_int,
         # note these are probably wrong,
         # but just putting these for now
-        'PetscScalar' : c_float,
-        'Mat' : c_void_p,
-        'Vec' : c_void_p
-    }[petsc_name]
+        'PetscScalar': c_float,
+        'Mat': c_void_p,
+        'Vec': c_void_p,
+        'PetscErrorCode': c_int
+    }[petsc_type]
