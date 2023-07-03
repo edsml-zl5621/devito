@@ -111,8 +111,6 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         # There may or may not be a `Grid`
         self._grid = kwargs.get('grid')
 
-    # taken from Function class but removed staggered indices
-    # and also added the option for all dimensions, shape and grid to be None
     @classmethod
     def __indices_setup__(cls, **kwargs):
         grid = kwargs.get('grid')
