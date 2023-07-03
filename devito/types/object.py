@@ -231,12 +231,9 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         """The wrapped IndexedData object."""
         return IndexedData(self.name, shape=self._shape, function=self.function)
 
-    def indexify(self, indices=None, subs=None):
+    def indexify(self, indices):
         """Create a types.Indexed from the current object."""
-        if indices is not None:
-            return Indexed(self.indexed, *indices)
-
-        return self.indexed[self.indices]
+        return Indexed(self.indexed, *indices)
 
 
 class Object(AbstractObject, ArgProvider, Uncached):
