@@ -155,11 +155,10 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
     __str__ = __repr__
 
-<<<<<<< HEAD
     # def _sympystr(self, printer):
     #     return str(self)
 
-<<<<<<< HEAD
+
     _ccode = _sympystr
 
     def _hashable_content(self):
@@ -172,14 +171,32 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     @property
     def free_symbols(self):
         return {self}
-=======
+
     # @property
     # def free_symbols(self):
     #     return {self}
->>>>>>> cdf20df03 (start to indexify petscobj)
 
-=======
->>>>>>> 0d3a1e839 (fix indexify)
+    # commenting these out for now since I removed dtype
+    # but they may be needed later on?
+
+    # def _sympystr(self, printer):
+    #     return str(self)
+
+    # def _hashable_content(self):
+    #     return (self.name, self.dtype)
+
+    # @property
+    # def dtype(self):
+    #     return self._dtype
+
+    # @property
+    # def free_symbols(self):
+    #     return {self}
+
+    # @property
+    # def _C_ctype(self):
+    #     return self.dtype
+
     @property
     def _C_name(self):
         return self.name
@@ -222,13 +239,39 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         return DimensionTuple(*self.args, getters=self.dimensions)
 
     @property
+    def indices_ref(self):
+        """The reference indices of the object (indices at first creation)."""
+        return DimensionTuple(*self.function.indices, getters=self.dimensions)
+
+    @property
+    def origin(self):
+        return DimensionTuple(*(r-d for d, r in zip(self.dimensions, self.indices_ref)),
+                              getters=self.dimensions)
+
+    @property
     def indexed(self):
         """The wrapped IndexedData object."""
         return IndexedData(self.name, shape=self._shape, function=self.function)
 
-    def indexify(self, indices):
+    # changing it back so it works exactly the same as a Devito Function
+    def indexify(self, indices=None, subs=None):
         """Create a types.Indexed from the current object."""
-        return Indexed(self.indexed, *indices)
+        if indices is not None:
+            return Indexed(self.indexed, *indices)
+
+        # Substitution for each index (spacing only used in own dimension)
+        subs = subs or {}
+        subs = [{**{d.spacing: 1, -d.spacing: -1}, **subs} for d in self.dimensions]
+
+        # Indices after substitutions
+        indices = [sympy.sympify(a.subs(d, d - o).xreplace(s)) for a, d, o, s in
+                   zip(self.args, self.dimensions, self.origin, subs)]
+        indices = [i.xreplace({k: sympy.Integer(k) for k in i.atoms(sympy.Float)})
+                   for i in indices]
+        return self.indexed[indices]
+
+    # Pickling support
+    __reduce_ex__ = Pickable.__reduce_ex__
 
 
 class Object(AbstractObject, ArgProvider, Uncached):
