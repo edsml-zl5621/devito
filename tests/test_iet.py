@@ -405,6 +405,23 @@ def test_petsc_object():
 
 def test_petsc_indexify():
 
+    i, j = dimensions('i j')
+    xarr = PetscObject(name='xarr', petsc_type='PetscScalar', shape=(50, 50),
+                       dimensions=(i, j), is_const=True)
+
+    tmp = PetscObject(name='tmp', petsc_type='PetscScalar')
+
+    line1 = Definition(xarr)
+    line2 = DummyExpr(tmp, xarr.indexify(indices=(25, 25)))
+    line3 = DummyExpr(tmp, xarr.indexify())
+
+    assert str(line1) == "const PetscScalar ** xarr;"
+    assert str(line2) == "tmp = xarr[25][25];"
+    assert str(line3) == "tmp = xarr[i][j];"
+
+
+def test_petsc_callable():
+
     retval = PetscObject(name='retval', petsc_type='PetscErrorCode')
     A_matfree = PetscObject(name='A_matfree', petsc_type='Mat')
     xvec = PetscObject(name='xvec', petsc_type='Vec')
