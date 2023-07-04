@@ -1,11 +1,12 @@
 from ctypes import POINTER
 from devito.tools import petsc_type_to_ctype
 from devito.types import AbstractObjectWithShape
+from sympy import Expr
 
 __all__ = ['PetscObject']
 
 
-class PetscObject(AbstractObjectWithShape):
+class PetscObject(AbstractObjectWithShape, Expr):
 
     def __init__(self, name, petsc_type, **kwargs):
         self.name = name
@@ -19,6 +20,10 @@ class PetscObject(AbstractObjectWithShape):
         for n in range(self.ndim):
             r = POINTER(r)
         return r
+
+    @property
+    def dtype(self):
+        return self._petsc_type
 
     @property
     def petsc_type(self):

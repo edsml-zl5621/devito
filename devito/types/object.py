@@ -90,12 +90,14 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     def __new__(cls, *args, **kwargs):
 
         name = kwargs.get('name')
+        dtype = kwargs.get('dtype')
         dimensions, indices = cls.__indices_setup__(**kwargs)
 
         with sympy_mutex:
             obj = sympy.Basic.__new__(cls, *indices)
 
         obj._name = name
+        obj._dtype = dtype
         obj._dimensions = dimensions
         obj._shape = cls.__shape_setup__(**kwargs)
         obj.__init_finalize__(*args, **kwargs)
@@ -155,39 +157,18 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
     __str__ = __repr__
 
-    # def _sympystr(self, printer):
-    #     return str(self)
-
-
-    _ccode = _sympystr
+    def _sympystr(self, printer):
+        return str(self)
 
     def _hashable_content(self):
         return (self.name, self.dtype)
 
-    @property
-    def dtype(self):
-        return self._dtype
+    # def _hashable_content(self):
+    #     return (self.name, self.dtype)
 
     @property
     def free_symbols(self):
         return {self}
-
-    # @property
-    # def free_symbols(self):
-    #     return {self}
-
-    # commenting these out for now since I removed dtype
-    # but they may be needed later on?
-
-    # def _sympystr(self, printer):
-    #     return str(self)
-
-    # def _hashable_content(self):
-    #     return (self.name, self.dtype)
-
-    # @property
-    # def dtype(self):
-    #     return self._dtype
 
     # @property
     # def free_symbols(self):
