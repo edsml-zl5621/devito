@@ -420,6 +420,35 @@ def test_petsc_indexify():
     assert str(line3) == "tmp = xarr[i][j];"
 
 
+def test_petsc_expressions():
+
+    a = PetscObject(name='a', petsc_type='PetscInt')
+    expr1 = DummyExpr(a, 15, init=True)
+
+    b = PetscObject(name='b', petsc_type='PetscScalar', is_const=True)
+    expr2 = DummyExpr(b, 2.0, init=True)
+
+    # c = PetscObject(name='c', petsc_type='PetscScalar', is_const=True)
+    # expr3 = DummyExpr(c, b/a, init=True)
+
+    # d = PetscObject(name='d', petsc_type='PetscScalar', is_const=True)
+    # expr4 = DummyExpr(d, 10./b/b)
+
+    # e = PetscObject(name='d', petsc_type='PetscScalar')
+    # expr5 = DummyExpr(e, d - c)
+    # expr6 = DummyExpr(e, d + c)
+    # expr7 = DummyExpr(e, d*c)
+
+    assert str(expr1) == "PetscInt a = 15;"
+    # assert str(expr2) == "const PetscScalar b = 2.0"
+    # assert str(expr3) == "const PetscScalar c = b/a"
+    # assert str(expr4) == "const PetscScalar d = 10./b/b"
+    # assert str(expr5) == "e = d - c"
+
+
+    
+
+
 def test_petsc_callable():
 
     retval = PetscObject(name='retval', petsc_type='PetscErrorCode')
