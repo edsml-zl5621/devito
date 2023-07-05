@@ -88,7 +88,7 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
 class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
     # need to check this?
-    __rkwargs__ = ('name', 'dtype', 'is_const', 'grid', 'shape', 'dimensions')
+    # __rkwargs__ = ('name', 'dtype', 'is_const', 'grid', 'shape', 'dimensions')
 
     def __new__(cls, *args, **kwargs):
 
@@ -164,7 +164,8 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         return str(self)
 
     def _hashable_content(self):
-        return (self.name, self.dtype, self.is_const, self.grid, self.shape, self.dimensions)
+        return (self.name, self.dtype, self.is_const,
+                self.grid, self.shape, self.dimensions)
 
     # def _hashable_content(self):
     #     return (self.name, self.dtype)

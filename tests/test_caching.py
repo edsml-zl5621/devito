@@ -11,6 +11,7 @@ from devito import (Grid, Function, TimeFunction, SparseFunction, SparseTimeFunc
                     TensorFunction, TensorTimeFunction, VectorTimeFunction)
 from devito.types import (DeviceID, NThreadsBase, NPThreads, Object, LocalObject,
                           Scalar, Symbol, ThreadID)
+from devito.passes.iet.petsc import PetscObject
 
 
 @pytest.fixture
@@ -221,6 +222,25 @@ class TestHashing(object):
         assert hash(foo1) == hash(foo2)
         assert hash(foo3) != hash(foo0)
         assert hash(foo3) != hash(foo1)
+
+    def test_petsc_object(self):
+
+        foo0 = PetscObject(name='foo', petsc_type='PetscInt')
+        foo1 = PetscObject(name='foo', petsc_type='PetscInt')
+
+        grid0 = Grid(shape=(4, 4))
+        grid1 = Grid(shape=(5, 5))
+        foo2 = PetscObject(name='foo', petsc_type='PetscInt', grid=grid0)
+        foo3 = PetscObject(name='foo', petsc_type='PetscInt', grid=grid0)
+        foo4 = PetscObject(name='foo', petsc_type='PetscInt', grid=grid1)
+
+
+        assert hash(foo0) == hash(foo1)
+        assert hash(foo2) == hash(foo3)
+        assert hash(foo2) != hash(foo4)
+        assert hash(foo3) != hash(foo4)
+
+
 
 
 class TestCaching(object):
