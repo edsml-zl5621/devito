@@ -8,7 +8,7 @@ import pytest
 from devito import (Grid, Function, TimeFunction, SparseFunction, SparseTimeFunction,
                     ConditionalDimension, SubDimension, Constant, Operator, Eq, Dimension,
                     DefaultDimension, _SymbolCache, clear_cache, solve, VectorFunction,
-                    TensorFunction, TensorTimeFunction, VectorTimeFunction)
+                    TensorFunction, TensorTimeFunction, VectorTimeFunction, dimensions)
 from devito.types import (DeviceID, NThreadsBase, NPThreads, Object, LocalObject,
                           Scalar, Symbol, ThreadID)
 from devito.passes.iet.petsc import PetscObject
@@ -228,17 +228,53 @@ class TestHashing(object):
         foo0 = PetscObject(name='foo', petsc_type='PetscInt')
         foo1 = PetscObject(name='foo', petsc_type='PetscInt')
 
-        grid0 = Grid(shape=(4, 4))
-        grid1 = Grid(shape=(5, 5))
+        grid0 = Grid(shape=(4, 4, 4))
+        grid1 = Grid(shape=(5, 5, 5))
         foo2 = PetscObject(name='foo', petsc_type='PetscInt', grid=grid0)
         foo3 = PetscObject(name='foo', petsc_type='PetscInt', grid=grid0)
         foo4 = PetscObject(name='foo', petsc_type='PetscInt', grid=grid1)
 
+        i, j, k = dimensions('i j k')
+        foo5 = PetscObject(name='foo', petsc_type='PetscInt', shape=(4, 4, 4), dimensions=(i, j, k))
+        foo6 = PetscObject(name='foo', petsc_type='PetscInt', shape=(4, 4, 4), dimensions=(i, j, k))
+        foo7 = PetscObject(name='foo', petsc_type='PetscInt', shape=(5, 5, 5), dimensions=(i, j, k))
+
+        foo8 = PetscObject(name='foo', petsc_type='PetscInt', is_const=True)
+        foo9 = PetscObject(name='foo', petsc_type='PetscInt', is_const=True)
+        foo10 = PetscObject(name='foo', petsc_type='PetscInt', is_const=False)
+
 
         assert hash(foo0) == hash(foo1)
         assert hash(foo2) == hash(foo3)
+        assert foo2 is not foo4
         assert hash(foo2) != hash(foo4)
+        assert foo3 is not foo4
         assert hash(foo3) != hash(foo4)
+        assert foo0 is not foo2
+        assert hash(foo0) != hash(foo2)
+        assert foo0 is not foo3
+        assert hash(foo0) != hash(foo3)
+        assert foo0 is not foo4
+        assert hash(foo0) != hash(foo4)
+
+        assert hash(foo5) == hash(foo6)
+        assert foo5 is not foo7
+        assert hash(foo5) != hash(foo7)
+        assert foo6 is not foo7
+        assert hash(foo6) != hash(foo7)
+        assert foo3 is not foo6
+        assert hash(foo3) != hash(foo6)
+
+        assert hash(foo8) == hash(foo9)
+        assert foo8 is not foo10
+        assert hash(foo8) != hash(foo10)
+        assert foo9 is not foo10
+        assert hash(foo9) != hash(foo10)
+        assert foo4 is not foo7
+        assert hash(foo4) != hash(foo7)
+
+        assert hash(foo0) == hash(foo10)
+        assert hash(foo1) == hash(foo10)
 
 
 
