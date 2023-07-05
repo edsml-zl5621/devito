@@ -87,9 +87,12 @@ class AbstractObject(Basic, sympy.Basic, Pickable):
 
 class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
+    # need to check this?
+    __rkwargs__ = ('name', 'dtype', 'is_const', 'grid', 'shape', 'dimensions')
+
     def __new__(cls, *args, **kwargs):
 
-        name = kwargs.get('name')
+        name = kwargs.get('name') or args[0]
         dtype = kwargs.get('dtype')
         dimensions, indices = cls.__indices_setup__(**kwargs)
 
