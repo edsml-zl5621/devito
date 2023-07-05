@@ -11,11 +11,13 @@ class PetscObject(AbstractObjectWithShape, Expr):
     # need to check this?
     __rkwargs__ = (AbstractObjectWithShape.__rkwargs__ +
                    ('petsc_type',))
+    
+    def __init__(self, *args, **kwargs):
+        self.name = kwargs.get('name') or args[0]
+        self._petsc_type = kwargs.get('petsc_type')
 
-    def __init__(self, name, petsc_type, **kwargs):
-        self.name = name
-        self._petsc_type = petsc_type
-        self._is_const = kwargs.get('is_const', False)
+    def _hashable_content(self):
+        return super()._hashable_content() + (self.petsc_type,)
 
     @property
     def _C_ctype(self):

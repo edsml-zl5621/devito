@@ -164,7 +164,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         return str(self)
 
     def _hashable_content(self):
-        return (self.name, self.dtype)
+        return (self.name, self.dtype, self.is_const, self.grid, self.shape, self.dimensions)
 
     # def _hashable_content(self):
     #     return (self.name, self.dtype)
