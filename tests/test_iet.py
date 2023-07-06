@@ -10,7 +10,7 @@ from devito import (Eq, Grid, Function, TimeFunction, Operator, Dimension,  # no
 from devito.ir.iet import (Call, Callable, Conditional, DummyExpr, Iteration, List,
                            Lambda, ElementalFunction, CGen, FindSymbols,
                            filter_iterations, make_efunc, retrieve_iteration_tree,
-                           Definition)
+                           Definition, Expression)
 from devito.ir import SymbolRegistry
 from devito.passes.iet.engine import Graph
 from devito.passes.iet.languages.C import CDataManager
@@ -18,6 +18,7 @@ from devito.symbolics import Byref, FieldFromComposite, InlineIf, Macro
 from devito.tools import as_tuple
 from devito.types import Array, LocalObject, Symbol
 from devito.passes.iet.petsc import PetscObject
+from devito.ir.equations import DummyEq
 
 
 @pytest.fixture
@@ -440,6 +441,51 @@ def test_petsc_expressions():
     assert str(expr4) == "const PetscScalar b = c*1.0/d;"
     assert str(expr5) == "const PetscScalar b = c*d;"
     assert str(expr6) == "const PetscScalar b = pow(c, -2);"
+
+
+def test_petsc_iterations():
+    dims = {'x': Dimension(name='x'),
+            'y': Dimension(name='y')}
+    
+    symbs = {'left': PetscObject(name='left', petsc_type='PetscScalar'),
+            'right': PetscObject(name='right', petsc_type='PetscScalar'),
+            'x_m': PetscObject(name='x_m', petsc_type='PetscInt', is_const=True),
+            'x_M': PetscObject(name='x_M', petsc_type='PetscInt', is_const=True),
+            'y_m': PetscObject(name='y_m', petsc_type='PetscInt', is_const=True),
+            'y_M': PetscObject(name='y_M', petsc_type='PetscInt', is_const=True)}
+    
+    def get_exprs(left, right):
+        return [Expression(DummyEq(left, 0.)),
+                Expression(DummyEq(right, 0.))]
+    
+    exprs = get_exprs(symbs['left'],
+                      symbs['right'])
+    
+    def get_iters(dims, symbs):
+        return [lambda ex: Iteration(ex, dims['x'], (symbs['x_m'], symbs['x_M'], 1)),
+                lambda ex: Iteration(ex, dims['y'], (symbs['y_m'], symbs['y_M'], 1))]
+    
+    iters = get_iters(dims, symbs)
+
+    def get_block(exprs, iters):
+        return iters[0](iters[1]([exprs[0],exprs[1]]))
+
+    block1 = get_block(exprs, iters)
+    
+    kernel = Callable('foo', block1, 'void', ())
+
+    assert str(kernel) == """\
+void foo()
+{
+  for (int x = x_m; x <= x_M; x += 1)
+  {
+    for (int y = y_m; y <= y_M; y += 1)
+    {
+      left = 0.0;
+      right = 0.0;
+    }
+  }
+}"""
 
 
 def test_petsc_callable():
