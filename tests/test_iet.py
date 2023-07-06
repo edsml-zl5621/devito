@@ -426,27 +426,20 @@ def test_petsc_expressions():
     expr1 = DummyExpr(a, 15, init=True)
 
     b = PetscObject(name='b', petsc_type='PetscScalar', is_const=True)
-    expr2 = DummyExpr(b, 2.0, init=True)
-
-    # c = PetscObject(name='c', petsc_type='PetscScalar', is_const=True)
-    # expr3 = DummyExpr(c, b/a, init=True)
-
-    # d = PetscObject(name='d', petsc_type='PetscScalar', is_const=True)
-    # expr4 = DummyExpr(d, 10./b/b)
-
-    # e = PetscObject(name='d', petsc_type='PetscScalar')
-    # expr5 = DummyExpr(e, d - c)
-    # expr6 = DummyExpr(e, d + c)
-    # expr7 = DummyExpr(e, d*c)
+    c = PetscObject(name='c', petsc_type='PetscScalar', is_const=True)
+    d = PetscObject(name='d', petsc_type='PetscScalar', is_const=True)
+    expr2 = DummyExpr(b, c + d, init=True)
+    expr3 = DummyExpr(b, c - d, init=True)
+    expr4 = DummyExpr(b, c / d, init=True)
+    expr5 = DummyExpr(b, c * d, init=True)
+    expr6 = DummyExpr(b, c**-2, init=True)
 
     assert str(expr1) == "PetscInt a = 15;"
-    # assert str(expr2) == "const PetscScalar b = 2.0"
-    # assert str(expr3) == "const PetscScalar c = b/a"
-    # assert str(expr4) == "const PetscScalar d = 10./b/b"
-    # assert str(expr5) == "e = d - c"
-
-
-    
+    assert str(expr2) == "const PetscScalar b = c + d;"
+    assert str(expr3) == "const PetscScalar b = -d + c;"
+    assert str(expr4) == "const PetscScalar b = c*1.0/d;"
+    assert str(expr5) == "const PetscScalar b = c*d;"
+    assert str(expr6) == "const PetscScalar b = pow(c, -2);"
 
 
 def test_petsc_callable():
