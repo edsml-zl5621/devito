@@ -235,14 +235,16 @@ class TestHashing(object):
         foo4 = PetscObject(name='foo', petsc_type='PetscInt', grid=grid1)
 
         i, j, k = dimensions('i j k')
-        foo5 = PetscObject(name='foo', petsc_type='PetscInt', shape=(4, 4, 4), dimensions=(i, j, k))
-        foo6 = PetscObject(name='foo', petsc_type='PetscInt', shape=(4, 4, 4), dimensions=(i, j, k))
-        foo7 = PetscObject(name='foo', petsc_type='PetscInt', shape=(5, 5, 5), dimensions=(i, j, k))
+        foo5 = PetscObject(name='foo', petsc_type='PetscInt',
+                           shape=(4, 4, 4), dimensions=(i, j, k))
+        foo6 = PetscObject(name='foo', petsc_type='PetscInt',
+                           shape=(4, 4, 4), dimensions=(i, j, k))
+        foo7 = PetscObject(name='foo', petsc_type='PetscInt',
+                           shape=(5, 5, 5), dimensions=(i, j, k))
 
         foo8 = PetscObject(name='foo', petsc_type='PetscInt', is_const=True)
         foo9 = PetscObject(name='foo', petsc_type='PetscInt', is_const=True)
         foo10 = PetscObject(name='foo', petsc_type='PetscInt', is_const=False)
-
 
         assert hash(foo0) == hash(foo1)
         assert hash(foo2) == hash(foo3)
@@ -275,8 +277,6 @@ class TestHashing(object):
 
         assert hash(foo0) == hash(foo10)
         assert hash(foo1) == hash(foo10)
-
-
 
 
 class TestCaching(object):

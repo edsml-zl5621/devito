@@ -11,7 +11,7 @@ class PetscObject(AbstractObjectWithShape, Expr):
     # need to check this?
     # __rkwargs__ = (AbstractObjectWithShape.__rkwargs__ +
     #                ('petsc_type',))
-    
+
     def __init__(self, name, petsc_type, **kwargs):
         self.name = name
         self._petsc_type = petsc_type
