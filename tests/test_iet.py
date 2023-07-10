@@ -6,11 +6,11 @@ import sympy
 
 
 from devito import (Eq, Grid, Function, TimeFunction, Operator, Dimension,  # noqa
-                    switchconfig, dimensions)
+                    switchconfig, dimensions, SpaceDimension)
 from devito.ir.iet import (Call, Callable, Conditional, DummyExpr, Iteration, List,
                            Lambda, ElementalFunction, CGen, FindSymbols,
                            filter_iterations, make_efunc, retrieve_iteration_tree,
-                           Definition, Expression)
+                           Definition, Expression, Transformer)
 from devito.ir import SymbolRegistry
 from devito.passes.iet.engine import Graph
 from devito.passes.iet.languages.C import CDataManager
@@ -485,6 +485,84 @@ void foo()
       right = 0.0;
     }
   }
+}"""
+
+def test_petsc_dummy():
+    """
+
+    """
+    #### create an 'operator' manually 
+    dims_op = {'x': SpaceDimension(name='x'),
+               'y': SpaceDimension(name='y')}
+
+    grid = Grid(shape=(5, 5))
+    symbs_op = {'u': Function(name='u', grid=grid).indexify()}
+
+    def get_exprs(u):
+        return [Expression(DummyEq(u, u+1))]
+
+    exprs_op = get_exprs(symbs_op['u'])
+
+    def get_iters(dims_op):
+        return [lambda ex: Iteration(ex, dims_op['x'], (0, 4, 1)),
+                lambda ex: Iteration(ex, dims_op['y'], (0, 4, 1))]
+
+    iters_op = get_iters(dims_op)
+
+    def get_block1(exprs_op, iters_op):
+        return iters_op[0](iters_op[1](exprs_op[0]))
+
+    block1 = get_block1(exprs_op, iters_op)
+
+    kernel_op = Callable('kernel', block1, 'int', ())
+
+    symbs_petsc = {'retval': PetscObject(name='retval', petsc_type='PetscErrorCode'),
+                   'A_matfree': PetscObject(name='A_matfree', petsc_type='Mat'),
+                   'xvec': PetscObject(name='xvec', petsc_type='Vec'),
+                   'yvec': PetscObject(name='yvec', petsc_type='Vec'),
+                   'xarr': PetscObject(name='xarr', petsc_type='PetscScalar', grid=Grid((2,)), is_const=True),
+                   'yarr': PetscObject(name='yarr', petsc_type='PetscScalar', grid=Grid((2,)))}
+
+    MyMatShellMult = Callable('MyMatShellMult', kernel_op.body, retval=symbs_petsc['retval'],
+                              parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
+
+    call = Call(MyMatShellMult.name)
+    transformer = Transformer({block1: call})
+    main_block = transformer.visit(block1)
+    new_op_block = [Call('PetscCall', [Call('VecGetArrayRead', arguments=[symbs_petsc['xvec'], Byref(symbs_petsc['xarr'])])]),
+                    main_block]
+    main = Callable('main', new_op_block, 'int', ())
+
+    assert('Original kernel:\n' + str(kernel_op) + '\n' +  \
+           'MyMatShellMult with body of original kernel:\n' + str(MyMatShellMult) + '\n' + \
+           'New kernel with a call to the MyMatShellMult function:\n' + str(main)) == """\
+Original kernel:
+int kernel()
+{
+  for (int x = 0; x <= 4; x += 1)
+  {
+    for (int y = 0; y <= 4; y += 1)
+    {
+      u[x][y] = u[x][y] + 1;
+    }
+  }
+}
+MyMatShellMult with body of original kernel:
+PetscErrorCode MyMatShellMult(Mat A_matfree, Vec xvec, Vec yvec)
+{
+  for (int x = 0; x <= 4; x += 1)
+  {
+    for (int y = 0; y <= 4; y += 1)
+    {
+      u[x][y] = u[x][y] + 1;
+    }
+  }
+}
+New kernel with a call to the MyMatShellMult function:
+int main()
+{
+  PetscCall(VecGetArrayRead(xvec,&xarr));
+  MyMatShellMult();
 }"""
 
 
