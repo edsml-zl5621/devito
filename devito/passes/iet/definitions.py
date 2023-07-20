@@ -322,6 +322,7 @@ class DataManager(object):
                 self._alloc_scalar_on_low_lat_mem((iet,) + v, k, storage)
 
         iet, _ = self._inject_definitions(iet, storage)
+        
 
         # Process all other definitions, essentially all temporary objects
         # created by the compiler up to this point (Array, LocalObject, etc.)
@@ -359,7 +360,11 @@ class DataManager(object):
                 if v:
                     includes.add(v)
 
+        # it is at this point storage has been populated with the efunc foo and 
+        # a <devito.passes.iet....> so after calling _inject_definitions again
+        # the ccode inclues cudaStreamCreate etc
         iet, efuncs = self._inject_definitions(iet, storage)
+
 
         return iet, {'efuncs': efuncs,
                      'globals': as_tuple(globs),

@@ -20,7 +20,7 @@ from devito.operator.registry import operator_selector
 from devito.mpi import MPI
 from devito.parameters import configuration
 from devito.passes import (Graph, lower_index_derivatives, generate_implicit,
-                           generate_macros, minimize_symbols, unevaluate)
+                           generate_macros, minimize_symbols, unevaluate, lower_petsc)
 from devito.symbolics import estimate_cost
 from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_tuple, flatten,
                           filter_sorted, frozendict, is_integer, split, timed_pass,
@@ -463,11 +463,16 @@ class Operator(Callable):
         # specialization further Sections may be introduced
         cls._Target.instrument(graph, profiler=profiler, **kwargs)
 
+        # from IPython import embed; embed()
         # Extract the necessary macros from the symbolic objects
         generate_macros(graph)
-
+        # from IPython import embed; embed()
         # Target-independent optimizations
         minimize_symbols(graph)
+        # from IPython import embed; embed()
+        # lower_petsc(graph)
+
+        # from IPython import embed; embed()
 
         return graph.root, graph
 

@@ -297,7 +297,7 @@ def make_mpi(iet, mpimode=None, **kwargs):
     """
     # To produce unique object names
     generators = {'msg': generator(), 'comm': generator(), 'comp': generator()}
-
+    # from IPython import embed; embed()
     sync_heb = HaloExchangeBuilder('basic', generators, **kwargs)
     user_heb = HaloExchangeBuilder(mpimode, generators, **kwargs)
     mapper = {}
@@ -307,7 +307,6 @@ def make_mpi(iet, mpimode=None, **kwargs):
 
     efuncs = sync_heb.efuncs + user_heb.efuncs
     iet = Transformer(mapper, nested=True).visit(iet)
-
     # Must drop the PARALLEL tag from the Iterations within which halo
     # exchanges are performed
     mapper = {}
