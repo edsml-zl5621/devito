@@ -2,8 +2,10 @@ from ctypes import POINTER
 from devito.tools import petsc_type_to_ctype
 from devito.types import AbstractObjectWithShape
 from sympy import Expr
+from devito.ir.iet import Call, Callable, Transformer
+from devito.passes.iet.engine import iet_pass
 
-__all__ = ['PetscObject']
+__all__ = ['PetscObject', 'lower_petsc']
 
 
 class PetscObject(AbstractObjectWithShape, Expr):
@@ -34,3 +36,10 @@ class PetscObject(AbstractObjectWithShape, Expr):
     @property
     def petsc_type(self):
         return self._petsc_type
+
+
+@iet_pass
+def lower_petsc(iet):
+    call_back = Callable('call_back', iet.body, 'int', parameters=iet.parameters)
+    iet = Transformer({iet.body: Call(call_back.name)}).visit(iet)
+    return iet, {'efuncs': [call_back]}
