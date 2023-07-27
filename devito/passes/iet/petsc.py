@@ -39,7 +39,24 @@ class PetscObject(AbstractObjectWithShape, Expr):
 
 
 @iet_pass
-def lower_petsc(iet):
-    call_back = Callable('call_back', iet.body, 'int', parameters=iet.parameters)
-    iet = Transformer({iet.body: Call(call_back.name)}).visit(iet)
-    return iet, {'efuncs': [call_back]}
+def lower_petsc(iet, **kwargs):
+    # from IPython import embed; embed()
+
+    # call_back = Callable('call_back', iet.body, 'int', parameters=iet.parameters)
+    # iet = Transformer({iet.body: Call(call_back.name)}).visit(iet)
+
+    # add necessary include directories for petsc
+    kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/include')
+    kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/arch-linux-c-debug/include')
+
+    kwargs['compiler'].add_libraries('petsc')
+    libdir = '/home/zl5621/petsc/arch-linux-c-debug/lib'
+    kwargs['compiler'].add_library_dirs(libdir)
+
+    kwargs['compiler'].add_ldflags('-Wl,-rpath,%s' % libdir)
+
+
+    # return iet, {'efuncs': [call_back],
+    #              'includes': ['petscksp.h']}
+
+    return iet, {'includes': ['petscksp.h', 'stdio.h']}

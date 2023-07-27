@@ -382,6 +382,7 @@ class AdvisorProfiler(AdvancedProfiler):
     _ext_calls = [_api_resume, _api_pause]
 
     def __init__(self, name):
+        # from IPython import embed; embed()
         self.path = locate_intel_advisor()
         if self.path is None:
             self.initialized = False

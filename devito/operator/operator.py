@@ -134,7 +134,7 @@ class Operator(Callable):
     """
 
     _default_headers = [('_POSIX_C_SOURCE', '200809L')]
-    _default_includes = ['stdlib.h', 'math.h', 'sys/time.h']
+    _default_includes = ['stdlib.h', 'math.h', 'sys/time.h', 'petscksp.h']
     _default_globals = []
 
     def __new__(cls, expressions, **kwargs):
@@ -220,6 +220,8 @@ class Operator(Callable):
         op._dimensions = set().union(*[e.dimensions for e in irs.expressions])
         op._dtype, op._dspace = irs.clusters.meta
         op._profiler = profiler
+
+        # from IPython import embed; embed()
 
         return op
 
@@ -470,7 +472,7 @@ class Operator(Callable):
         # Target-independent optimizations
         minimize_symbols(graph)
         # from IPython import embed; embed()
-        # lower_petsc(graph)
+        lower_petsc(graph, **kwargs)
 
         # from IPython import embed; embed()
 
@@ -707,9 +709,11 @@ class Operator(Callable):
         Operator, reagardless of how many times this method is invoked.
         """
         if self._lib is None:
+            # from IPython import embed; embed()
             with self._profiler.timer_on('jit-compile'):
                 recompiled, src_file = self._compiler.jit_compile(self._soname,
                                                                   str(self.ccode))
+                # from IPython import embed; embed()
 
             elapsed = self._profiler.py_timers['jit-compile']
             if recompiled:
@@ -722,7 +726,9 @@ class Operator(Callable):
     @property
     def cfunction(self):
         """The JIT-compiled C function as a ctypes.FuncPtr object."""
+        # from IPython import embed; embed()
         if self._lib is None:
+            # from IPython import embed; embed()
             self._jit_compile()
             self._lib = self._compiler.load(self._soname)
             self._lib.name = self._soname
@@ -753,7 +759,7 @@ class Operator(Callable):
 
         cfile = name.with_suffix(".%s" % self._compiler.src_ext)
         hfile = name.with_suffix('.h')
-
+        # from IPython import embed; embed()
         # Generate the .c and .h code
         ccode, hcode = CInterface().visit(self)
 
@@ -834,14 +840,17 @@ class Operator(Callable):
         >>> op = Operator(Eq(u3.forward, u3 + 1))
         >>> summary = op.apply(time_M=10)
         """
+        # from IPython import embed; embed()
         # Build the arguments list to invoke the kernel function
         with self._profiler.timer_on('arguments'):
             args = self.arguments(**kwargs)
-
+        # from IPython import embed; embed()
         # Invoke kernel function with args
         arg_values = [args[p.name] for p in self.parameters]
+        # from IPython import embed; embed()
         try:
             cfunction = self.cfunction
+            # from IPython import embed; embed()
             with self._profiler.timer_on('apply', comm=args.comm):
                 cfunction(*arg_values)
         except ctypes.ArgumentError as e:

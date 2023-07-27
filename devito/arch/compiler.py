@@ -323,6 +323,8 @@ class Compiler(GCCToolchain):
         target = str(self.get_jit_dir().joinpath(soname))
         src_file = "%s.%s" % (target, self.src_ext)
 
+        # from IPython import embed; embed()
+
         cache_dir = self.get_codepy_dir().joinpath(soname[:7])
         if configuration['jit-backdoor'] is False:
             # Typically we end up here

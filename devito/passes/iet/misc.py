@@ -33,7 +33,7 @@ from devito.types import Array, LocalObject, Symbol
 from devito.ir.equations import DummyEq
 
 __all__ = ['avoid_denormals', 'hoist_prodders', 'relax_incr_dimensions',
-           'generate_macros', 'minimize_symbols', 'lower_petsc']
+           'generate_macros', 'minimize_symbols']
 
 
 @iet_pass
@@ -154,20 +154,20 @@ def relax_incr_dimensions(iet, options=None, **kwargs):
     return iet, {}
 
 
-# @iet_pass
-# def generate_macros(iet):
-#     applications = FindApplications().visit(iet)
-#     headers = set().union(*[_generate_macros(i) for i in applications])
-#     # from IPython import embed; embed()
-#     return iet, {'headers': headers}
-
-
-# playing around with generate_macros
-# this is how you would add an extra header that is not default?
 @iet_pass
 def generate_macros(iet):
-    # return iet, {'headers': {('MAX(a,b)', ('(((a) > (b)) ? (a) : (b))'))}}
-    return iet, {'headers': {('PI', ('3.14'))}}
+    applications = FindApplications().visit(iet)
+    headers = set().union(*[_generate_macros(i) for i in applications])
+    # from IPython import embed; embed()
+    return iet, {'headers': headers}
+
+
+# # playing around with generate_macros
+# # this is how you would add an extra header that is not default?
+# @iet_pass
+# def generate_macros(iet):
+#     # return iet, {'headers': {('MAX(a,b)', ('(((a) > (b)) ? (a) : (b))'))}}
+#     return iet, {'headers': {('PI', ('3.14'))}}
 
 
 @singledispatch
@@ -235,12 +235,9 @@ def remove_redundant_moddims(iet):
     return iet
 
 
-
-
-@iet_pass
-def lower_petsc(iet):
-    call_back = Callable('call_back', iet.body, 'void', parameters=iet.parameters)
-    iet = Transformer({iet.body: Call(call_back.name)}).visit(iet)
-    return iet, {'efuncs': [call_back]}
-
+# @iet_pass
+# def lower_petsc(iet):
+#     call_back = Callable('call_back', iet.body, 'int', parameters=iet.parameters)
+#     iet = Transformer({iet.body: Call(call_back.name)}).visit(iet)
+#     return iet, {'efuncs': [call_back]}
 
