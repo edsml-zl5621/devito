@@ -2,7 +2,7 @@ from ctypes import POINTER
 from devito.tools import petsc_type_to_ctype
 from devito.types import AbstractObjectWithShape
 from sympy import Expr
-from devito.ir.iet import Call, Callable, Transformer
+from devito.ir.iet import Call, Callable, Transformer, Definition
 from devito.passes.iet.engine import iet_pass
 
 __all__ = ['PetscObject', 'lower_petsc']
@@ -42,21 +42,29 @@ class PetscObject(AbstractObjectWithShape, Expr):
 def lower_petsc(iet, **kwargs):
     # from IPython import embed; embed()
 
-    # call_back = Callable('call_back', iet.body, 'int', parameters=iet.parameters)
-    # iet = Transformer({iet.body: Call(call_back.name)}).visit(iet)
+    symbs_petsc = {'retval': PetscObject(name='retval', petsc_type='PetscErrorCode'),
+                   'A_matfree': PetscObject(name='A_matfree', petsc_type='Mat'),
+                   'xvec': PetscObject(name='xvec', petsc_type='Vec'),
+                   'yvec': PetscObject(name='yvec', petsc_type='Vec'),
+                   'x' : PetscObject(name='x', petsc_type='Vec')}
+    
+    call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
+                          parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
+    
+    # from IPython import embed; embed()
+    iet = Transformer({iet.body.body[1]: Call(call_back.name)}).visit(iet)
+
 
     # add necessary include directories for petsc
     kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/include')
     kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/arch-linux-c-debug/include')
-
     kwargs['compiler'].add_libraries('petsc')
     libdir = '/home/zl5621/petsc/arch-linux-c-debug/lib'
     kwargs['compiler'].add_library_dirs(libdir)
-
     kwargs['compiler'].add_ldflags('-Wl,-rpath,%s' % libdir)
 
 
-    # return iet, {'efuncs': [call_back],
-    #              'includes': ['petscksp.h']}
+    return iet, {'efuncs': [call_back],
+                 'includes': ['petscksp.h']}
 
-    return iet, {'includes': ['petscksp.h', 'stdio.h']}
+    # return iet, {'includes': ['petscksp.h', 'stdio.h']}

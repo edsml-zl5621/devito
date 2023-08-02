@@ -134,7 +134,7 @@ class Operator(Callable):
     """
 
     _default_headers = [('_POSIX_C_SOURCE', '200809L')]
-    _default_includes = ['stdlib.h', 'math.h', 'sys/time.h', 'petscksp.h']
+    _default_includes = ['stdlib.h', 'math.h', 'sys/time.h']
     _default_globals = []
 
     def __new__(cls, expressions, **kwargs):
@@ -328,10 +328,11 @@ class Operator(Callable):
         expressions = cls._specialize_exprs(expressions, **kwargs)
 
         # "True" lowering (indexification, shifting, ...)
+        # from IPython import embed; embed()
         expressions = lower_exprs(expressions, **kwargs)
-
+        # from IPython import embed; embed()
         processed = [LoweredEq(i) for i in expressions]
-
+        # from IPython import embed; embed()
         return processed
 
     # Compilation -- Cluster level
