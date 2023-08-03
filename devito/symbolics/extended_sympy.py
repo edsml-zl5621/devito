@@ -310,13 +310,10 @@ class UnaryOp(sympy.Expr, Pickable, BasicWrapperMixin):
     __rargs__ = ('base',)
 
     def __new__(cls, base, **kwargs):
-        # from IPython import embed; embed()
         try:
-            # from IPython import embed; embed()
             # If an AbstractFunction, pull the underlying Symbol
             base = base.indexed.label
         except AttributeError:
-            # from IPython import embed; embed()
             if isinstance(base, str):
                 base = Symbol(base)
             else:
@@ -417,7 +414,6 @@ class FunctionPtr(UnaryOp):
     @property
     def _op(self):
         return '(%s (%s)(%s))' % (self._return_typ, '*', self._parameter_typ)
-
 
 
 class IndexedPointer(sympy.Expr, Pickable, BasicWrapperMixin):
