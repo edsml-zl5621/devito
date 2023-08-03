@@ -11,10 +11,12 @@ from devito.ir import Expression, FindNodes
 from devito.symbolics import (retrieve_functions, retrieve_indexed, evalrel,  # noqa
                               CallFromPointer, Cast, DefFunction, FieldFromPointer,
                               INT, FieldFromComposite, IntDiv, ccode, uxreplace,
-                              retrieve_derivatives)
+                              retrieve_derivatives, FunctionPtr)
 from devito.tools import as_tuple
 from devito.types import (Array, Bundle, FIndexed, LocalObject, Object,
                           Symbol as dSymbol)
+from devito.passes.iet.petsc import PetscObject
+from devito.ir.iet import Callable, Definition
 
 
 def test_float_indices():
@@ -313,6 +315,23 @@ def test_findexed():
     assert new_fi.name == fi.name == 'f'
     assert new_fi.indices == fi.indices
     assert new_fi.strides == (3, 4)
+    
+def test_function_ptr():
+    s = Symbol(name='s', dtype=np.float32)
+    iet = Definition(s)
+
+    A_matfree = PetscObject(name='A_matfree', petsc_type='Mat')
+    xvec = PetscObject(name='xvec', petsc_type='Vec')
+    yvec = PetscObject(name='yvec', petsc_type='Vec')
+
+    MyMatShellMult = Callable('MyMatShellMult', iet, retval='PetscErrorCode', parameters=(A_matfree, xvec, yvec))
+
+    class voidFunctionPtr(FunctionPtr):
+        _return_typ = 'void'
+        _parameter_typ = 'void'
+
+    tmp = voidFunctionPtr(MyMatShellMult.name)
+    assert ccode(tmp) == '(void (*)(void))MyMatShellMult'
 
 
 def test_symbolic_printing():

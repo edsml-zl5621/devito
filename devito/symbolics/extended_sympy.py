@@ -16,7 +16,7 @@ __all__ = ['CondEq', 'CondNe', 'IntDiv', 'CallFromPointer', 'FieldFromPointer', 
            'FieldFromComposite', 'ListInitializer', 'Byref', 'IndexedPointer', 'Cast',
            'DefFunction', 'InlineIf', 'Keyword', 'String', 'Macro', 'MacroArgument',
            'CustomType', 'Deref', 'INT', 'FLOAT', 'DOUBLE', 'VOID',
-           'Null', 'SizeOf', 'rfunc', 'cast_mapper', 'BasicWrapperMixin']
+           'Null', 'SizeOf', 'rfunc', 'cast_mapper', 'BasicWrapperMixin', 'FunctionPtr']
 
 
 class CondEq(sympy.Eq):
@@ -310,10 +310,13 @@ class UnaryOp(sympy.Expr, Pickable, BasicWrapperMixin):
     __rargs__ = ('base',)
 
     def __new__(cls, base, **kwargs):
+        # from IPython import embed; embed()
         try:
+            # from IPython import embed; embed()
             # If an AbstractFunction, pull the underlying Symbol
             base = base.indexed.label
         except AttributeError:
+            # from IPython import embed; embed()
             if isinstance(base, str):
                 base = Symbol(base)
             else:
@@ -394,6 +397,27 @@ class Cast(UnaryOp):
     @property
     def _op(self):
         return '(%s)' % self.typ
+    
+
+class FunctionPtr(UnaryOp):
+
+    """
+    Symbolic representation of C's function pointers.
+    """
+
+    _return_typ = ''
+    _parameter_typ = ''
+
+    def __new__(cls, base, **kwargs):
+        obj = super().__new__(cls, base)
+        return obj
+
+    func = Pickable._rebuild
+
+    @property
+    def _op(self):
+        return '(%s (%s)(%s))' % (self._return_typ, '*', self._parameter_typ)
+
 
 
 class IndexedPointer(sympy.Expr, Pickable, BasicWrapperMixin):
