@@ -14,8 +14,8 @@ from devito.types import Symbol
 
 __all__ = ['CondEq', 'CondNe', 'IntDiv', 'CallFromPointer', 'FieldFromPointer',  # noqa
            'FieldFromComposite', 'ListInitializer', 'Byref', 'IndexedPointer', 'Cast',
-           'DefFunction', 'InlineIf', 'Keyword', 'String', 'Macro', 'MacroArgument',
-           'CustomType', 'Deref', 'INT', 'FLOAT', 'DOUBLE', 'VOID',
+           'FunctionPointer', 'DefFunction', 'InlineIf', 'Keyword', 'String', 'Macro',
+           'MacroArgument', 'CustomType', 'Deref', 'INT', 'FLOAT', 'DOUBLE', 'VOID',
            'Null', 'SizeOf', 'rfunc', 'cast_mapper', 'BasicWrapperMixin']
 
 
@@ -398,6 +398,60 @@ class Cast(UnaryOp):
     @property
     def _op(self):
         return '(%s)' % self.typ
+    
+
+class FunctionPointer(sympy.Expr, Pickable, BasicWrapperMixin):
+
+    """
+    Symbolic representation of C's function pointers.
+    """
+
+    __rargs__ = ('base', 'return_type', 'parameter_type',)
+
+    def __new__(cls, base, return_type, parameter_type, **kwargs):
+        try:
+            # If an AbstractFunction, pull the underlying Symbol
+            base = base.indexed.label
+        except AttributeError:
+            if isinstance(base, str):
+                base = Symbol(base)
+            else:
+                # Fallback: go plain sympy
+                base = sympify(base)
+
+        obj = sympy.Expr.__new__(cls, base, return_type, parameter_type)
+        obj._base = base
+        obj._return_type = return_type
+        obj._parameter_type = parameter_type
+
+        return obj
+
+    @property
+    def base(self):
+        return self._base
+    
+    @property
+    def return_type(self):
+        return self._return_type
+
+    @property
+    def parameter_type(self):
+        return self._parameter_type
+
+    @property
+    def free_symbols(self):
+        return self.base.free_symbols
+
+    def __str__(self):
+        if self.base.is_Symbol:
+            return "(%s (%s)(%s))%s" % (self._return_type, '*', self._parameter_type, str(self.base))
+        else:
+            return "(%s (%s)(%s))(%s)" % (self._return_type, '*', self._parameter_type, str(self.base))
+
+    __repr__ = __str__
+
+    # Pickling support
+    __reduce_ex__ = Pickable.__reduce_ex__
 
 
 class IndexedPointer(sympy.Expr, Pickable, BasicWrapperMixin):
