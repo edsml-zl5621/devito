@@ -231,12 +231,10 @@ def test_function_pointer():
     assert fp0 != fp2
     assert fp0 != fp3
 
-
     # Test hashing
     assert hash(fp0) != hash(fp1)  # Same reason as above
     assert hash(fp0) != hash(fp2)
     assert hash(fp0) != hash(fp3)
-
 
     # Test reconstruction
     fp4 = fp0.func(*fp0.args)

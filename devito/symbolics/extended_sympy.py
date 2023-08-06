@@ -398,7 +398,7 @@ class Cast(UnaryOp):
     @property
     def _op(self):
         return '(%s)' % self.typ
-    
+
 
 class FunctionPointer(sympy.Expr, Pickable):
 
@@ -409,7 +409,7 @@ class FunctionPointer(sympy.Expr, Pickable):
     __rargs__ = ('func_call', 'return_type', 'parameter_type',)
 
     def __new__(cls, func_call, return_type, parameter_type, **kwargs):
- 
+
         if isinstance(func_call, str):
             # devito.types.Symbol
             func_call = Symbol(func_call)
@@ -427,7 +427,7 @@ class FunctionPointer(sympy.Expr, Pickable):
     @property
     def func_call(self):
         return self._func_call
-    
+
     @property
     def return_type(self):
         return self._return_type
@@ -437,7 +437,8 @@ class FunctionPointer(sympy.Expr, Pickable):
         return self._parameter_type
 
     def __str__(self):
-        return "(%s (%s)(%s))%s" % (self.return_type, '*', self.parameter_type, self.func_call)
+        return "(%s (%s)(%s))%s" % (self.return_type, '*',
+                                    self.parameter_type, self.func_call)
 
     __repr__ = __str__
 
@@ -448,7 +449,7 @@ class FunctionPointer(sympy.Expr, Pickable):
     @property
     def free_symbols(self):
         return self.func_call.free_symbols
-    
+
     # Pickling support
     __reduce_ex__ = Pickable.__reduce_ex__
 

@@ -21,7 +21,7 @@ from devito.types import (Array, CustomDimension, Symbol as dSymbol, Scalar,
 from devito.types.basic import BoundSymbol
 from devito.tools import EnrichedTuple
 from devito.symbolics import (IntDiv, ListInitializer, FieldFromPointer,
-                              CallFromPointer, DefFunction)
+                              CallFromPointer, DefFunction, FunctionPointer)
 from examples.seismic import (demo_model, AcquisitionGeometry,
                               TimeAxis, RickerSource, Receiver)
 
@@ -298,6 +298,11 @@ class TestBasic(object):
         pkl_ffp = pickle.dumps(ffp)
         new_ffp = pickle.loads(pkl_ffp)
         assert ffp == new_ffp
+
+        fp = FunctionPointer(a, 'void', 'void')
+        pkl_fp = pickle.dumps(fp)
+        new_fp = pickle.loads(pkl_fp)
+        assert fp == new_fp
 
         li = ListInitializer(['a', 'b'])
         pkl_li = pickle.dumps(li)
