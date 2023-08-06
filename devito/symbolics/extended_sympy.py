@@ -400,35 +400,32 @@ class Cast(UnaryOp):
         return '(%s)' % self.typ
     
 
-class FunctionPointer(sympy.Expr, Pickable, BasicWrapperMixin):
+class FunctionPointer(sympy.Expr, Pickable):
 
     """
     Symbolic representation of C's function pointers.
     """
 
-    __rargs__ = ('base', 'return_type', 'parameter_type',)
+    __rargs__ = ('func_call', 'return_type', 'parameter_type',)
 
-    def __new__(cls, base, return_type, parameter_type, **kwargs):
-        try:
-            # If an AbstractFunction, pull the underlying Symbol
-            base = base.indexed.label
-        except AttributeError:
-            if isinstance(base, str):
-                base = Symbol(base)
-            else:
-                # Fallback: go plain sympy
-                base = sympify(base)
+    def __new__(cls, func_call, return_type, parameter_type, **kwargs):
+ 
+        if isinstance(func_call, str):
+            func_call = Symbol(func_call)
+        else:
+            # Fallback: go plain sympy
+            func_call = sympify(func_call)
 
-        obj = sympy.Expr.__new__(cls, base, return_type, parameter_type)
-        obj._base = base
+        obj = sympy.Expr.__new__(cls, func_call, return_type, parameter_type)
+        obj._func_call = func_call
         obj._return_type = return_type
         obj._parameter_type = parameter_type
 
         return obj
 
     @property
-    def base(self):
-        return self._base
+    def func_call(self):
+        return self._func_call
     
     @property
     def return_type(self):
@@ -438,20 +435,19 @@ class FunctionPointer(sympy.Expr, Pickable, BasicWrapperMixin):
     def parameter_type(self):
         return self._parameter_type
 
-    @property
-    def free_symbols(self):
-        return self.base.free_symbols
-
     def __str__(self):
-        if self.base.is_Symbol:
-            return "(%s (%s)(%s))%s" % (self._return_type, '*', self._parameter_type, str(self.base))
-        else:
-            return "(%s (%s)(%s))(%s)" % (self._return_type, '*', self._parameter_type, str(self.base))
+        return "(%s (%s)(%s))%s" % (self.return_type, '*', self.parameter_type, self.func_call)
 
     __repr__ = __str__
 
+    def _hashable_content(self):
+        return super(FunctionPointer, self)._hashable_content() +\
+            (self.func_call, self.return_type, self.parameter_type)
+    
     # Pickling support
     __reduce_ex__ = Pickable.__reduce_ex__
+
+    func = Pickable._rebuild
 
 
 class IndexedPointer(sympy.Expr, Pickable, BasicWrapperMixin):
