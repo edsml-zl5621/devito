@@ -411,6 +411,7 @@ class FunctionPointer(sympy.Expr, Pickable):
     def __new__(cls, func_call, return_type, parameter_type, **kwargs):
  
         if isinstance(func_call, str):
+            # devito.types.Symbol
             func_call = Symbol(func_call)
         else:
             # Fallback: go plain sympy
@@ -443,6 +444,10 @@ class FunctionPointer(sympy.Expr, Pickable):
     def _hashable_content(self):
         return super(FunctionPointer, self)._hashable_content() +\
             (self.func_call, self.return_type, self.parameter_type)
+
+    @property
+    def free_symbols(self):
+        return self.func_call.free_symbols
     
     # Pickling support
     __reduce_ex__ = Pickable.__reduce_ex__

@@ -10,7 +10,8 @@ from devito import (Constant, Dimension, Grid, Function, solve, TimeFunction, Eq
 from devito.ir import Expression, FindNodes
 from devito.symbolics import (retrieve_functions, retrieve_indexed, evalrel,  # noqa
                               CallFromPointer, Cast, DefFunction, FieldFromPointer,
-                              INT, FieldFromComposite, IntDiv, ccode, uxreplace)
+                              INT, FieldFromComposite, IntDiv, ccode, uxreplace,
+                              FunctionPointer)
 from devito.tools import as_tuple
 from devito.types import (Array, Bundle, FIndexed, LocalObject, Object,
                           Symbol as dSymbol)
@@ -215,6 +216,34 @@ def test_field_from_composite():
 
     # Free symbols
     assert ffc1.free_symbols == {s}
+
+
+def test_function_pointer():
+    s = Symbol('s')
+
+    # Test construction
+    fp0 = FunctionPointer('s', 'void', 'void')
+    fp1 = FunctionPointer(s, 'void', 'void')
+    assert str(fp0) == str(fp1) == '(void (*)(void))s'
+    assert fp0 != fp1  # As `fp0`'s underlying Symbol is a types.Symbol
+    fp2 = FunctionPointer('s', 'void', 'int')
+    fp3 = FunctionPointer('s', 'float', 'void')
+    assert fp0 != fp2
+    assert fp0 != fp3
+
+
+    # Test hashing
+    assert hash(fp0) != hash(fp1)  # Same reason as above
+    assert hash(fp0) != hash(fp2)
+    assert hash(fp0) != hash(fp3)
+
+
+    # Test reconstruction
+    fp4 = fp0.func(*fp0.args)
+    assert fp0 == fp4
+
+    # Free symbols
+    assert fp1.free_symbols == {s}
 
 
 def test_extended_sympy_arithmetic():
