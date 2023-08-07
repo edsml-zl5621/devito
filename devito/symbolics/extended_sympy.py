@@ -406,54 +406,37 @@ class FunctionPointer(sympy.Expr, Pickable):
     Symbolic representation of C's function pointers.
     """
 
-    __rargs__ = ('func_call', 'return_type', 'parameter_type',)
+    __rargs__ = ('func_name', 'return_type', 'parameter_type',)
 
-    def __new__(cls, func_call, return_type, parameter_type, **kwargs):
+    def __new__(cls, func_name, return_type, parameter_type, **kwargs):
 
-        if isinstance(func_call, str):
-            # devito.types.Symbol
-            func_call = Symbol(func_call)
+        if isinstance(func_name, str):
+            func_name = Symbol(func_name)
+        if isinstance(return_type, str):
+            return_type = Symbol(return_type)
+        if isinstance(parameter_type, str):
+            parameter_type = Symbol(parameter_type)
         else:
-            # Fallback: go plain sympy
-            func_call = sympify(func_call)
+            raise ValueError("`args` must be str")
 
-        obj = sympy.Expr.__new__(cls, func_call, return_type, parameter_type)
-        obj._func_call = func_call
-        obj._return_type = return_type
-        obj._parameter_type = parameter_type
+        obj = sympy.Expr.__new__(cls, func_name, return_type, parameter_type)
+        obj.func_name = func_name
+        obj.return_type = return_type
+        obj.parameter_type = parameter_type
 
         return obj
 
-    @property
-    def func_call(self):
-        return self._func_call
-
-    @property
-    def return_type(self):
-        return self._return_type
-
-    @property
-    def parameter_type(self):
-        return self._parameter_type
-
     def __str__(self):
         return "(%s (%s)(%s))%s" % (self.return_type, '*',
-                                    self.parameter_type, self.func_call)
+                                    self.parameter_type, self.func_name)
 
     __repr__ = __str__
 
     def _hashable_content(self):
-        return super(FunctionPointer, self)._hashable_content() +\
-            (self.func_call, self.return_type, self.parameter_type)
-
-    @property
-    def free_symbols(self):
-        return self.func_call.free_symbols
+        return (self.func_name, self.return_type, self.parameter_type)
 
     # Pickling support
     __reduce_ex__ = Pickable.__reduce_ex__
-
-    func = Pickable._rebuild
 
 
 class IndexedPointer(sympy.Expr, Pickable, BasicWrapperMixin):

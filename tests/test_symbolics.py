@@ -219,29 +219,21 @@ def test_field_from_composite():
 
 
 def test_function_pointer():
-    s = Symbol('s')
 
     # Test construction
-    fp0 = FunctionPointer('s', 'void', 'void')
-    fp1 = FunctionPointer(s, 'void', 'void')
-    assert str(fp0) == str(fp1) == '(void (*)(void))s'
-    assert fp0 != fp1  # As `fp0`'s underlying Symbol is a types.Symbol
-    fp2 = FunctionPointer('s', 'void', 'int')
-    fp3 = FunctionPointer('s', 'float', 'void')
+    fp0 = FunctionPointer('foo0', 'void', 'void')
+    assert str(fp0) == '(void (*)(void))foo0'
+    fp1 = FunctionPointer('foo0', 'int', 'void')
+    fp2 = FunctionPointer('foo0', 'void', 'float')
+    fp3 = FunctionPointer('foo1', 'void', 'void')
+    assert fp0 != fp1
     assert fp0 != fp2
     assert fp0 != fp3
 
     # Test hashing
-    assert hash(fp0) != hash(fp1)  # Same reason as above
+    assert hash(fp0) != hash(fp1)
     assert hash(fp0) != hash(fp2)
     assert hash(fp0) != hash(fp3)
-
-    # Test reconstruction
-    fp4 = fp0.func(*fp0.args)
-    assert fp0 == fp4
-
-    # Free symbols
-    assert fp1.free_symbols == {s}
 
 
 def test_extended_sympy_arithmetic():

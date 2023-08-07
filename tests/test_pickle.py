@@ -299,7 +299,7 @@ class TestBasic(object):
         new_ffp = pickle.loads(pkl_ffp)
         assert ffp == new_ffp
 
-        fp = FunctionPointer(a, 'void', 'void')
+        fp = FunctionPointer('foo', 'void', 'void')
         pkl_fp = pickle.dumps(fp)
         new_fp = pickle.loads(pkl_fp)
         assert fp == new_fp
