@@ -22,7 +22,7 @@ from devito.types import (Array, CustomDimension, Symbol as dSymbol, Scalar,
 from devito.types.basic import BoundSymbol
 from devito.tools import EnrichedTuple
 from devito.symbolics import (IntDiv, ListInitializer, FieldFromPointer,
-                              CallFromPointer, DefFunction)
+                              CallFromPointer, DefFunction, FunctionPointer)
 from examples.seismic import (demo_model, AcquisitionGeometry,
                               TimeAxis, RickerSource, Receiver)
 
@@ -364,6 +364,11 @@ class TestBasic(object):
         new_df = pickle.loads(pkl_df)
         assert df == new_df
         assert df.arguments == new_df.arguments
+
+        fp = FunctionPointer('foo', 'void', 'void')
+        pkl_fp = pickle.dumps(fp)
+        new_fp = pickle.loads(pkl_fp)
+        assert fp == new_fp
 
     def test_timers(self, pickle):
         """Pickling for Timers used in Operators for C-level profiling."""

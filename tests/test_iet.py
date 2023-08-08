@@ -446,32 +446,32 @@ def test_petsc_expressions():
 def test_petsc_iterations():
     dims = {'x': Dimension(name='x'),
             'y': Dimension(name='y')}
-    
+
     symbs = {'left': PetscObject(name='left', petsc_type='PetscScalar'),
-            'right': PetscObject(name='right', petsc_type='PetscScalar'),
-            'x_m': PetscObject(name='x_m', petsc_type='PetscInt', is_const=True),
-            'x_M': PetscObject(name='x_M', petsc_type='PetscInt', is_const=True),
-            'y_m': PetscObject(name='y_m', petsc_type='PetscInt', is_const=True),
-            'y_M': PetscObject(name='y_M', petsc_type='PetscInt', is_const=True)}
-    
+             'right': PetscObject(name='right', petsc_type='PetscScalar'),
+             'x_m': PetscObject(name='x_m', petsc_type='PetscInt', is_const=True),
+             'x_M': PetscObject(name='x_M', petsc_type='PetscInt', is_const=True),
+             'y_m': PetscObject(name='y_m', petsc_type='PetscInt', is_const=True),
+             'y_M': PetscObject(name='y_M', petsc_type='PetscInt', is_const=True)}
+
     def get_exprs(left, right):
         return [Expression(DummyEq(left, 0.)),
                 Expression(DummyEq(right, 0.))]
-    
+
     exprs = get_exprs(symbs['left'],
                       symbs['right'])
-    
+
     def get_iters(dims, symbs):
         return [lambda ex: Iteration(ex, dims['x'], (symbs['x_m'], symbs['x_M'], 1)),
                 lambda ex: Iteration(ex, dims['y'], (symbs['y_m'], symbs['y_M'], 1))]
-    
+
     iters = get_iters(dims, symbs)
 
     def get_block(exprs, iters):
-        return iters[0](iters[1]([exprs[0],exprs[1]]))
+        return iters[0](iters[1]([exprs[0], exprs[1]]))
 
     block1 = get_block(exprs, iters)
-    
+
     kernel = Callable('foo', block1, 'void', ())
 
     assert str(kernel) == """\
@@ -487,11 +487,12 @@ void foo()
   }
 }"""
 
+
 def test_petsc_dummy():
     """
 
     """
-    #### create an 'operator' manually 
+    # create an 'operator' manually
     dims_op = {'x': SpaceDimension(name='x'),
                'y': SpaceDimension(name='y')}
 
@@ -520,22 +521,29 @@ def test_petsc_dummy():
                    'A_matfree': PetscObject(name='A_matfree', petsc_type='Mat'),
                    'xvec': PetscObject(name='xvec', petsc_type='Vec'),
                    'yvec': PetscObject(name='yvec', petsc_type='Vec'),
-                   'xarr': PetscObject(name='xarr', petsc_type='PetscScalar', grid=Grid((2,)), is_const=True),
-                   'yarr': PetscObject(name='yarr', petsc_type='PetscScalar', grid=Grid((2,)))}
+                   'xarr': PetscObject(name='xarr', petsc_type='PetscScalar',
+                                       grid=Grid((2,)), is_const=True),
+                   'yarr': PetscObject(name='yarr', petsc_type='PetscScalar',
+                                       grid=Grid((2,)))}
 
-    MyMatShellMult = Callable('MyMatShellMult', kernel_op.body, retval=symbs_petsc['retval'],
-                              parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
+    MyMatShellMult = Callable('MyMatShellMult', kernel_op.body,
+                              retval=symbs_petsc['retval'],
+                              parameters=(symbs_petsc['A_matfree'],
+                                          symbs_petsc['xvec'], symbs_petsc['yvec']))
 
     call = Call(MyMatShellMult.name)
     transformer = Transformer({block1: call})
     main_block = transformer.visit(block1)
-    new_op_block = [Call('PetscCall', [Call('VecGetArrayRead', arguments=[symbs_petsc['xvec'], Byref(symbs_petsc['xarr'])])]),
+    new_op_block = [Call('PetscCall', [Call('VecGetArrayRead',
+                                            arguments=[symbs_petsc['xvec'],
+                                                       Byref(symbs_petsc['xarr'])])]),
                     main_block]
     main = Callable('main', new_op_block, 'int', ())
 
-    assert('Original kernel:\n' + str(kernel_op) + '\n' +  \
-           'MyMatShellMult with body of original kernel:\n' + str(MyMatShellMult) + '\n' + \
-           'New kernel with a call to the MyMatShellMult function:\n' + str(main)) == """\
+    assert('Original kernel:\n' + str(kernel_op) + '\n' +
+           'MyMatShellMult with body of original kernel:\n' + str(MyMatShellMult) +
+           '\n' + 'New kernel with a call to the MyMatShellMult function:\n' +
+           str(main)) == """\
 Original kernel:
 int kernel()
 {

@@ -16,7 +16,8 @@ __all__ = ['CondEq', 'CondNe', 'IntDiv', 'CallFromPointer', 'FieldFromPointer', 
            'FieldFromComposite', 'ListInitializer', 'Byref', 'IndexedPointer', 'Cast',
            'DefFunction', 'InlineIf', 'Keyword', 'String', 'Macro', 'MacroArgument',
            'CustomType', 'Deref', 'INT', 'FLOAT', 'DOUBLE', 'VOID',
-           'Null', 'SizeOf', 'rfunc', 'cast_mapper', 'BasicWrapperMixin', 'FunctionPtr']
+           'Null', 'SizeOf', 'rfunc', 'cast_mapper', 'BasicWrapperMixin',
+           'FunctionPointer']
 
 
 class CondEq(sympy.Eq):
@@ -394,26 +395,37 @@ class Cast(UnaryOp):
     @property
     def _op(self):
         return '(%s)' % self.typ
-    
 
-class FunctionPtr(UnaryOp):
+
+class FunctionPointer(sympy.Expr, Pickable):
 
     """
-    Symbolic representation of C's function pointers.
+    Symbolic representation of C's function pointers to be used as an
+    argument to a function.
     """
 
-    _return_typ = ''
-    _parameter_typ = ''
+    __rargs__ = ('func_name', 'return_type', 'parameter_type',)
 
-    def __new__(cls, base, **kwargs):
-        obj = super().__new__(cls, base)
+    def __new__(cls, func_name, return_type, parameter_type, **kwargs):
+
+        obj = sympy.Expr.__new__(cls, func_name, return_type, parameter_type)
+        obj.func_name = func_name
+        obj.return_type = return_type
+        obj.parameter_type = parameter_type
+
         return obj
 
-    func = Pickable._rebuild
+    def __str__(self):
+        return "(%s (%s)(%s))%s" % (self.return_type, '*',
+                                    self.parameter_type, self.func_name)
 
-    @property
-    def _op(self):
-        return '(%s (%s)(%s))' % (self._return_typ, '*', self._parameter_typ)
+    __repr__ = __str__
+
+    def _hashable_content(self):
+        return (self.func_name, self.return_type, self.parameter_type)
+
+    # Pickling support
+    __reduce_ex__ = Pickable.__reduce_ex__
 
 
 class IndexedPointer(sympy.Expr, Pickable, BasicWrapperMixin):

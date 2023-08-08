@@ -15,8 +15,6 @@ from devito.symbolics import (retrieve_functions, retrieve_indexed, evalrel,  # 
 from devito.tools import as_tuple
 from devito.types import (Array, Bundle, FIndexed, LocalObject, Object,
                           Symbol as dSymbol)
-from devito.passes.iet.petsc import PetscObject
-from devito.ir.iet import Callable, Definition
 
 
 def test_float_indices():
@@ -229,6 +227,24 @@ def test_field_from_composite():
 
     # Free symbols
     assert ffc1.free_symbols == {s}
+
+
+def test_function_pointer():
+
+    # Test construction
+    fp0 = FunctionPointer('foo0', 'void', 'void')
+    assert str(fp0) == '(void (*)(void))foo0'
+    fp1 = FunctionPointer('foo0', 'int', 'void')
+    fp2 = FunctionPointer('foo0', 'void', 'float')
+    fp3 = FunctionPointer('foo1', 'void', 'void')
+    assert fp0 != fp1
+    assert fp0 != fp2
+    assert fp0 != fp3
+
+    # Test hashing
+    assert hash(fp0) != hash(fp1)
+    assert hash(fp0) != hash(fp2)
+    assert hash(fp0) != hash(fp3)
 
 
 def test_extended_sympy_arithmetic():
