@@ -401,7 +401,7 @@ class FunctionPointer(sympy.Expr, Pickable):
 
     """
     Symbolic representation of C's function pointers to be used as an
-    argument to a function.
+    argument to a function
     """
 
     __rargs__ = ('func_name', 'return_type', 'parameter_type',)
