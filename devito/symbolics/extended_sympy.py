@@ -410,15 +410,6 @@ class FunctionPointer(sympy.Expr, Pickable):
 
     def __new__(cls, func_name, return_type, parameter_type, **kwargs):
 
-        if isinstance(func_name, str):
-            func_name = Symbol(func_name)
-        if isinstance(return_type, str):
-            return_type = Symbol(return_type)
-        if isinstance(parameter_type, str):
-            parameter_type = Symbol(parameter_type)
-        else:
-            raise ValueError("`args` must be str")
-
         obj = sympy.Expr.__new__(cls, func_name, return_type, parameter_type)
         obj.func_name = func_name
         obj.return_type = return_type
