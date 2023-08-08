@@ -4,7 +4,7 @@ from devito.types import AbstractObjectWithShape
 from sympy import Expr
 from devito.ir.iet import Call, Callable, Transformer, Definition
 from devito.passes.iet.engine import iet_pass
-from devito.symbolics import FunctionPtr
+from devito.symbolics import FunctionPointer, ccode
 
 __all__ = ['PetscObject', 'lower_petsc']
 
@@ -54,11 +54,7 @@ def lower_petsc(iet, **kwargs):
     
     # from IPython import embed; embed()
 
-    class voidFunctionPtr(FunctionPtr):
-        _return_typ = 'void'
-        _parameter_typ = 'void'
-
-    tmp = voidFunctionPtr(call_back.name)
+    tmp = FunctionPointer(call_back.name, 'void', 'void')
     kernel_body = Call('PetscCall', [Call('MatShellSetOperation', arguments=[symbs_petsc['A_matfree'], tmp])])
 
     # iet = Transformer({iet.body.body[1]: Call(call_back.name)}).visit(iet)
@@ -74,7 +70,7 @@ def lower_petsc(iet, **kwargs):
     kwargs['compiler'].add_ldflags('-Wl,-rpath,%s' % libdir)
 
 
-    return iet, {'efuncs': [kernel_body],
-                 'includes': ['petscksp.h']}
+    # return iet, {'efuncs': [kernel_body],
+    #              'includes': ['petscksp.h']}
 
-    # return iet, {'includes': ['petscksp.h', 'stdio.h']}
+    return iet, {'includes': ['petscksp.h', 'stdio.h']}
