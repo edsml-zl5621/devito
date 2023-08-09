@@ -196,6 +196,10 @@ class CodePrinter(C99CodePrinter):
     def _print_ListInitializer(self, expr):
         return "{%s}" % ', '.join([self._print(i) for i in expr.params])
 
+    def _print_FunctionPointer(self, expr):
+        return "(%s (%s)(%s))%s" % (expr.return_type, '*',
+                                    expr.parameter_type, expr.func_name)
+
     def _print_IndexedPointer(self, expr):
         return "%s%s" % (expr.base, ''.join('[%s]' % self._print(i) for i in expr.index))
 
