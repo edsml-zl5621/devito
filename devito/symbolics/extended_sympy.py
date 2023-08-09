@@ -423,7 +423,7 @@ class FunctionPointer(sympy.Expr, Pickable):
 
     def _hashable_content(self):
         return (self.func_name, self.return_type, self.parameter_type)
-        
+
     # Pickling support
     __reduce_ex__ = Pickable.__reduce_ex__
 
