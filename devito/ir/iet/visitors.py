@@ -10,12 +10,12 @@ from itertools import chain, groupby
 import ctypes
 
 import cgen as c
-from sympy import IndexedBase
+from sympy import IndexedBase, sympify
 from sympy.core.function import Application
 
 from devito.exceptions import VisitorException
 from devito.ir.iet.nodes import (Node, Iteration, Expression, ExpressionBundle,
-                                 Call, Lambda, BlankLine, Section)
+                                 Call, CallBack, Lambda, BlankLine, Section)
 from devito.ir.support.space import Backward
 from devito.symbolics import ListInitializer, ccode, uxreplace
 from devito.tools import (GenericVisitor, as_tuple, ctypes_to_cstr, filter_ordered,
@@ -292,6 +292,7 @@ class CGen(Visitor):
         return ret
 
     def _gen_signature(self, o):
+        # from IPython import embed; embed()
         decls = self._args_decl(o.parameters)
         prefix = ' '.join(o.prefix + (self._gen_rettype(o.retval),))
         signature = c.FunctionDeclaration(c.Value(prefix, o.name), decls)
@@ -299,6 +300,7 @@ class CGen(Visitor):
             tparams = ', '.join([i.inline() for i in self._args_decl(o.templates)])
             signature = c.Template(tparams, signature)
         return signature
+    
 
     def _blankline_logic(self, children):
         """
@@ -483,6 +485,12 @@ class CGen(Visitor):
                 rettype = self._gen_rettype(retobj)
                 return c.Initializer(c.Value(rettype, retobj._C_name), call)
 
+    def visit_CallBack(self, o, nested_call=False):
+        name = o.name
+        return_type = o.return_type
+        parameter_type = o.parameter_type
+        return FunctionPointerArg(name, return_type, parameter_type)
+
     def visit_Conditional(self, o):
         try:
             then_body, else_body = self._blankline_logic(o.children)
@@ -549,8 +557,10 @@ class CGen(Visitor):
             return c.Statement('while(%s)' % condition)
 
     def visit_Callable(self, o):
+        # from IPython import embed; embed()
         body = flatten(self._visit(i) for i in o.children)
         signature = self._gen_signature(o)
+        # from IPython import embed; embed()
         return c.FunctionBody(signature, c.Block(body))
 
     def visit_CallableBody(self, o):
@@ -1253,3 +1263,16 @@ class MultilineCall(c.Generable):
         if self.cast:
             tip = '(%s)%s' % (self.cast, tip)
         yield tip
+
+
+class FunctionPointerArg(c.Generable):
+
+    def __init__(self, name, return_type, parameter_type):
+        self.name = name
+        self.return_type = return_type
+        self.parameter_type = parameter_type
+
+    def generate(self):
+        yield "(%s (*)(%s))%s" % (self.return_type, self.parameter_type, self.name)
+
+

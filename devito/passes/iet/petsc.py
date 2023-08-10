@@ -2,7 +2,7 @@ from ctypes import POINTER
 from devito.tools import petsc_type_to_ctype
 from devito.types import AbstractObjectWithShape
 from sympy import Expr
-from devito.ir.iet import Call, Callable, Transformer, Definition
+from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack
 from devito.passes.iet.engine import iet_pass
 from devito.symbolics import FunctionPointer, ccode
 
@@ -52,13 +52,13 @@ def lower_petsc(iet, **kwargs):
     call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
                           parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
     
-    # from IPython import embed; embed()
+    call_back_arg = CallBack(call_back.name, 'void', 'void')
+    # fp = FunctionPointer(call_back.name, 'void', 'void')
 
-    tmp = FunctionPointer(call_back.name, 'void', 'void')
-    kernel_body = Call('PetscCall', [Call('MatShellSetOperation', arguments=[symbs_petsc['A_matfree'], tmp])])
+    kernel_body = Call('PetscCall', [Call('MatShellSetOperation', arguments=[symbs_petsc['A_matfree'], 'MATOP_MULT', call_back_arg])])
 
-    # iet = Transformer({iet.body.body[1]: Call(call_back.name)}).visit(iet)
     iet = Transformer({iet.body.body[1]: kernel_body}).visit(iet)
+    # iet = Transformer({iet.body.body[1]: Call(call_back.name)}).visit(iet)
 
 
     # add necessary include directories for petsc
@@ -70,7 +70,9 @@ def lower_petsc(iet, **kwargs):
     kwargs['compiler'].add_ldflags('-Wl,-rpath,%s' % libdir)
 
 
-    # return iet, {'efuncs': [kernel_body],
-    #              'includes': ['petscksp.h']}
+    return iet, {'efuncs': [call_back],
+                 'includes': ['petscksp.h']}
 
-    return iet, {'includes': ['petscksp.h', 'stdio.h']}
+    # return iet, {'includes': ['petscksp.h', 'stdio.h']}
+
+    # return iet, {}

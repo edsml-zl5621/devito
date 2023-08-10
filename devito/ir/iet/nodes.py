@@ -27,7 +27,7 @@ __all__ = ['Node', 'Block', 'Expression', 'Callable', 'Call',
            'AugmentedExpression', 'Increment', 'Return', 'While',
            'ParallelIteration', 'ParallelBlock', 'Dereference', 'Lambda',
            'SyncSpot', 'Pragma', 'DummyExpr', 'BlankLine', 'ParallelTree',
-           'BusyWait', 'CallableBody', 'Transfer']
+           'BusyWait', 'CallableBody', 'Transfer', 'CallBack']
 
 # First-class IET nodes
 
@@ -42,6 +42,7 @@ class Node(Signer):
     is_Expression = False
     is_Callable = False
     is_CallableBody = False
+    is_CallBack = False
     is_Conditional = False
     is_ElementalFunction = False
     is_Call = False
@@ -727,6 +728,16 @@ class Callable(Node):
     @property
     def defines(self):
         return self.all_parameters
+
+
+class CallBack(Call):
+
+    def __init__(self, name, return_type, parameter_type, **kwargs):
+        
+        super().__init__(name=name)
+
+        self.return_type = return_type
+        self.parameter_type = parameter_type
 
 
 class CallableBody(Node):
