@@ -12,6 +12,8 @@ class PetscObject(AbstractObjectWithShape, Expr):
     # __rkwargs__ = (AbstractObjectWithShape.__rkwargs__ +
     #                ('petsc_type',))
 
+    # to do: figure out how to change to _init_finalize_ without
+    # everything breaking.
     def __init__(self, name, petsc_type, **kwargs):
         self.name = name
         self._petsc_type = petsc_type
