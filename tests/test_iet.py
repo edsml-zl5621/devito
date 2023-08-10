@@ -120,7 +120,7 @@ def test_callback_cgen():
     code0 = CGen().visit(foo0_arg)
     assert str(code0) == '(void (*)(int))foo0'
 
-    # test nested calls with CallBack (i.e a functionpointer) as the argument
+    # test nested calls with a CallBack (i.e a functionpointer) as an argument
     call = Call('foo1', [
         Call('foo2', [foo0_arg])
     ])

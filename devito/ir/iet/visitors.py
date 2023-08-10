@@ -557,10 +557,8 @@ class CGen(Visitor):
             return c.Statement('while(%s)' % condition)
 
     def visit_Callable(self, o):
-        # from IPython import embed; embed()
         body = flatten(self._visit(i) for i in o.children)
         signature = self._gen_signature(o)
-        # from IPython import embed; embed()
         return c.FunctionBody(signature, c.Block(body))
 
     def visit_CallableBody(self, o):

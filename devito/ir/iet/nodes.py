@@ -42,7 +42,6 @@ class Node(Signer):
     is_Expression = False
     is_Callable = False
     is_CallableBody = False
-    is_CallBack = False
     is_Conditional = False
     is_ElementalFunction = False
     is_Call = False
@@ -732,6 +731,9 @@ class Callable(Node):
 
 class CallBack(Call):
 
+    """
+    Implement a function pointer argument for a callback function.
+    """
     def __init__(self, name, return_type, parameter_type, **kwargs):
         
         super().__init__(name=name)
