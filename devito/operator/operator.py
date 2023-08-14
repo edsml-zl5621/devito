@@ -249,7 +249,7 @@ class Operator(Callable):
         # This may be used by a compilation pass that constructs a new
         # expression for which a partial or complete lowering is desired
         kwargs['rcompile'] = cls._rcompile_wrapper(**kwargs)
-
+        
         # [Eq] -> [LoweredEq]
         expressions = cls._lower_exprs(expressions, **kwargs)
 
@@ -473,7 +473,7 @@ class Operator(Callable):
         # Target-independent optimizations
         minimize_symbols(graph)
         # from IPython import embed; embed()
-        lower_petsc(graph, **kwargs)
+        # lower_petsc(graph, **kwargs)
 
         # from IPython import embed; embed()
 

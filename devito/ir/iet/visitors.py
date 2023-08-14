@@ -292,7 +292,6 @@ class CGen(Visitor):
         return ret
 
     def _gen_signature(self, o):
-        # from IPython import embed; embed()
         decls = self._args_decl(o.parameters)
         prefix = ' '.join(o.prefix + (self._gen_rettype(o.retval),))
         signature = c.FunctionDeclaration(c.Value(prefix, o.name), decls)
@@ -654,7 +653,6 @@ class CGen(Visitor):
         globs = self._operator_globals(o, mode)
         if globs:
             globs.append(blankline)
-
         return c.Module(headers + includes + typedecls + globs +
                         esigns + [blankline, kernel] + efuncs)
 
