@@ -284,7 +284,9 @@ def infer_dtype(dtypes):
 
 # this probably shouldn't be in this file
 def petsc_type_to_ctype(petsc_type):
-    "Map Petsc types to ctypes type"
+    """
+    Map Petsc types to ctypes type
+    """
     return {
         'PetscInt': c_int,
         # note these are probably wrong,

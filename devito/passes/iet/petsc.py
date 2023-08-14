@@ -8,7 +8,6 @@ __all__ = ['PetscObject']
 
 class PetscObject(AbstractObjectWithShape, Expr):
 
-
     __rkwargs__ = AbstractObjectWithShape.__rkwargs__ + ('petsc_type',)
 
     def __init_finalize__(self, *args, **kwargs):

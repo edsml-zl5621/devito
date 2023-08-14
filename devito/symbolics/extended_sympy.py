@@ -398,7 +398,6 @@ class Cast(UnaryOp):
 
 
 class FunctionPointer(sympy.Expr, Pickable):
-
     """
     Symbolic representation of C's function pointers to be used as an
     argument to a function.
