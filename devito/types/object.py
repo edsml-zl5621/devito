@@ -156,7 +156,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         return shape
 
     def __repr__(self):
-        return self.name
+        return self._name
 
     __str__ = __repr__
 
@@ -164,7 +164,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         return str(self)
 
     def _hashable_content(self):
-        return (self.name, self.dtype, self.is_const,
+        return (self._name, self.dtype, self.is_const,
                 self.grid, self.shape, self.dimensions)
 
     # def _hashable_content(self):
@@ -184,7 +184,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
 
     @property
     def _C_name(self):
-        return self.name
+        return self._name
 
     @property
     def is_const(self):
@@ -236,7 +236,7 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
     @property
     def indexed(self):
         """The wrapped IndexedData object."""
-        return IndexedData(self.name, shape=self._shape, function=self.function)
+        return IndexedData(self._name, shape=self._shape, function=self.function)
 
     # changing it back so it works exactly the same as a Devito Function
     def indexify(self, indices=None, subs=None):

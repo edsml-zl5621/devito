@@ -8,15 +8,14 @@ __all__ = ['PetscObject']
 
 class PetscObject(AbstractObjectWithShape, Expr):
 
-    # need to check this?
-    # __rkwargs__ = (AbstractObjectWithShape.__rkwargs__ +
-    #                ('petsc_type',))
 
-    # to do: figure out how to change to _init_finalize_ without
-    # everything breaking.
-    def __init__(self, name, petsc_type, **kwargs):
-        self.name = name
-        self._petsc_type = petsc_type
+    __rkwargs__ = AbstractObjectWithShape.__rkwargs__ + ('petsc_type',)
+
+    def __init_finalize__(self, *args, **kwargs):
+
+        super(PetscObject, self).__init_finalize__(*args, **kwargs)
+
+        self._petsc_type = kwargs.get('petsc_type')
 
     def _hashable_content(self):
         return super()._hashable_content() + (self.petsc_type,)
