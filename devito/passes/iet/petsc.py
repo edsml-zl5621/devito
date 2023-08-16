@@ -1,12 +1,13 @@
-from ctypes import POINTER
+from ctypes import POINTER, c_int
 from devito.tools import petsc_type_to_ctype
-from devito.types import AbstractObjectWithShape
+from devito.types import AbstractObjectWithShape, CompositeObject
 from sympy import Expr
 from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack
 from devito.passes.iet.engine import iet_pass
 from devito.symbolics import FunctionPointer, ccode
+import cgen as c
 
-__all__ = ['PetscObject', 'lower_petsc']
+__all__ = ['PetscObject', 'lower_petsc', 'PetscStruct']
 
 
 class PetscObject(AbstractObjectWithShape, Expr):
@@ -38,6 +39,10 @@ class PetscObject(AbstractObjectWithShape, Expr):
     def petsc_type(self):
         return self._petsc_type
 
+    @property
+    def name(self):
+        return self._name
+
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
@@ -49,16 +54,23 @@ def lower_petsc(iet, **kwargs):
                    'yvec': PetscObject(name='yvec', petsc_type='Vec'),
                    'x' : PetscObject(name='x', petsc_type='Vec')}
     
+    tmp = iet.args_frozen['parameters'][2:-1]
+    tmp2 = PetscStruct(tmp)
+    
     call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
-                          parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
+                          parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec'], tmp2))
     
     call_back_arg = CallBack(call_back.name, 'void', 'void')
-    # fp = FunctionPointer(call_back.name, 'void', 'void')
 
-    kernel_body = Call('PetscCall', [Call('MatShellSetOperation', arguments=[symbs_petsc['A_matfree'], 'MATOP_MULT', call_back_arg])])
+    kernel_body = Call('PetscCall', [Call('MatShellSetOperation',
+                                          arguments=[symbs_petsc['A_matfree'], 'MATOP_MULT', call_back_arg])])
+    
+
+    # from IPython import embed; embed()
 
     iet = Transformer({iet.body.body[1]: kernel_body}).visit(iet)
-    # iet = Transformer({iet.body.body[1]: Call(call_back.name)}).visit(iet)
+
+    # from IPython import embed; embed()
 
 
     # add necessary include directories for petsc
@@ -73,6 +85,67 @@ def lower_petsc(iet, **kwargs):
     return iet, {'efuncs': [call_back],
                  'includes': ['petscksp.h']}
 
-    # return iet, {'includes': ['petscksp.h', 'stdio.h']}
+    # return iet, {'includes': ['petscksp.h']}
 
-    # return iet, {}
+
+# class new_iet(c.Generable):
+
+#     def __init__(self, name):
+#         self.name = name
+
+#     def generate(self):
+#         yield "%s\n %s" % (self.name, self.name)
+
+
+
+class PetscStruct(CompositeObject):
+
+    __rargs__ = ('usr_ctx',)
+
+    def __init__(self, usr_ctx):
+        # from IPython import embed; embed()
+        self._usr_ctx = usr_ctx
+
+        fields = [(str(i), c_int) for i in usr_ctx]
+        super(PetscStruct, self).__init__('ctx', 'MatContext', fields)
+
+    @property
+    def entries(self):
+        return self._entries
+
+    @property
+    def usr_ctx(self):
+        return self._usr_ctx
+
+    # @cached_property
+    # def _C_typedecl(self):
+    #     # Overriding for better code readability
+    #     #
+    #     # Struct neighborhood                 Struct neighborhood
+    #     # {                                   {
+    #     #   int ll;                             int ll, lc, lr;
+    #     #   int lc;                 VS          ...
+    #     #   int lr;                             ...
+    #     #   ...                                 ...
+    #     # }                                   }
+    #     #
+    #     # With this override, we generate the one on the right
+    #     groups = [list(g) for k, g in groupby(self.pfields, key=lambda x: x[0][0])]
+    #     groups = [(j[0], i) for i, j in [zip(*g) for g in groups]]
+    #     # from IPython import embed; embed()
+    #     return Struct(self.pname, [Value(ctypes_to_cstr(i), ', '.join(j))
+    #                                for i, j in groups])
+
+    # def _arg_defaults(self):
+    #     values = super(MPINeighborhood, self)._arg_defaults()
+    #     for name, i in zip(self.fields, self.entries):
+    #         setattr(values[self.name]._obj, name, self.neighborhood[i])
+    #     return values
+
+    # def _arg_values(self, *args, **kwargs):
+    #     grid = kwargs.get('grid', None)
+    #     # Update `nb` based on object attached to `grid`
+    #     if grid is not None:
+    #         return grid.distributor._obj_neighborhood._arg_defaults()
+    #     else:
+    #         return self._arg_defaults()
