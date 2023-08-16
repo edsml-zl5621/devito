@@ -190,7 +190,9 @@ class CGen(Visitor):
         """
         Convert ctypes.Struct -> cgen.Structure.
         """
+        # from IPython import embed; embed()
         ctype = obj._C_ctype
+        # from IPython import embed; embed()
         while issubclass(ctype, ctypes._Pointer):
             ctype = ctype._type_
 
@@ -590,6 +592,7 @@ class CGen(Visitor):
                 for i in o._includes]
 
     def _operator_typedecls(self, o, mode='all'):
+        # from IPython import embed; embed()
         xfilter0 = lambda i: self._gen_struct_decl(i) is not None
 
         if mode == 'all':
@@ -612,9 +615,17 @@ class CGen(Visitor):
                 continue
             typedecls.extend([self._gen_struct_decl(j) for j in i.root.parameters
                               if xfilter(j)])
-        typedecls = filter_sorted(typedecls, key=lambda i: i.tpname)
+        # from IPython import embed; embed()
 
-        return typedecls
+        # this is obviously really hacky and terrible.......
+        # remove the PETSc Typedef before filtering since cgen.Typedefs do not have a 'tpname'
+        # there is definitely a better way to do this..
+        typedecls_notypedef = [item for item in typedecls if not isinstance(item, c.Typedef)]
+        typedecls_small = filter_sorted(typedecls_notypedef, key=lambda i: i.tpname)
+        typedef = [item for item in typedecls if isinstance(item, c.Typedef)]
+        typedecls_small += typedef
+
+        return typedecls_small
 
     def _operator_globals(self, o, mode='all'):
         # Sorting for deterministic code generation

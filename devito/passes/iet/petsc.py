@@ -1,5 +1,5 @@
 from ctypes import POINTER, c_int
-from devito.tools import petsc_type_to_ctype
+from devito.tools import petsc_type_to_ctype, ctypes_to_cstr
 from devito.types import AbstractObjectWithShape, CompositeObject
 from sympy import Expr
 from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack
@@ -55,10 +55,14 @@ def lower_petsc(iet, **kwargs):
                    'x' : PetscObject(name='x', petsc_type='Vec')}
     
     tmp = iet.args_frozen['parameters'][2:-1]
+    # from IPython import embed; embed()
     tmp2 = PetscStruct(tmp)
     
     call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
                           parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec'], tmp2))
+
+    # call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
+    #                       parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
     
     call_back_arg = CallBack(call_back.name, 'void', 'void')
 
@@ -109,43 +113,17 @@ class PetscStruct(CompositeObject):
         fields = [(str(i), c_int) for i in usr_ctx]
         super(PetscStruct, self).__init__('ctx', 'MatContext', fields)
 
+    # @property
+    # def usr_ctx(self):
+    #     return [h_x]
+    
     @property
-    def entries(self):
-        return self._entries
-
+    def fields(self):
+        fields = [('h_x', c_int)]
+        return fields
+    
     @property
-    def usr_ctx(self):
-        return self._usr_ctx
-
-    # @cached_property
-    # def _C_typedecl(self):
-    #     # Overriding for better code readability
-    #     #
-    #     # Struct neighborhood                 Struct neighborhood
-    #     # {                                   {
-    #     #   int ll;                             int ll, lc, lr;
-    #     #   int lc;                 VS          ...
-    #     #   int lr;                             ...
-    #     #   ...                                 ...
-    #     # }                                   }
-    #     #
-    #     # With this override, we generate the one on the right
-    #     groups = [list(g) for k, g in groupby(self.pfields, key=lambda x: x[0][0])]
-    #     groups = [(j[0], i) for i, j in [zip(*g) for g in groups]]
-    #     # from IPython import embed; embed()
-    #     return Struct(self.pname, [Value(ctypes_to_cstr(i), ', '.join(j))
-    #                                for i, j in groups])
-
-    # def _arg_defaults(self):
-    #     values = super(MPINeighborhood, self)._arg_defaults()
-    #     for name, i in zip(self.fields, self.entries):
-    #         setattr(values[self.name]._obj, name, self.neighborhood[i])
-    #     return values
-
-    # def _arg_values(self, *args, **kwargs):
-    #     grid = kwargs.get('grid', None)
-    #     # Update `nb` based on object attached to `grid`
-    #     if grid is not None:
-    #         return grid.distributor._obj_neighborhood._arg_defaults()
-    #     else:
-    #         return self._arg_defaults()
+    def _C_typedecl(self):
+        struct = [c.Value(ctypes_to_cstr(ctype), param) for (param, ctype) in self.fields]
+        struct = c.Struct(self.pname, struct)
+        return c.Typedef(struct)
