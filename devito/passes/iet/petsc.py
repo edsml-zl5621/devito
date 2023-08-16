@@ -1,10 +1,10 @@
 from ctypes import POINTER, c_int
-from devito.tools import petsc_type_to_ctype, ctypes_to_cstr
+from devito.tools import petsc_type_to_ctype, ctypes_to_cstr, dtype_to_ctype
 from devito.types import AbstractObjectWithShape, CompositeObject
 from sympy import Expr
 from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack
 from devito.passes.iet.engine import iet_pass
-from devito.symbolics import FunctionPointer, ccode
+from devito.symbolics import FunctionPointer, ccode, Byref
 import cgen as c
 
 __all__ = ['PetscObject', 'lower_petsc', 'PetscStruct']
@@ -53,12 +53,20 @@ def lower_petsc(iet, **kwargs):
                    'xvec': PetscObject(name='xvec', petsc_type='Vec'),
                    'yvec': PetscObject(name='yvec', petsc_type='Vec'),
                    'x' : PetscObject(name='x', petsc_type='Vec')}
-    
+    from IPython import embed; embed()
     tmp = iet.args_frozen['parameters'][2:-1]
     # from IPython import embed; embed()
     tmp2 = PetscStruct(tmp)
+
+    # from IPython import embed; embed()
+    # probably shouldn't be str(tmp2) - change
+    mymatshellmult_body = [Definition(tmp2),
+                           Call('PetscCall', [Call('MatShellGetContext', arguments=[symbs_petsc['A_matfree'], Byref(str(tmp2))])]),
+                           iet.body.body[1],
+                           Call('PetscFunctionReturn', arguments=str(0))]
+
     
-    call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
+    call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=symbs_petsc['retval'],
                           parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec'], tmp2))
 
     # call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
@@ -101,7 +109,6 @@ def lower_petsc(iet, **kwargs):
 #         yield "%s\n %s" % (self.name, self.name)
 
 
-
 class PetscStruct(CompositeObject):
 
     __rargs__ = ('usr_ctx',)
@@ -113,13 +120,13 @@ class PetscStruct(CompositeObject):
         fields = [(str(i), c_int) for i in usr_ctx]
         super(PetscStruct, self).__init__('ctx', 'MatContext', fields)
 
-    # @property
-    # def usr_ctx(self):
-    #     return [h_x]
+    @property
+    def usr_ctx(self):
+        return self._usr_ctx
     
     @property
     def fields(self):
-        fields = [('h_x', c_int)]
+        fields = [(str(i), dtype_to_ctype(i.dtype)) for i in self.usr_ctx]
         return fields
     
     @property
