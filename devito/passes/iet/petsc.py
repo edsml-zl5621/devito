@@ -2,9 +2,9 @@ from ctypes import POINTER, c_int
 from devito.tools import petsc_type_to_ctype, ctypes_to_cstr, dtype_to_ctype
 from devito.types import AbstractObjectWithShape, CompositeObject
 from sympy import Expr
-from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack
+from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack, Uxreplace
 from devito.passes.iet.engine import iet_pass
-from devito.symbolics import FunctionPointer, ccode, Byref
+from devito.symbolics import FunctionPointer, ccode, Byref, FieldFromPointer
 import cgen as c
 
 __all__ = ['PetscObject', 'lower_petsc', 'PetscStruct']
@@ -53,10 +53,11 @@ def lower_petsc(iet, **kwargs):
                    'xvec': PetscObject(name='xvec', petsc_type='Vec'),
                    'yvec': PetscObject(name='yvec', petsc_type='Vec'),
                    'x' : PetscObject(name='x', petsc_type='Vec')}
-    from IPython import embed; embed()
+    # from IPython import embed; embed()
     tmp = iet.args_frozen['parameters'][2:-1]
     # from IPython import embed; embed()
     tmp2 = PetscStruct(tmp)
+    # cfp = FieldFromPointer(tmp[0], tmp2)
 
     # from IPython import embed; embed()
     # probably shouldn't be str(tmp2) - change
@@ -72,6 +73,9 @@ def lower_petsc(iet, **kwargs):
     # call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
     #                       parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
     
+    for i in tmp:
+        call_back = Uxreplace({i: FieldFromPointer(i, tmp2)}).visit(call_back)
+
     call_back_arg = CallBack(call_back.name, 'void', 'void')
 
     kernel_body = Call('PetscCall', [Call('MatShellSetOperation',
