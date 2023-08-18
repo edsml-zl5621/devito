@@ -57,26 +57,25 @@ def lower_petsc(iet, **kwargs):
                    str(iet.functions[1].func) : PetscObject(name=str(iet.functions[1].func), petsc_type='PetscScalar', grid=iet.functions[1].grid, is_const=True)}
 
     # from IPython import embed; embed()
-    tmp2 = PetscStruct(iet.args_frozen['parameters'][2:-1])
+    tmp = iet.args_frozen['parameters'][len(iet.functions):-1]
+    xsize = iet.functions[0].dimensions[0].symbolic_size
+    ysize = iet.functions[0].dimensions[1].symbolic_size
+    tmp.extend([xsize, ysize])
+    tmp2 = PetscStruct(tmp)
 
-    # from IPython import embed; embed()
-    # probably shouldn't be str(tmp2) - change
+    from IPython import embed; embed()
+    # str(tmp2) is obvs NOT correct way to do it
     mymatshellmult_body = [Definition(tmp2),
                            Call('PetscCall', [Call('MatShellGetContext', arguments=[symbs_petsc['A_matfree'], Byref(str(tmp2))])]),
                            Definition(symbs_petsc[str(iet.functions[0].func)]),
                            Definition(symbs_petsc[str(iet.functions[1].func)]),
-                           Call('PetscCall', [Call('VecGetArray2dRead', arguments=[symbs_petsc['xvec'], Byref(str(tmp2))])]),
-                           iet.body.body[1],
-                           Call('PetscFunctionReturn', arguments=str(0))]
+                           Call('PetscCall', [Call('VecGetArray2dRead', arguments=[symbs_petsc['xvec']])]),
+                           iet.body.body[1]]
 
-
-    call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
-                          parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec'], tmp2))
-
-    # call_back = Callable('MyMatShellMult', iet.body.body[1], retval=symbs_petsc['retval'],
-    #                       parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
+    call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=symbs_petsc['retval'],
+                          parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
     
-    for i in iet.args_frozen['parameters'][2:-1]:
+    for i in tmp:
         call_back = Uxreplace({i: FieldFromPointer(i, tmp2)}).visit(call_back)
 
     call_back_arg = CallBack(call_back.name, 'void', 'void')
@@ -118,11 +117,11 @@ class PetscStruct(CompositeObject):
     __rargs__ = ('usr_ctx',)
 
     def __init__(self, usr_ctx):
-        # from IPython import embed; embed()
         self._usr_ctx = usr_ctx
+        
+        # fields = [(i._C_name, dtype_to_ctype(i.dtype)) for i in self.usr_ctx]
+        fields = [(str(i), c_int) for i in self.usr_ctx]
 
-        fields = [(i._C_name, dtype_to_ctype(i.dtype)) for i in self.usr_ctx]
-        # from IPython import embed; embed()
         super(PetscStruct, self).__init__('ctx', 'MatContext', fields)
     
     @property
@@ -134,3 +133,4 @@ class PetscStruct(CompositeObject):
         struct = [c.Value(ctypes_to_cstr(ctype), param) for (param, ctype) in self.pfields]
         struct = c.Struct(self.pname, struct)
         return c.Typedef(struct)
+    
