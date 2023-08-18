@@ -198,7 +198,7 @@ class CGen(Visitor):
 
         if not issubclass(ctype, ctypes.Structure):
             return None
-
+        # from IPython import embed; embed()
         try:
             return obj._C_typedecl
         except AttributeError:
@@ -608,12 +608,17 @@ class CGen(Visitor):
         # in some external headers
         xfilter = lambda i: xfilter1(i) and not is_external_ctype(i._C_ctype, o._includes)
 
-        candidates = o.parameters + tuple(o._dspace.parts)
+        tmp = FindSymbols().visit(o.body)
+        candidates = o.parameters + tuple(o._dspace.parts) + tuple(tmp)
+        # from IPython import embed; embed()
         typedecls = [self._gen_struct_decl(i) for i in candidates if xfilter(i)]
+        # from IPython import embed; embed()
         for i in o._func_table.values():
             if not i.local:
                 continue
-            typedecls.extend([self._gen_struct_decl(j) for j in i.root.parameters
+            tmp2 = FindSymbols().visit(i.root)
+            candidates2 = tuple(tmp2) + i.root.parameters
+            typedecls.extend([self._gen_struct_decl(j) for j in candidates2
                               if xfilter(j)])
         # from IPython import embed; embed()
 
