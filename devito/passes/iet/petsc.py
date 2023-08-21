@@ -3,10 +3,11 @@ from devito.tools import petsc_type_to_ctype, ctypes_to_cstr, dtype_to_ctype
 from devito.types import AbstractObjectWithShape, CompositeObject
 from devito.types.basic import Basic, Symbol
 from sympy import Expr
-from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack, Uxreplace
+from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack, Uxreplace, Conditional, DummyExpr
 from devito.passes.iet.engine import iet_pass
 from devito.symbolics import FunctionPointer, ccode, Byref, FieldFromPointer
 import cgen as c
+import sympy
 
 __all__ = ['PetscObject', 'lower_petsc', 'PetscStruct']
 
@@ -66,8 +67,6 @@ def lower_petsc(iet, **kwargs):
     usr_ctx.extend([xsize, ysize])
     matctx = PetscStruct(usr_ctx)
 
-
-    # from IPython import embed; embed()
     mymatshellmult_body = [Definition(matctx),
                            Call('PetscCall', [Call('MatShellGetContext', arguments=[symbs_petsc['A_matfree'], Byref(matctx.name)])]),
                            Definition(symbs_petsc[iet.functions[0].name]),
@@ -82,7 +81,21 @@ def lower_petsc(iet, **kwargs):
     call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=symbs_petsc['retval'],
                           parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
     
-    from IPython import embed; embed()
+
+    # transform the very inner loop of call_back function
+    else_body = call_back.body.body[6].body[1].body[0].body[0].nodes[0].nodes[0]
+    then_body = DummyExpr(symbs_petsc[iet.functions[0].name].indexify(), symbs_petsc[iet.functions[1].name].indexify())
+
+    condition = sympy.Or(sympy.Eq(iet.functions[0].dimensions[0], 0), sympy.Eq(iet.functions[0].dimensions[0], iet.parameters[4]),
+                     sympy.Eq(iet.functions[0].dimensions[1], 0), sympy.Eq(iet.functions[1].dimensions[0], iet.parameters[6]))
+    
+    # then_body = 
+    # from IPython import embed; embed()
+
+    call_back = Transformer({else_body: Conditional(condition, then_body, else_body)}).visit(call_back)
+
+
+
     tmp = [i for i in usr_ctx if isinstance(i, Symbol)]
     # from IPython import embed; embed()
     for i in tmp:
