@@ -1,6 +1,7 @@
 from ctypes import POINTER, c_int
 from devito.tools import petsc_type_to_ctype, ctypes_to_cstr, dtype_to_ctype
 from devito.types import AbstractObjectWithShape, CompositeObject
+from devito.types.basic import Basic, Symbol
 from sympy import Expr
 from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack, Uxreplace
 from devito.passes.iet.engine import iet_pass
@@ -53,30 +54,38 @@ def lower_petsc(iet, **kwargs):
                    'xvec': PetscObject(name='xvec', petsc_type='Vec'),
                    'yvec': PetscObject(name='yvec', petsc_type='Vec'),
                    'x' : PetscObject(name='x', petsc_type='Vec'),
-                   str(iet.functions[0].func) : PetscObject(name=str(iet.functions[0].func), petsc_type='PetscScalar', grid=iet.functions[0].grid),
-                   str(iet.functions[1].func) : PetscObject(name=str(iet.functions[1].func), petsc_type='PetscScalar', grid=iet.functions[1].grid, is_const=True)}
+                   str(iet.functions[0].func) : PetscObject(name=str(iet.functions[0].func),
+                                                            petsc_type='PetscScalar', grid=iet.functions[0].grid),
+                   str(iet.functions[1].func) : PetscObject(name=str(iet.functions[1].func),
+                                                            petsc_type='PetscScalar', grid=iet.functions[1].grid, is_const=True)}
 
     # from IPython import embed; embed()
-    tmp = iet.args_frozen['parameters'][len(iet.functions):-1]
-    xsize = iet.functions[0].dimensions[0].symbolic_size
-    ysize = iet.functions[0].dimensions[1].symbolic_size
-    tmp.extend([xsize, ysize])
-    tmp2 = PetscStruct(tmp)
+    # usr_ctx = iet.args_frozen['parameters'][len(iet.functions):-1]
+    usr_ctx = iet.parameters
+    # from IPython import embed; embed()
+    # xsize = iet.functions[0].dimensions[0].symbolic_size
+    # ysize = iet.functions[0].dimensions[1].symbolic_size
+    # tmp.extend([xsize, ysize])
+    matctx = PetscStruct(usr_ctx)
 
-    from IPython import embed; embed()
+
+    # from IPython import embed; embed()
     # str(tmp2) is obvs NOT correct way to do it
-    mymatshellmult_body = [Definition(tmp2),
-                           Call('PetscCall', [Call('MatShellGetContext', arguments=[symbs_petsc['A_matfree'], Byref(str(tmp2))])]),
-                           Definition(symbs_petsc[str(iet.functions[0].func)]),
-                           Definition(symbs_petsc[str(iet.functions[1].func)]),
-                           Call('PetscCall', [Call('VecGetArray2dRead', arguments=[symbs_petsc['xvec']])]),
-                           iet.body.body[1]]
+    # mymatshellmult_body = [Definition(tmp2),
+    #                        Call('PetscCall', [Call('MatShellGetContext', arguments=[symbs_petsc['A_matfree'], Byref(str(tmp2))])]),
+    #                        Definition(symbs_petsc[str(iet.functions[0].func)]),
+    #                        Definition(symbs_petsc[str(iet.functions[1].func)]),
+    #                        Call('PetscCall', [Call('VecGetArray2dRead', arguments=[symbs_petsc['xvec']])]),
+    #                        iet.body.body[1]]
 
-    call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=symbs_petsc['retval'],
+    callback_body = [Definition(matctx), iet.body.body[1]]
+
+    call_back = Callable('MyMatShellMult', callback_body, retval=symbs_petsc['retval'],
                           parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
     
+    tmp = [i for i in usr_ctx if isinstance(i, Symbol)]
     for i in tmp:
-        call_back = Uxreplace({i: FieldFromPointer(i, tmp2)}).visit(call_back)
+        call_back = Uxreplace({i: FieldFromPointer(i, matctx)}).visit(call_back)
 
     call_back_arg = CallBack(call_back.name, 'void', 'void')
 
@@ -118,19 +127,20 @@ class PetscStruct(CompositeObject):
 
     def __init__(self, usr_ctx):
         self._usr_ctx = usr_ctx
-        
-        # fields = [(i._C_name, dtype_to_ctype(i.dtype)) for i in self.usr_ctx]
-        fields = [(str(i), c_int) for i in self.usr_ctx]
+        # from IPython import embed; embed()
+        pfields = [(str(i), dtype_to_ctype(i.dtype)) for i in self.usr_ctx if isinstance(i, Symbol)]
+        # pfields = [(str(i), c_int) for i in self.usr_ctx]
 
-        super(PetscStruct, self).__init__('ctx', 'MatContext', fields)
+        super(PetscStruct, self).__init__('ctx', 'MatContext', pfields)
     
     @property
     def usr_ctx(self):
         return self._usr_ctx
     
-    @property
-    def _C_typedecl(self):
-        struct = [c.Value(ctypes_to_cstr(ctype), param) for (param, ctype) in self.pfields]
-        struct = c.Struct(self.pname, struct)
-        return c.Typedef(struct)
+    # @property
+    # def _C_typedecl(self):
+        # struct = [c.Value(ctypes_to_cstr(ctype), param) for (param, ctype) in self.pfields]
+    #     struct = c.Struct(self.pname, struct)
+    #     # return c.Typedef(struct)
+    #     return struct
     
