@@ -54,36 +54,37 @@ def lower_petsc(iet, **kwargs):
                    'xvec': PetscObject(name='xvec', petsc_type='Vec'),
                    'yvec': PetscObject(name='yvec', petsc_type='Vec'),
                    'x' : PetscObject(name='x', petsc_type='Vec'),
-                   str(iet.functions[0].func) : PetscObject(name=str(iet.functions[0].func),
+                   iet.functions[0].name : PetscObject(name=iet.functions[0].name,
                                                             petsc_type='PetscScalar', grid=iet.functions[0].grid),
-                   str(iet.functions[1].func) : PetscObject(name=str(iet.functions[1].func),
-                                                            petsc_type='PetscScalar', grid=iet.functions[1].grid, is_const=True)}
+                   iet.functions[1].name : PetscObject(name=iet.functions[1].name,
+                                                            petsc_type='PetscScalar', grid=iet.functions[1].grid)}
 
+    usr_ctx = list(iet.parameters)
     # from IPython import embed; embed()
-    # usr_ctx = iet.args_frozen['parameters'][len(iet.functions):-1]
-    usr_ctx = iet.parameters
-    # from IPython import embed; embed()
-    # xsize = iet.functions[0].dimensions[0].symbolic_size
-    # ysize = iet.functions[0].dimensions[1].symbolic_size
-    # tmp.extend([xsize, ysize])
+    xsize = iet.functions[0].dimensions[0].symbolic_size
+    ysize = iet.functions[0].dimensions[1].symbolic_size
+    usr_ctx.extend([xsize, ysize])
     matctx = PetscStruct(usr_ctx)
 
 
     # from IPython import embed; embed()
-    # str(tmp2) is obvs NOT correct way to do it
-    # mymatshellmult_body = [Definition(tmp2),
-    #                        Call('PetscCall', [Call('MatShellGetContext', arguments=[symbs_petsc['A_matfree'], Byref(str(tmp2))])]),
-    #                        Definition(symbs_petsc[str(iet.functions[0].func)]),
-    #                        Definition(symbs_petsc[str(iet.functions[1].func)]),
-    #                        Call('PetscCall', [Call('VecGetArray2dRead', arguments=[symbs_petsc['xvec']])]),
-    #                        iet.body.body[1]]
+    mymatshellmult_body = [Definition(matctx),
+                           Call('PetscCall', [Call('MatShellGetContext', arguments=[symbs_petsc['A_matfree'], Byref(matctx.name)])]),
+                           Definition(symbs_petsc[iet.functions[0].name]),
+                           Definition(symbs_petsc[iet.functions[1].name]),
+                           Call('PetscCall', [Call('VecGetArray2dRead', arguments=[symbs_petsc['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
+                           Call('PetscCall', [Call('VecGetArray2d', arguments=[symbs_petsc['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
+                           iet.body.body[1],
+                           Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[symbs_petsc['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
+                           Call('PetscCall', [Call('VecRestoreArray2d', arguments=[symbs_petsc['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
+                           Call('PetscFunctionReturn', arguments=[0])]
 
-    callback_body = [Definition(matctx), iet.body.body[1]]
-
-    call_back = Callable('MyMatShellMult', callback_body, retval=symbs_petsc['retval'],
+    call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=symbs_petsc['retval'],
                           parameters=(symbs_petsc['A_matfree'], symbs_petsc['xvec'], symbs_petsc['yvec']))
     
+    from IPython import embed; embed()
     tmp = [i for i in usr_ctx if isinstance(i, Symbol)]
+    # from IPython import embed; embed()
     for i in tmp:
         call_back = Uxreplace({i: FieldFromPointer(i, matctx)}).visit(call_back)
 
@@ -96,6 +97,8 @@ def lower_petsc(iet, **kwargs):
     # from IPython import embed; embed()
 
     iet = Transformer({iet.body.body[1]: kernel_body}).visit(iet)
+
+
 
     # add necessary include directories for petsc
     kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/include')
@@ -126,10 +129,10 @@ class PetscStruct(CompositeObject):
     __rargs__ = ('usr_ctx',)
 
     def __init__(self, usr_ctx):
+
         self._usr_ctx = usr_ctx
-        # from IPython import embed; embed()
-        pfields = [(str(i), dtype_to_ctype(i.dtype)) for i in self.usr_ctx if isinstance(i, Symbol)]
-        # pfields = [(str(i), c_int) for i in self.usr_ctx]
+
+        pfields = [(i._C_name, dtype_to_ctype(i.dtype)) for i in self.usr_ctx if isinstance(i, Symbol)]
 
         super(PetscStruct, self).__init__('ctx', 'MatContext', pfields)
     
@@ -137,6 +140,7 @@ class PetscStruct(CompositeObject):
     def usr_ctx(self):
         return self._usr_ctx
     
+    # can use this if I want to generate typedefs
     # @property
     # def _C_typedecl(self):
         # struct = [c.Value(ctypes_to_cstr(ctype), param) for (param, ctype) in self.pfields]

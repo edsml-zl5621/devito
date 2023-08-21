@@ -473,8 +473,9 @@ class Operator(Callable):
         # Target-independent optimizations
         minimize_symbols(graph)
         # from IPython import embed; embed()
-        # lower_petsc(graph, **kwargs)
+        lower_petsc(graph, **kwargs)
 
+        # graph = cls._specialize_iet(graph, **kwargs)
         # from IPython import embed; embed()
 
         return graph.root, graph

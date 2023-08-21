@@ -518,11 +518,13 @@ class MPINeighborhood(CompositeObject):
     __rargs__ = ('neighborhood',)
 
     def __init__(self, neighborhood):
+        # from IPython import embed; embed()
         self._neighborhood = neighborhood
 
         self._entries = [i for i in neighborhood if isinstance(i, tuple)]
 
         fields = [(''.join(j.name[0] for j in i), c_int) for i in self.entries]
+        # from IPython import embed; embed()
         super(MPINeighborhood, self).__init__('nb', 'neighborhood', fields)
 
     @property
@@ -547,14 +549,20 @@ class MPINeighborhood(CompositeObject):
         #
         # With this override, we generate the one on the right
         groups = [list(g) for k, g in groupby(self.pfields, key=lambda x: x[0][0])]
+        # from IPython import embed; embed()
         groups = [(j[0], i) for i, j in [zip(*g) for g in groups]]
+        # from IPython import embed; embed()
         return Struct(self.pname, [Value(ctypes_to_cstr(i), ', '.join(j))
                                    for i, j in groups])
 
     def _arg_defaults(self):
+        # from IPython import embed; embed()
         values = super(MPINeighborhood, self)._arg_defaults()
+        # from IPython import embed; embed()
         for name, i in zip(self.fields, self.entries):
+            # from IPython import embed; embed()
             setattr(values[self.name]._obj, name, self.neighborhood[i])
+        # from IPython import embed; embed()
         return values
 
     def _arg_values(self, *args, **kwargs):

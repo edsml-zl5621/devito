@@ -621,16 +621,43 @@ class CGen(Visitor):
             typedecls.extend([self._gen_struct_decl(j) for j in candidates2
                               if xfilter(j)])
         # from IPython import embed; embed()
+        typedecls = filter_sorted(typedecls, key=lambda i: i.tpname)
 
-        # this is obviously really hacky and terrible.......
-        # remove the PETSc Typedef before filtering since cgen.Typedefs do not have a 'tpname'
-        # there is definitely a better way to do this..
-        typedecls_notypedef = [item for item in typedecls if not isinstance(item, c.Typedef)]
-        typedecls_small = filter_sorted(typedecls_notypedef, key=lambda i: i.tpname)
-        typedef = [item for item in typedecls if isinstance(item, c.Typedef)]
-        typedecls_small += typedef
 
-        return typedecls_small
+        # typedecls_notypedef = [item for item in typedecls if not isinstance(item, c.Typedef)]
+        # typedecls_small = filter_sorted(typedecls_notypedef, key=lambda i: i.tpname)
+        # typedef = [item for item in typedecls if isinstance(item, c.Typedef)]
+        # typedecls_small += typedef
+
+        return typedecls
+    
+
+    # def _operator_typedecls(self, o, mode='all'):
+    #     xfilter0 = lambda i: self._gen_struct_decl(i) is not None
+
+    #     if mode == 'all':
+    #         xfilter1 = xfilter0
+    #     else:
+    #         public_types = (AbstractFunction, CompositeObject)
+    #         if mode == 'public':
+    #             xfilter1 = lambda i: xfilter0(i) and isinstance(i, public_types)
+    #         else:
+    #             xfilter1 = lambda i: xfilter0(i) and not isinstance(i, public_types)
+
+    #     # This is essentially to rule out vector types which are declared already
+    #     # in some external headers
+    #     xfilter = lambda i: xfilter1(i) and not is_external_ctype(i._C_ctype, o._includes)
+
+    #     candidates = o.parameters + tuple(o._dspace.parts)
+    #     typedecls = [self._gen_struct_decl(i) for i in candidates if xfilter(i)]
+    #     for i in o._func_table.values():
+    #         if not i.local:
+    #             continue
+    #         typedecls.extend([self._gen_struct_decl(j) for j in i.root.parameters
+    #                           if xfilter(j)])
+    #     typedecls = filter_sorted(typedecls, key=lambda i: i.tpname)
+
+    #     return typedecls
 
     def _operator_globals(self, o, mode='all'):
         # Sorting for deterministic code generation

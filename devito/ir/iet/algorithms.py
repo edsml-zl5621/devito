@@ -26,7 +26,9 @@ def iet_build(stree):
                     exprs.append(Increment(e))
                 else:
                     exprs.append(Expression(e, operation=e.operation))
+            # from IPython import embed; embed()
             body = ExpressionBundle(i.ispace, i.ops, i.traffic, body=exprs)
+            # from IPython import embed; embed()
 
         elif i.is_Conditional:
             body = Conditional(i.guard, queues.pop(i))
