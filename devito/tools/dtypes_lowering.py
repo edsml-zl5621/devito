@@ -294,5 +294,7 @@ def petsc_type_to_ctype(petsc_type):
         'PetscScalar': c_float,
         'Mat': c_void_p,
         'Vec': c_void_p,
-        'PetscErrorCode': c_int
+        'PetscErrorCode': c_int,
+        'KSP': c_void_p,
+        'PetscMPIInt': c_int
     }[petsc_type]
