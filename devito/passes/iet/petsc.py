@@ -76,18 +76,15 @@ def lower_petsc(iet, **kwargs):
     usr_ctx.extend(dims)
     matctx = PetscStruct(usr_ctx)
 
-    matctx2 = PetscStruct2(usr_ctx)
-
-
-    mymatshellmult_body = [Definition(matctx2),
-                           Call('PetscCall', [Call('MatShellGetContext', arguments=[petsc_objs['A_matfree'], Byref(matctx2.name)])]),
+    mymatshellmult_body = [Definition(matctx),
+                           Call('PetscCall', [Call('MatShellGetContext', arguments=[petsc_objs['A_matfree'], Byref(matctx.name)])]),
                            Definition(petsc_objs[iet.functions[0].name]),
                            Definition(petsc_objs[iet.functions[1].name]),
-                           Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx2.name), FieldFromPointer(ysize.name, matctx2.name), 0, 0, Byref(iet.functions[1].name)])]),
-                           Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx2.name), FieldFromPointer(ysize.name, matctx2.name), 0, 0, Byref(iet.functions[0].name)])]),
+                           Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
+                           Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
                            iet.body.body[1],
-                           Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx2.name), FieldFromPointer(ysize.name, matctx2.name), 0, 0, Byref(iet.functions[1].name)])]),
-                           Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx2.name), FieldFromPointer(ysize.name, matctx2.name), 0, 0, Byref(iet.functions[0].name)])]),
+                           Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
+                           Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
                            Call('PetscFunctionReturn', arguments=[0])]
 
     call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=petsc_objs['retval'],
@@ -106,7 +103,7 @@ def lower_petsc(iet, **kwargs):
 
     tmp = [i for i in usr_ctx if isinstance(i, Symbol)]
     for i in tmp:
-        call_back = Uxreplace({i: FieldFromPointer(i, matctx2)}).visit(call_back)
+        call_back = Uxreplace({i: FieldFromPointer(i, matctx)}).visit(call_back)
 
     call_back_arg = CallBack(call_back.name, 'void', 'void')
 
@@ -205,44 +202,4 @@ class PetscStruct(CompositeObject):
     
     # maybe also want to override arg defaults?
 
-
-class PetscStruct2(CompositeObject):
-
-    __rargs__ = ('usr_ctx',)
-
-    def __init__(self, usr_ctx):
-
-        # from IPython import embed; embed()
-
-        self._usr_ctx = usr_ctx
-
-        pfields = [(i._C_name, dtype_to_ctype(i.dtype)) for i in self.usr_ctx if isinstance(i, Symbol)]
-
-        super(PetscStruct2, self).__init__('ctx2', 'MatContext', pfields)
-    
-    @property
-    def usr_ctx(self):
-        return self._usr_ctx
-    
-    # can use this if I want to generate typedefs
-    # @property
-    # def _C_typedecl(self):
-        # struct = [c.Value(ctypes_to_cstr(ctype), param) for (param, ctype) in self.pfields]
-    #     struct = c.Struct(self.pname, struct)
-    #     # return c.Typedef(struct)
-    #     return struct
-
-    def _arg_values(self, **kwargs):
-        values = super()._arg_values(**kwargs)
-
-        # from IPython import embed; embed()
-        # 0.0 needs to be changed to value of h_x etc found in kwargs
-        for i in self.fields:
-            # if (str(i) == 'h_x' or str(i) == 'h_y'):
-            #     setattr(values[self.name]._obj, i, 0.0)
-            setattr(values[self.name]._obj, i, kwargs['args'][i])
-
-        return values
-    
-    # maybe also want to override arg defaults?
     
