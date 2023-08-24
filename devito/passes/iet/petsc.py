@@ -1,7 +1,7 @@
 from ctypes import POINTER, c_int
 from devito.tools import petsc_type_to_ctype, ctypes_to_cstr, dtype_to_ctype
 from devito.types import AbstractObjectWithShape, CompositeObject
-from devito.types.basic import Basic, Symbol
+from devito.types.basic import Basic, Symbol, Scalar
 from sympy import Expr
 from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack, Uxreplace, Conditional, DummyExpr, Block, EntryFunction, List, FindNodes, Iteration
 from devito.passes.iet.engine import iet_pass
@@ -111,7 +111,7 @@ def lower_petsc(iet, **kwargs):
                              Definition(petsc_objs['size']),
                              Definition(petsc_objs['matsize']),
                              DummyExpr(petsc_objs['matsize'], xsize*ysize),
-                             Call('PetscCall', [Call('PetscInitialize', arguments=["temp"])]),
+                             Call('PetscCall', [Call('PetscInitialize', arguments=['NULL', 'NULL', 'NULL', 'NULL'])]),
                              Call('PetscCallMPI', [Call('MPI_Comm_size', arguments=['PETSC_COMM_WORLD', Byref(petsc_objs['size'].name)])]),
                              Call('PetscCall', [Call('VecCreate', arguments=['PETSC_COMM_SELF', Byref(petsc_objs['x'].name)])]),
                              Call('PetscCall', [Call('VecSetSizes', arguments=[petsc_objs['x'], 'PETSC_DECIDE', petsc_objs['matsize']])]),
@@ -123,38 +123,16 @@ def lower_petsc(iet, **kwargs):
                              Call('PetscCall', [Call('KSPCreate', arguments=['PETSC_COMM_WORLD', Byref(petsc_objs['ksp'].name)])]),
                              Call('PetscCall', [Call('KSPSetInitialGuessNonzero', arguments=[petsc_objs['ksp'], 'PETSC_TRUE'])]),
                              Call('PetscCall', [Call('KSPSetOperators', arguments=[petsc_objs['ksp'], petsc_objs['A_matfree'], petsc_objs['A_matfree']])]),
+                             Call('PetscCall', [Call('KSPSetTolerances', arguments=[petsc_objs['ksp'], 1.e-5, 'PETSC_DEFAULT', 'PETSC_DEFAULT', 'PETSC_DEFAULT'])]),
+                             Call('PetscCall', [Call('KSPSetFromOptions', arguments=[petsc_objs['ksp']])]),
+                             Call('PetscCall', [Call('KSPSolve', arguments=[petsc_objs['ksp'], petsc_objs['b'], petsc_objs['x']])]),
+                             Call('PetscCall', [Call('VecDestroy', arguments=[Byref(petsc_objs['x'].name)])]),
+                             Call('PetscCall', [Call('VecDestroy', arguments=[Byref(petsc_objs['b'].name)])]),
+                             Call('PetscCall', [Call('MatDestroy', arguments=[Byref(petsc_objs['A_matfree'].name)])]),
+                             Call('PetscCall', [Call('KSPDestroy', arguments=[Byref(petsc_objs['x'].name)])]),
+                             Call('PetscCall', [Call('PetscFinalize')])])
 
 
-
-
-#   PetscCall(KSPSetTolerances(ksp, 1.e-5, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT));
-#   PetscCall(KSPSetFromOptions(ksp));
-
-#   // Solve system.
-#   PetscCall(KSPSolve(ksp, b, x));
-#   PetscCall(KSPGetIterationNumber(ksp, &its));
-#   PetscCall(PetscPrintf(PETSC_COMM_SELF, "Solution achieved in %d iterations\n", its));
-
-
-#   PetscCall(VecView(x, PETSC_VIEWER_STDOUT_SELF));
-
-#   PetscCall(VecDestroy(&x));
-#   PetscCall(VecDestroy(&b));
-#   PetscCall(MatDestroy(&A_matfree));
-#   PetscCall(KSPDestroy(&ksp));
-#   // need to destroy ctx maybe?
-#   PetscCall(PetscFinalize());
-
-#   return 0;
-
-
-
-
-
-                             Call('PetscCall', [Call('MatShellSetOperation',
-                                          arguments=[petsc_objs['A_matfree'], 'MATOP_MULT', call_back_arg])]),
-                             Call('PetscFunctionReturn', arguments=[0]),
-                             Call('hi', arguments=[xsize])])
     # from IPython import embed; embed()
     iet = Transformer({iet.body.body[1]: kernel_body}).visit(iet)
 
@@ -185,6 +163,8 @@ class PetscStruct(CompositeObject):
 
     def __init__(self, usr_ctx):
 
+        # from IPython import embed; embed()
+
         self._usr_ctx = usr_ctx
 
         pfields = [(i._C_name, dtype_to_ctype(i.dtype)) for i in self.usr_ctx if isinstance(i, Symbol)]
@@ -202,4 +182,15 @@ class PetscStruct(CompositeObject):
     #     struct = c.Struct(self.pname, struct)
     #     # return c.Typedef(struct)
     #     return struct
+
+    def _arg_values(self, **kwargs):
+        values = super()._arg_values(**kwargs)
+
+        # 0.0 needs to be changed to value of h_x etc found in kwargs
+        for i in self.fields:
+            setattr(values[self.name]._obj, i, 0.0)
+
+        return values
+    
+    # maybe also want to override arg defaults?
     

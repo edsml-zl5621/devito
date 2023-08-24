@@ -451,21 +451,27 @@ class Operator(Callable):
         """
         name = kwargs.get("name", "Kernel")
         sregistry = kwargs['sregistry']
-
+        # from IPython import embed; embed()
         # Wrap the IET with an EntryFunction (a special Callable representing
         # the entry point of the generated library)
         parameters = derive_parameters(uiet, True)
+        # from IPython import embed; embed()
         iet = EntryFunction(name, uiet, 'int', parameters, ())
 
         # Lower IET to a target-specific IET
         graph = Graph(iet, sregistry=sregistry)
+        # from IPython import embed; embed()
         graph = cls._specialize_iet(graph, **kwargs)
 
+        # lower_petsc(graph, **kwargs)
+
+        # from IPython import embed; embed()
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced
+        # after this line below, struct profiler * timers becomes an argument to the kernel function
         cls._Target.instrument(graph, profiler=profiler, **kwargs)
-
+        # from IPython import embed; embed()
         # from IPython import embed; embed()
         # Extract the necessary macros from the symbolic objects
         generate_macros(graph)
@@ -475,7 +481,9 @@ class Operator(Callable):
         # from IPython import embed; embed()
         lower_petsc(graph, **kwargs)
 
-        # graph = cls._specialize_iet(graph, **kwargs)
+        # from IPython import embed; embed()
+        graph = cls._specialize_iet(graph, **kwargs)
+
         # from IPython import embed; embed()
 
         return graph.root, graph

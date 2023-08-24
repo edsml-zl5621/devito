@@ -116,6 +116,7 @@ class Graph(object):
 
 
 def iet_pass(func):
+    # from IPython import embed; embed()
     if isinstance(func, tuple):
         assert len(func) == 2 and func[0] is iet_visit
         call = lambda graph: graph.visit

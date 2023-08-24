@@ -19,8 +19,9 @@ def instrument(graph, **kwargs):
     if profiler is None:
         return
     timer = Timer(profiler.name, list(profiler.all_sections))
-
+    # from IPython import embed; embed()
     instrument_sections(graph, timer=timer, **kwargs)
+    # from IPython import embed; embed()
     sync_sections(graph, **kwargs)
 
 
@@ -98,19 +99,20 @@ def track_subsections(iet, **kwargs):
 
 @iet_pass
 def instrument_sections(iet, **kwargs):
+    # from IPython import embed; embed()
     """
     Instrument the Sections of the input IET based on `profiler.sections`.
     """
     profiler = kwargs['profiler']
     timer = kwargs['timer']
-
+    # from IPython import embed; embed()
     piet = profiler.instrument(iet, timer)
-
+    # from IPython import embed; embed()
     if piet is iet:
         return piet, {}
 
     headers = [TimedList._start_timer_header(), TimedList._stop_timer_header()]
-
+    # from IPython import embed; embed()
     return piet, {'headers': headers}
 
 
