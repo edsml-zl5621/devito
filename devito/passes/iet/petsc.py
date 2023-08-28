@@ -86,16 +86,17 @@ def lower_petsc(iet, **kwargs):
     iteration_root = retrieve_iteration_tree(iet)[0][0]
 
     # from IPython import embed; embed()
-    mymatshellmult_body = [Definition(matctx),
-                           Call('PetscCall', [Call('MatShellGetContext', arguments=[petsc_objs['A_matfree'], Byref(matctx.name)])]),
-                           Definition(petsc_objs[iet.functions[0].name]),
-                           Definition(petsc_objs[iet.functions[1].name]),
-                           Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
-                           Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
-                           iteration_root,
-                           Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
-                           Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
-                           Call('PetscFunctionReturn', arguments=[0])]
+    mymatshellmult_body = List(header=c.Line('PetscFunctionBegin;'),
+                               body=[Definition(matctx),
+                               Call('PetscCall', [Call('MatShellGetContext', arguments=[petsc_objs['A_matfree'], Byref(matctx.name)])]),
+                               Definition(petsc_objs[iet.functions[0].name]),
+                               Definition(petsc_objs[iet.functions[1].name]),
+                               Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
+                               Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
+                               iteration_root,
+                               Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
+                               Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
+                               Call('PetscFunctionReturn', arguments=[0])])
 
     call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=petsc_objs['retval'],
                           parameters=(petsc_objs['A_matfree'], petsc_objs['xvec'], petsc_objs['yvec']))
@@ -116,21 +117,22 @@ def lower_petsc(iet, **kwargs):
     call_back_arg = CallBack(call_back.name, 'void', 'void')
 
 
-    # from IPython import embed; embed()
+    # to map petsc vector back to devito function
     petsc_2_dev = DummyExpr(petsc_objs[iet.functions[0].name].indexify(indices=(petsc_objs['tmp'].dimensions[0]+2, petsc_objs['tmp'].dimensions[1]+2)),
                             petsc_objs['tmp'].indexify(indices=(petsc_objs['tmp'].dimensions[0], petsc_objs['tmp'].dimensions[1])))
-    # from IPython import embed; embed()
     petsc_2_dev = Transformer({else_body: petsc_2_dev}).visit(iteration_root)
 
     
+    # to map devito array to petsc vector
     dev_2_petsc = List(body=[DummyExpr(petsc_objs['position'], (iet.functions[0].dimensions[0]-2)*ysize + (iet.functions[0].dimensions[1]-2), init=True),
                              Call('PetscCall', [Call('VecSetValue', arguments=[petsc_objs['b'], petsc_objs['position'], petsc_objs[iet.functions[0].name].indexify(), 'INSERT_VALUES'])])])
     
-    dev_2_petsc_iters = [lambda ex: Iteration(ex, iet.functions[0].dimensions[0], (2, 6, 1)),
-                         lambda ex: Iteration(ex, iet.functions[0].dimensions[1], (2, 6, 1))]
+    dev_2_petsc_iters = [lambda ex: Iteration(ex, iet.functions[0].dimensions[0], (iet.functions[0].space_order, iet.functions[0].space_order+xsize-1, 1)),
+                         lambda ex: Iteration(ex, iet.functions[0].dimensions[1], (iet.functions[0].space_order, iet.functions[0].space_order+ysize-1, 1))]
     
     dev_2_petsc = dev_2_petsc_iters[0](dev_2_petsc_iters[1](dev_2_petsc))
     
+
     # from IPython import embed; embed()
     kernel_body = List(body=[Definition(petsc_objs['x']),
                              Definition(petsc_objs['b']),
