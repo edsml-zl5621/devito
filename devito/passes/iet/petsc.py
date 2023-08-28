@@ -1,15 +1,16 @@
 from ctypes import POINTER, c_int
-from devito.tools import petsc_type_to_ctype, ctypes_to_cstr, dtype_to_ctype
+from devito.tools import petsc_type_to_ctype, ctypes_to_cstr, dtype_to_ctype, split
 from devito.types import AbstractObjectWithShape, CompositeObject
 from devito.types.basic import Basic, Symbol, Scalar
 from sympy import Expr
-from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack, Uxreplace, Conditional, DummyExpr, Block, EntryFunction, List, FindNodes, Iteration
+from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack, Uxreplace, Conditional, DummyExpr, Block, EntryFunction, List, FindNodes, Iteration, CallableBody
 from devito.passes.iet.engine import iet_pass
-from devito.symbolics import FunctionPointer, ccode, Byref, FieldFromPointer
+from devito.ir import retrieve_iteration_tree, Forward, Any
+from devito.symbolics import FunctionPointer, ccode, Byref, FieldFromPointer, evalrel
 import cgen as c
 import sympy
 
-__all__ = ['PetscObject', 'lower_petsc', 'PetscStruct', 'PetscStruct2']
+__all__ = ['PetscObject', 'lower_petsc', 'PetscStruct', 'adjust_iter']
 
 
 class PetscObject(AbstractObjectWithShape, Expr):
@@ -76,13 +77,25 @@ def lower_petsc(iet, **kwargs):
     usr_ctx.extend(dims)
     matctx = PetscStruct(usr_ctx)
 
+    # from IPython import embed; embed()
+
+    mapper = {}
+    for tree in retrieve_iteration_tree(iet):
+        iterations = [i for i in tree]
+        for i in iterations:
+            mapper[i] = i._rebuild(limits=(i.dim.symbolic_min-1, i.dim.symbolic_max+1, i.dim.symbolic_incr))
+
+
+    if mapper:
+        iet = Transformer(mapper, nested=True).visit(iet)
+
     mymatshellmult_body = [Definition(matctx),
                            Call('PetscCall', [Call('MatShellGetContext', arguments=[petsc_objs['A_matfree'], Byref(matctx.name)])]),
                            Definition(petsc_objs[iet.functions[0].name]),
                            Definition(petsc_objs[iet.functions[1].name]),
                            Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
                            Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
-                           iet.body.body[1],
+                           iet.body.body[0].body[0].body[0].body[0],
                            Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
                            Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
                            Call('PetscFunctionReturn', arguments=[0])]
@@ -93,12 +106,16 @@ def lower_petsc(iet, **kwargs):
     # from IPython import embed; embed()
     # transform the very inner loop of call_back function
     # this may not be needed...
-    else_body = call_back.body.body[6].body[1].body[0].body[0].nodes[0].nodes[0]
-    then_body = DummyExpr(petsc_objs[iet.functions[0].name].indexify(), petsc_objs[iet.functions[1].name].indexify())
-    condition = sympy.Or(sympy.Eq(iet.functions[0].dimensions[0], iet.parameters[5]), sympy.Eq(iet.functions[0].dimensions[0], iet.parameters[4]),
-                         sympy.Eq(iet.functions[0].dimensions[1], iet.parameters[7]), sympy.Eq(iet.functions[0].dimensions[1], iet.parameters[6]))
-    call_back = Transformer({else_body: Conditional(condition, then_body, else_body)}).visit(call_back)
+    # else_body = call_back.body.body[6].body[1].body[0].body[0].nodes[0].nodes[0]
 
+    # from IPython import embed; embed()
+    for tree in retrieve_iteration_tree(call_back):
+        else_body = tree[0].nodes[0].nodes[0]
+
+    then_body = DummyExpr(petsc_objs[iet.functions[0].name].indexify(), petsc_objs[iet.functions[1].name].indexify())
+    condition = sympy.Or(sympy.Eq(iet.functions[0].dimensions[0], iet.parameters[5]-1), sympy.Eq(iet.functions[0].dimensions[0], iet.parameters[4]+1),
+                         sympy.Eq(iet.functions[0].dimensions[1], iet.parameters[7]-1), sympy.Eq(iet.functions[0].dimensions[1], iet.parameters[6]+1))
+    call_back = Transformer({else_body: Conditional(condition, then_body, else_body)}).visit(call_back)
 
 
     tmp = [i for i in usr_ctx if isinstance(i, Symbol)]
@@ -137,7 +154,7 @@ def lower_petsc(iet, **kwargs):
 
 
     # from IPython import embed; embed()
-    iet = Transformer({iet.body.body[1]: kernel_body}).visit(iet)
+    iet = Transformer({iet.body.body[0]: kernel_body}).visit(iet)
 
 
     for i in dims:
@@ -157,6 +174,55 @@ def lower_petsc(iet, **kwargs):
                  'includes': ['petscksp.h']}
 
     # return iet, {'includes': ['petscksp.h']}
+
+
+
+
+@iet_pass
+def adjust_iter(iet, **kwargs):
+
+    mapper = {}
+    for tree in retrieve_iteration_tree(iet):
+        iterations = [i for i in tree]
+        from IPython import embed; embed()
+        if not iterations:
+            continue
+
+        root = iterations[0]
+        if root in mapper:
+            continue
+
+        # assert all(i.direction in (Forward, Any) for i in iterations)
+        outer, inner = split(iterations, lambda i: i.dim)
+
+        # Get root's `symbolic_max` out of each outer Dimension
+        roots_max = {i.dim.root: i.symbolic_max for i in outer}
+
+        # Process inner iterations and adjust their bounds
+        for n, i in enumerate(inner):
+            # If definitely in-bounds, as ensured by a prior compiler pass, then
+            # we can skip this step
+            if i.is_Inbound:
+                continue
+
+            # The Iteration's maximum is the Min of (a) the `symbolic_max` of current
+            # Iteration e.g. `x0_blk0 + x0_blk0_size - 1` and (b) the `symbolic_max`
+            # of the current Iteration's root Dimension e.g. `x_M`. The generated
+            # maximum will be `Min(x0_blk0 + x0_blk0_size - 1, x_M)
+
+            # In some corner cases an offset may be added (e.g. after CIRE passes)
+            # E.g. assume `i.symbolic_max = x0_blk0 + x0_blk0_size + 1` and
+            # `i.dim.symbolic_max = x0_blk0 + x0_blk0_size - 1` then the generated
+            # maximum will be `Min(x0_blk0 + x0_blk0_size + 1, x_M + 2)`
+
+            root_max = roots_max[i.dim.root] + i.symbolic_max - i.dim.symbolic_max
+            iter_max = evalrel(min, [i.symbolic_max, root_max])
+            mapper[i] = i._rebuild(limits=(i.symbolic_min, iter_max, i.step))
+
+    if mapper:
+        iet = Transformer(mapper, nested=True).visit(iet)
+
+    return iet, {}
 
 
 
