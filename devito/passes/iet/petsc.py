@@ -1,12 +1,12 @@
-from ctypes import POINTER, c_int
-from devito.tools import petsc_type_to_ctype, ctypes_to_cstr, dtype_to_ctype, split
+from ctypes import POINTER
+from devito.tools import petsc_type_to_ctype, dtype_to_ctype
 from devito.types import AbstractObjectWithShape, CompositeObject
-from devito.types.basic import Basic, Symbol, Scalar
+from devito.types.basic import Symbol
 from sympy import Expr
-from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack, Uxreplace, Conditional, DummyExpr, Block, EntryFunction, List, FindNodes, Iteration, CallableBody, Expression
+from devito.ir.iet import Call, Callable, Transformer, Definition, CallBack, Uxreplace, Conditional, DummyExpr, List, FindNodes, Iteration, Expression
 from devito.passes.iet.engine import iet_pass
-from devito.ir import retrieve_iteration_tree, Forward, Any
-from devito.symbolics import FunctionPointer, ccode, Byref, FieldFromPointer, evalrel
+from devito.ir import retrieve_iteration_tree
+from devito.symbolics import Byref, FieldFromPointer
 import cgen as c
 import sympy
 
@@ -67,68 +67,70 @@ def lower_petsc(iet, **kwargs):
                   'tmp': PetscObject(name='tmp', petsc_type='PetscScalar', grid=iet.functions[0].grid),
                   'position': PetscObject(name='position', petsc_type='PetscInt')}
 
-
-    # this will be a list comprehension based on no.of dimensions used
-    usr_ctx = list(iet.parameters)
-    xsize = iet.parameters[0].grid.dimensions[0].symbolic_size
-    ysize = iet.parameters[0].grid.dimensions[1].symbolic_size
-    dims  =  [xsize, ysize]
-    usr_ctx.extend(dims)
+    # collect the components for the MatContext struct
+    usr_ctx = [i for i in iet.parameters if isinstance(i, Symbol)]
+    sizes = [iet.functions[0].grid.dimensions[i].symbolic_size for i in range(len(iet.functions[0].grid.dimensions))]
+    usr_ctx.extend(sizes)
     matctx = PetscStruct(usr_ctx)
 
+    # alter the iteration bounds since I turned off the shifting in lower_exprs
     mapper = {}
     for tree in retrieve_iteration_tree(iet):
         for i in tree:
             mapper[i] = i._rebuild(limits=(i.dim.symbolic_min-1, i.dim.symbolic_max+1, i.dim.symbolic_incr))
-
+    # nested is True since there is more than one mapping inside mapper
     iet = Transformer(mapper, nested=True).visit(iet)
 
+    # retrieve the adjusted iteration loop
     iteration_root = retrieve_iteration_tree(iet)[0][0]
 
-    # from IPython import embed; embed()
-    mymatshellmult_body = List(header=c.Line('PetscFunctionBegin;'),
-                               body=[Definition(matctx),
-                               Call('PetscCall', [Call('MatShellGetContext', arguments=[petsc_objs['A_matfree'], Byref(matctx.name)])]),
-                               Definition(petsc_objs[iet.functions[0].name]),
-                               Definition(petsc_objs[iet.functions[1].name]),
-                               Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
-                               Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
-                               iteration_root,
-                               Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
-                               Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
-                               Call('PetscFunctionReturn', arguments=[0])])
+    # build call_back function body 
+    mymatshellmult_body = List(body=[c.Line('PetscFunctionBegin;'),
+                                     Definition(matctx),
+                                     Call('PetscCall', [Call('MatShellGetContext', arguments=[petsc_objs['A_matfree'], Byref(matctx.name)])]),
+                                     Definition(petsc_objs[iet.functions[0].name]),
+                                     Definition(petsc_objs[iet.functions[1].name]),
+                                     Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name), FieldFromPointer(sizes[1].name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
+                                     Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(sizes[0].name, matctx.name), FieldFromPointer(sizes[1].name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
+                                     iteration_root,
+                                     Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name), FieldFromPointer(sizes[1].name, matctx.name), 0, 0, Byref(iet.functions[1].name)])]),
+                                     Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(sizes[0].name, matctx.name), FieldFromPointer(sizes[1].name, matctx.name), 0, 0, Byref(iet.functions[0].name)])]),
+                                     Call('PetscFunctionReturn', arguments=[0])])
 
     call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=petsc_objs['retval'],
                           parameters=(petsc_objs['A_matfree'], petsc_objs['xvec'], petsc_objs['yvec']))
+    
+    iteration_root2 = retrieve_iteration_tree(call_back)[0][0]
 
-    # transform the very inner loop of call_back function
-    # this may not be needed...
+    # transform the very inner loop of call_back function to have the if, else section
+    # this may not ultimately be needed...but for current setup it is needed.
     else_body = FindNodes(Expression).visit(iteration_root)[0]
     then_body = DummyExpr(petsc_objs[iet.functions[0].name].indexify(), petsc_objs[iet.functions[1].name].indexify())
     condition = sympy.Or(sympy.Eq(iet.functions[0].dimensions[0], iet.parameters[5]-1), sympy.Eq(iet.functions[0].dimensions[0], iet.parameters[4]+1),
                          sympy.Eq(iet.functions[0].dimensions[1], iet.parameters[7]-1), sympy.Eq(iet.functions[0].dimensions[1], iet.parameters[6]+1))
     call_back = Transformer({else_body: Conditional(condition, then_body, else_body)}).visit(call_back)
 
-
-    tmp = [i for i in usr_ctx if isinstance(i, Symbol)]
-    for i in tmp:
+    # from IPython import embed; embed()
+    # replace all of the struct MatContext symbols that appear in the callback function with a fieldfrompointer i.e ctx->symbol
+    for i in usr_ctx:
         call_back = Uxreplace({i: FieldFromPointer(i, matctx)}).visit(call_back)
-
     call_back_arg = CallBack(call_back.name, 'void', 'void')
 
 
     # to map petsc vector back to devito function
-    petsc_2_dev = DummyExpr(petsc_objs[iet.functions[0].name].indexify(indices=(petsc_objs['tmp'].dimensions[0]+2, petsc_objs['tmp'].dimensions[1]+2)),
+    petsc_2_dev = DummyExpr(petsc_objs[iet.functions[0].name].indexify(indices=(petsc_objs['tmp'].dimensions[0]+iet.functions[0].space_order, petsc_objs['tmp'].dimensions[1]+iet.functions[0].space_order)),
                             petsc_objs['tmp'].indexify(indices=(petsc_objs['tmp'].dimensions[0], petsc_objs['tmp'].dimensions[1])))
-    petsc_2_dev = Transformer({else_body: petsc_2_dev}).visit(iteration_root)
+    petsc_2_dev = Transformer({else_body: petsc_2_dev}).visit(iteration_root2)
+    for i in usr_ctx:
+        petsc_2_dev = Uxreplace({i: FieldFromPointer(i, matctx)}).visit(petsc_2_dev)
 
     
     # to map devito array to petsc vector
-    dev_2_petsc = List(body=[DummyExpr(petsc_objs['position'], (iet.functions[0].dimensions[0]-2)*ysize + (iet.functions[0].dimensions[1]-2), init=True),
+    dev_2_petsc = List(body=[DummyExpr(petsc_objs['position'], (iet.functions[0].dimensions[0]-iet.functions[0].space_order)*sizes[1] + (iet.functions[0].dimensions[1]-iet.functions[0].space_order), init=True),
                              Call('PetscCall', [Call('VecSetValue', arguments=[petsc_objs['b'], petsc_objs['position'], petsc_objs[iet.functions[0].name].indexify(), 'INSERT_VALUES'])])])
     
-    dev_2_petsc_iters = [lambda ex: Iteration(ex, iet.functions[0].dimensions[0], (iet.functions[0].space_order, iet.functions[0].space_order+xsize-1, 1)),
-                         lambda ex: Iteration(ex, iet.functions[0].dimensions[1], (iet.functions[0].space_order, iet.functions[0].space_order+ysize-1, 1))]
+    dev_2_petsc_iters = [lambda ex: Iteration(ex, iet.functions[0].dimensions[0], (iet.functions[0].space_order, iet.functions[0].space_order+sizes[0]-1, 1)),
+                         lambda ex: Iteration(ex, iet.functions[0].dimensions[1], (iet.functions[0].space_order, iet.functions[0].space_order+sizes[1]-1, 1))]
     
     dev_2_petsc = dev_2_petsc_iters[0](dev_2_petsc_iters[1](dev_2_petsc))
     
@@ -140,7 +142,8 @@ def lower_petsc(iet, **kwargs):
                              Definition(petsc_objs['ksp']),
                              Definition(petsc_objs['size']),
                              Definition(petsc_objs['matsize']),
-                             DummyExpr(petsc_objs['matsize'], xsize*ysize),
+                             DummyExpr(petsc_objs['matsize'], sizes[0]*sizes[1]),
+                             c.Line('PetscFunctionBeginUser;'),
                              Call('PetscCall', [Call('PetscInitialize', arguments=['NULL', 'NULL', 'NULL', 'NULL'])]),
                              Call('PetscCallMPI', [Call('MPI_Comm_size', arguments=['PETSC_COMM_WORLD', Byref(petsc_objs['size'].name)])]),
                              Call('PetscCall', [Call('VecCreate', arguments=['PETSC_COMM_SELF', Byref(petsc_objs['x'].name)])]),
@@ -153,14 +156,16 @@ def lower_petsc(iet, **kwargs):
                              Call('PetscCall', [Call('MatShellSetOperation', arguments=[petsc_objs['A_matfree'], 'MATOP_MULT', call_back_arg])]),
                              Call('PetscCall', [Call('KSPCreate', arguments=['PETSC_COMM_WORLD', Byref(petsc_objs['ksp'].name)])]),
                              Call('PetscCall', [Call('KSPSetInitialGuessNonzero', arguments=[petsc_objs['ksp'], 'PETSC_TRUE'])]),
+                            #  you can then initialise x with initial guess
                              Call('PetscCall', [Call('KSPSetOperators', arguments=[petsc_objs['ksp'], petsc_objs['A_matfree'], petsc_objs['A_matfree']])]),
                              Call('PetscCall', [Call('KSPSetTolerances', arguments=[petsc_objs['ksp'], 1.e-5, 'PETSC_DEFAULT', 'PETSC_DEFAULT', 'PETSC_DEFAULT'])]),
+                            #  means that you can do ./exe -ksp_type fgmres etc -> probably delete since we would use KSPSetType(ksp, KSPCG);?
                              Call('PetscCall', [Call('KSPSetFromOptions', arguments=[petsc_objs['ksp']])]),
                              Call('PetscCall', [Call('KSPSolve', arguments=[petsc_objs['ksp'], petsc_objs['b'], petsc_objs['x']])]),
                              Definition(petsc_objs['tmp']),
-                             Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['x'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(petsc_objs['tmp'].name)])]),
+                             Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['x'], FieldFromPointer(sizes[0].name, matctx.name), FieldFromPointer(sizes[1].name, matctx.name), 0, 0, Byref(petsc_objs['tmp'].name)])]),
                              petsc_2_dev,
-                             Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['x'], FieldFromPointer(xsize.name, matctx.name), FieldFromPointer(ysize.name, matctx.name), 0, 0, Byref(petsc_objs['tmp'].name)])]),
+                             Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['x'], FieldFromPointer(sizes[0].name, matctx.name), FieldFromPointer(sizes[1].name, matctx.name), 0, 0, Byref(petsc_objs['tmp'].name)])]),
                              Call('PetscCall', [Call('VecDestroy', arguments=[Byref(petsc_objs['x'].name)])]),
                              Call('PetscCall', [Call('VecDestroy', arguments=[Byref(petsc_objs['b'].name)])]),
                              Call('PetscCall', [Call('MatDestroy', arguments=[Byref(petsc_objs['A_matfree'].name)])]),
@@ -168,11 +173,9 @@ def lower_petsc(iet, **kwargs):
                              Call('PetscCall', [Call('PetscFinalize')])])
 
 
-    # from IPython import embed; embed()
     iet = Transformer({iet.body.body[0]: kernel_body}).visit(iet)
 
-    # from IPython import embed; embed()
-    for i in dims:
+    for i in sizes:
         iet = Uxreplace({i: FieldFromPointer(i, matctx)}).visit(iet)
 
     # add necessary include directories for petsc
@@ -187,7 +190,6 @@ def lower_petsc(iet, **kwargs):
     return iet, {'efuncs': [call_back],
                  'includes': ['petscksp.h']}
 
-    # return iet, {'includes': ['petscksp.h']}
 
 
 class PetscStruct(CompositeObject):
@@ -195,8 +197,6 @@ class PetscStruct(CompositeObject):
     __rargs__ = ('usr_ctx',)
 
     def __init__(self, usr_ctx):
-
-        # from IPython import embed; embed()
 
         self._usr_ctx = usr_ctx
 
@@ -208,22 +208,13 @@ class PetscStruct(CompositeObject):
     def usr_ctx(self):
         return self._usr_ctx
     
-    # can use this if I want to generate typedefs
-    # @property
-    # def _C_typedecl(self):
-        # struct = [c.Value(ctypes_to_cstr(ctype), param) for (param, ctype) in self.pfields]
-    #     struct = c.Struct(self.pname, struct)
-    #     # return c.Typedef(struct)
-    #     return struct
+    # maybe also want to def _arg_defaults here?
 
     def _arg_values(self, **kwargs):
         values = super()._arg_values(**kwargs)
-        # from IPython import embed; embed()
         for i in self.fields:
             setattr(values[self.name]._obj, i, kwargs['args'][i])
 
         return values
-    
-    # maybe also want to override arg defaults?
 
     
