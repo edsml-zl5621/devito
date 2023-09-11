@@ -1,4 +1,4 @@
-from ctypes import POINTER
+from ctypes import POINTER, c_float
 from devito.tools import petsc_type_to_ctype, dtype_to_ctype
 from devito.types import AbstractObjectWithShape, CompositeObject, Dimension
 from devito.types.basic import Symbol
@@ -196,143 +196,149 @@ class PetscObject(AbstractObjectWithShape, Expr):
 
 
 
-# updating version using subdomains
+# version using subdomains
 @iet_pass
 def lower_petsc(iet, **kwargs):
     # from IPython import embed; embed()
+
+    # collect all exprs that appear in first loop - doing this for now since when I add BC equations, they
+    # appear in iet.functions 
+    # obviously my code only works if a user supplies 1 eqn (excluding bcs) for now
+    exprs = FindNodes(Expression).visit(iet)[0]
+    rhs_func = exprs.write
+    lhs_func = exprs.reads[0]
 
     petsc_objs = {'retval': PetscObject(name='retval', petsc_type='PetscErrorCode'),
                   'A_matfree': PetscObject(name='A_matfree', petsc_type='Mat'),
                   'xvec': PetscObject(name='xvec', petsc_type='Vec'),
                   'yvec': PetscObject(name='yvec', petsc_type='Vec'),
-                  iet.functions[0].name : PetscObject(name=iet.functions[0].name,
-                                                      petsc_type='PetscScalar', dimensions=iet.functions[0].dimensions, shape=iet.functions[0].shape),
-                  iet.functions[1].name : PetscObject(name=iet.functions[1].name,
-                                                      petsc_type='PetscScalar', grid=iet.functions[1].grid),
+                  rhs_func.name : PetscObject(name=rhs_func.name, petsc_type='PetscScalar', dimensions=rhs_func.dimensions, shape=rhs_func.shape),
+                  lhs_func.name : PetscObject(name=lhs_func.name, petsc_type='PetscScalar', dimensions=lhs_func.dimensions, shape=lhs_func.shape),
                   'x': PetscObject(name='x', petsc_type='Vec'),
                   'b': PetscObject(name='b', petsc_type='Vec'),
                   'ksp': PetscObject(name='ksp', petsc_type='KSP'),
                   'size': PetscObject(name='size', petsc_type='PetscMPIInt'),
                   'vec_size': PetscObject(name='vec_size', petsc_type='PetscInt'),
-                  'tmp': PetscObject(name='tmp', petsc_type='PetscScalar', grid=iet.functions[1].grid),
                   'position': PetscObject(name='position', petsc_type='PetscInt'),
-                  'pn_tmp': PetscObject(name='pn_tmp', petsc_type='PetscScalar', grid=iet.functions[1].grid),
+                  'lhs_tmp': PetscObject(name='lhs_tmp', petsc_type='PetscScalar', dimensions=lhs_func.dimensions, shape=lhs_func.shape),
                   'b_left': PetscObject(name='b_left', petsc_type='PetscScalar'),
                   'b_right': PetscObject(name='b_right', petsc_type='PetscScalar'),
                   'b_down': PetscObject(name='b_down', petsc_type='PetscScalar'),
                   'b_up': PetscObject(name='b_up', petsc_type='PetscScalar')}
+    
+    # from IPython import embed; embed()
 
     # collect the components for the MatContext struct
     usr_ctx = [i for i in iet.parameters if isinstance(i, Symbol)]
-    sizes = [iet.functions[1].grid.dimensions[i].symbolic_size for i in range(len(iet.functions[1].grid.dimensions))]
+    sizes = [lhs_func.dimensions[i].symbolic_size for i in range(len(lhs_func.dimensions))]
     usr_ctx.extend(sizes)
     matctx = PetscStruct(usr_ctx)
 
-    # from IPython import embed; embed()
+
 
 
     # building RHS vector b from the equation provided by the user:
-    exprs = FindNodes(Expression).visit(iet)
-    ordered_terms = exprs[0].expr.rhs.as_ordered_terms()
+    # this only works for 2D for now......need a better method but not sure about this yet
+    ordered_terms = exprs.expr.rhs.as_ordered_terms()
     ordered_terms_all = [i.as_ordered_terms() for i in ordered_terms]
     flattened_list = [term for sublist in ordered_terms_all for term in sublist]
 
-    b_left_coeff = '[%s + %s, %s + %s]' % (iet.functions[0].dimensions[0], iet.functions[1].space_order-1,
-                                           iet.functions[0].dimensions[1], iet.functions[1].space_order)
+    eqn_dims = [exprs.expr.ispace[i].dim for i in range(len(exprs.expr.dimensions))]
 
-    b_right_coeff = '[%s + %s, %s + %s]' % (iet.functions[0].dimensions[0], iet.functions[1].space_order+1,
-                                            iet.functions[0].dimensions[1], iet.functions[1].space_order)
+    b_left_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order-1,
+                                           eqn_dims[1], lhs_func.space_order)
+
+    b_right_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order+1,
+                                            eqn_dims[1], lhs_func.space_order)
     
-    b_down_coeff = '[%s + %s, %s + %s]' % (iet.functions[0].dimensions[0], iet.functions[1].space_order,
-                                            iet.functions[0].dimensions[1], iet.functions[1].space_order-1)
+    b_down_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order,
+                                           eqn_dims[1], lhs_func.space_order-1)
     
-    b_up_coeff = '[%s + %s, %s + %s]' % (iet.functions[0].dimensions[0], iet.functions[1].space_order,
-                                         iet.functions[0].dimensions[1], iet.functions[1].space_order+1)
+    b_up_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order,
+                                         eqn_dims[1], lhs_func.space_order+1)
     
+    # from IPython import embed; embed()
     expr_left = [expr for expr in flattened_list if b_left_coeff in str(expr)][0]
     expr_right = [expr for expr in flattened_list if b_right_coeff in str(expr)][0]
     expr_down = [expr for expr in flattened_list if b_down_coeff in str(expr)][0]
     expr_up = [expr for expr in flattened_list if b_up_coeff in str(expr)][0]
-
-    dims_op = {'i': Dimension(name='i'),
-               'j': Dimension(name='j')}
     
     # from IPython import embed; embed()
     
-    pos_line = DummyExpr(petsc_objs['position'], (iet.functions[0].dimensions[0]-1)*(FieldFromPointer(sizes[1].name, matctx.name)-2) + (iet.functions[0].dimensions[1]-1), init=True)
+    pos_line = DummyExpr(petsc_objs['position'], (eqn_dims[0]-1)*(FieldFromPointer(sizes[1].name, matctx.name)-2) + (eqn_dims[1]-1), init=True)
     
-    b_iters = [lambda ex: Iteration(ex, iet.functions[0].dimensions[0], (1, FieldFromPointer(sizes[0].name, matctx.name)-2, 1)),
-               lambda ex: Iteration(ex, iet.functions[0].dimensions[1], (1, FieldFromPointer(sizes[1].name, matctx.name)-2, 1))]
+    b_iters = [lambda ex: Iteration(ex, eqn_dims[0], (1, FieldFromPointer(sizes[0].name, matctx.name)-2, 1)),
+               lambda ex: Iteration(ex, eqn_dims[1], (1, FieldFromPointer(sizes[1].name, matctx.name)-2, 1))]
     
 
-    condition1 = sympy.Eq(iet.functions[0].dimensions[0], 1)
+    condition1 = sympy.Eq(eqn_dims[0], 1)
     then_body1 = List(body=[DummyExpr(petsc_objs['b_left'], -expr_left, init=True),
                             Call('PetscCall', [Call('VecSetValue', arguments=[petsc_objs['b'], petsc_objs['position'], petsc_objs['b_left'], 'ADD_VALUES'])])
     ])
     conditional1 = Conditional(condition1, then_body1)
 
-    # from IPython import embed; embed()
 
-    condition2 = sympy.Eq(iet.functions[0].dimensions[0], FieldFromPointer(sizes[0].name, matctx.name)-2)
+    condition2 = sympy.Eq(eqn_dims[0], FieldFromPointer(sizes[0].name, matctx.name)-2)
     then_body2 = List(body=[DummyExpr(petsc_objs['b_right'], -expr_right, init=True),
                             Call('PetscCall', [Call('VecSetValue', arguments=[petsc_objs['b'], petsc_objs['position'], petsc_objs['b_right'], 'ADD_VALUES'])])
     ])
     conditional2 = Conditional(condition2, then_body2)
 
 
-    condition3 = sympy.Eq(iet.functions[0].dimensions[1], 1)
+    condition3 = sympy.Eq(eqn_dims[1], 1)
     then_body3 = List(body=[DummyExpr(petsc_objs['b_down'], -expr_down, init=True),
                             Call('PetscCall', [Call('VecSetValue', arguments=[petsc_objs['b'], petsc_objs['position'], petsc_objs['b_down'], 'ADD_VALUES'])])
     ])
     conditional3 = Conditional(condition3, then_body3)
 
 
-    condition4 = sympy.Eq(iet.functions[0].dimensions[1], FieldFromPointer(sizes[1].name, matctx.name)-2)
+    condition4 = sympy.Eq(eqn_dims[1], FieldFromPointer(sizes[1].name, matctx.name)-2)
     then_body4 = List(body=[DummyExpr(petsc_objs['b_up'], -expr_up, init=True),
                             Call('PetscCall', [Call('VecSetValue', arguments=[petsc_objs['b'], petsc_objs['position'], petsc_objs['b_up'], 'ADD_VALUES'])])
     ])
     conditional4 = Conditional(condition4, then_body4)
 
     build_b = b_iters[0](b_iters[1]([pos_line, conditional1, conditional2, conditional3, conditional4]))
-    # from IPython import embed; embed()
     for i in usr_ctx:
         build_b = Uxreplace({i: FieldFromPointer(i, matctx)}).visit(build_b)
-    # from IPython import embed; embed()
 
 
 
 
-    # Retrieve the adjusted iteration loop.
     # Purposely not using the TIMER parts since I cannot supply 'struct profiler * timers' as an arg to the 
-    # call back function. Will need to review this
+    # call back function. Will need to review this.
+    dims_op = {'i': Dimension(name='i'),
+               'j': Dimension(name='j')}
+
     iteration_root = retrieve_iteration_tree(iet)[0][0]
 
-    call_back_iters = [lambda ex: Iteration(ex, dims_op['i'], (0, FieldFromPointer(sizes[0].name, matctx.name)+2*iet.functions[1].space_order-1, 1)),
-                       lambda ex: Iteration(ex, dims_op['j'], (0, FieldFromPointer(sizes[1].name, matctx.name)+2*iet.functions[1].space_order-1, 1)),
+    call_back_iters = [lambda ex: Iteration(ex, dims_op['i'], (0, FieldFromPointer(sizes[0].name, matctx.name)+2*lhs_func.space_order-1, 1)),
+                       lambda ex: Iteration(ex, dims_op['j'], (0, FieldFromPointer(sizes[1].name, matctx.name)+2*lhs_func.space_order-1, 1)),
                        lambda ex: Iteration(ex, dims_op['i'], (0, FieldFromPointer(sizes[0].name, matctx.name)-2-1, 1)),
                        lambda ex: Iteration(ex, dims_op['j'], (0, FieldFromPointer(sizes[1].name, matctx.name)-2-1, 1))]
     
-    initalise = call_back_iters[0](call_back_iters[1](DummyExpr(petsc_objs[iet.functions[1].name].indexify(indices=(dims_op['i'],dims_op['j'])), 0.)))
+    initalise = call_back_iters[0](call_back_iters[1](DummyExpr(petsc_objs[lhs_func.name].indexify(indices=(dims_op['i'],dims_op['j'])), 0.)))
 
-    mapping = call_back_iters[2](call_back_iters[3](DummyExpr(petsc_objs[iet.functions[1].name].indexify(indices=(dims_op['i']+iet.functions[1].space_order+1,dims_op['j']+iet.functions[1].space_order+1)), petsc_objs['pn_tmp'].indexify(indices=(dims_op['i'],dims_op['j'])))))
+    mapping = call_back_iters[2](call_back_iters[3](DummyExpr(petsc_objs[lhs_func.name].indexify(indices=(dims_op['i']+lhs_func.space_order+1,dims_op['j']+lhs_func.space_order+1)), petsc_objs['lhs_tmp'].indexify(indices=(dims_op['i'],dims_op['j'])))))
 
 
-    new_ptr = IndexedPointer(petsc_objs[iet.functions[1].name], (FieldFromPointer(sizes[0].name, matctx.name)+2*iet.functions[1].space_order,FieldFromPointer(sizes[1].name, matctx.name)+2*iet.functions[1].space_order))
+    new_ptr = IndexedPointer(petsc_objs[lhs_func.name], (FieldFromPointer(sizes[0].name, matctx.name)+2*lhs_func.space_order,FieldFromPointer(sizes[1].name, matctx.name)+2*lhs_func.space_order))
     # build call_back function body 
-    mymatshellmult_body = List(body=[c.Line('PetscFunctionBegin;'),
+    mymatshellmult_body = List(body=[c.Line('PetscFunctionBegin;'),  # temp solution to forming this line for now
                                      Definition(matctx),
                                      Call('PetscCall', [Call('MatShellGetContext', arguments=[petsc_objs['A_matfree'], Byref(matctx.name)])]),
-                                     Definition(petsc_objs['pn_tmp']),
-                                     Definition(petsc_objs[iet.functions[0].name]),
+                                     Definition(petsc_objs['lhs_tmp']),
+                                     Definition(petsc_objs[rhs_func.name]),
+                                     # temp solution to forming this line for now
+                                     # because ultimately I don't think I will need to create the new tmp pointer
                                      c.Line('PetscScalar ' + str(new_ptr) +';'),
-                                    #  Definition(petsc_objs[iet.functions[1].name].indexify(indices=(FieldFromPointer(sizes[0].name, matctx.name)+2*iet.functions[1].space_order,))),
-                                     Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 0, 0, Byref(petsc_objs['pn_tmp'])])]),
-                                     Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(iet.functions[0].name)])]),
+                                     Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 0, 0, Byref(petsc_objs['lhs_tmp'])])]),
+                                     Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(rhs_func.name)])]),
                                      initalise,
                                      mapping,
                                      iteration_root,
-                                     Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 0, 0, Byref(petsc_objs['pn_tmp'])])]),
-                                     Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(iet.functions[0].name)])]),
+                                     Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 0, 0, Byref(petsc_objs['lhs_tmp'])])]),
+                                     Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(rhs_func.name)])]),
                                      Call('PetscFunctionReturn', arguments=[0])])
 
     call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=petsc_objs['retval'],
@@ -347,17 +353,20 @@ def lower_petsc(iet, **kwargs):
         call_back = Uxreplace({i: FieldFromPointer(i, matctx)}).visit(call_back)
     call_back_arg = CallBack(call_back.name, 'void', 'void')
 
-    petsc_2_dev_mapping = DummyExpr(petsc_objs[iet.functions[1].name].indexify(indices=(iet.functions[0].dimensions[0]+iet.functions[1].space_order, iet.functions[0].dimensions[1]+iet.functions[1].space_order)), petsc_objs['pn_tmp'].indexify(indices=(iet.functions[0].dimensions[0], iet.functions[0].dimensions[1])))
+    petsc_2_dev_mapping = DummyExpr(petsc_objs[lhs_func.name].indexify(indices=(eqn_dims[0]+lhs_func.space_order, eqn_dims[1]+lhs_func.space_order)), petsc_objs['lhs_tmp'].indexify(indices=(eqn_dims[0], eqn_dims[1])))
     petsc_2_dev = b_iters[0](b_iters[1](petsc_2_dev_mapping))
 
-    # from IPython import embed; embed()
+
+    # bc_loops = retrieve_iteration_tree(iet)[1:]
+
+    from IPython import embed; embed()
     kernel_body = List(body=[Definition(petsc_objs['x']),
                              Definition(petsc_objs['b']),
                              Definition(petsc_objs['A_matfree']),
                              Definition(petsc_objs['ksp']),
                              Definition(petsc_objs['size']),
-                             Definition(petsc_objs['vec_size']),
-                             DummyExpr(petsc_objs['vec_size'], (FieldFromPointer(sizes[0].name, matctx.name)-2)*(FieldFromPointer(sizes[1].name, matctx.name)-2)),
+                            #  Definition(petsc_objs['vec_size']),
+                             DummyExpr(petsc_objs['vec_size'], rhs_func.size, init=True),
                              c.Line('PetscFunctionBeginUser;'),
                              Call('PetscCall', [Call('PetscInitialize', arguments=['NULL', 'NULL', 'NULL', 'NULL'])]),
                              Call('PetscCallMPI', [Call('MPI_Comm_size', arguments=['PETSC_COMM_WORLD', Byref(petsc_objs['size'].name)])]),
@@ -370,17 +379,19 @@ def lower_petsc(iet, **kwargs):
                              Call('PetscCall', [Call('MatSetFromOptions', arguments=[petsc_objs['A_matfree']])]), 
                              Call('PetscCall', [Call('MatShellSetOperation', arguments=[petsc_objs['A_matfree'], 'MATOP_MULT', call_back_arg])]),
                              Call('PetscCall', [Call('KSPCreate', arguments=['PETSC_COMM_WORLD', Byref(petsc_objs['ksp'].name)])]),
-                             Call('PetscCall', [Call('KSPSetInitialGuessNonzero', arguments=[petsc_objs['ksp'], 'PETSC_TRUE'])]),
-                            #  you can then initialise x with initial guess
+                             #  you can then initialise x with initial guess
+                             #  Call('PetscCall', [Call('KSPSetInitialGuessNonzero', arguments=[petsc_objs['ksp'], 'PETSC_TRUE'])]),
                              Call('PetscCall', [Call('KSPSetOperators', arguments=[petsc_objs['ksp'], petsc_objs['A_matfree'], petsc_objs['A_matfree']])]),
                              Call('PetscCall', [Call('KSPSetTolerances', arguments=[petsc_objs['ksp'], 1.e-5, 'PETSC_DEFAULT', 'PETSC_DEFAULT', 'PETSC_DEFAULT'])]),
-                            #  means that you can do ./exe -ksp_type fgmres etc -> probably delete since we would use KSPSetType(ksp, KSPCG);?
+                             #  means that you can do ./exe -ksp_type fgmres etc -> probably delete since we would use KSPSetType(ksp, KSPCG);?
                              Call('PetscCall', [Call('KSPSetFromOptions', arguments=[petsc_objs['ksp']])]),
                              Call('PetscCall', [Call('KSPSolve', arguments=[petsc_objs['ksp'], petsc_objs['b'], petsc_objs['x']])]),
-                             Definition(petsc_objs['pn_tmp']),
-                             Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['x'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(petsc_objs['pn_tmp'].name)])]),
+                             Definition(petsc_objs['lhs_tmp']),
+                             Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['x'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(petsc_objs['lhs_tmp'].name)])]),
                              petsc_2_dev,
-                             Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['x'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(petsc_objs['pn_tmp'].name)])]),
+                            #  bc_loops[0][0],
+                            #  bc_loops[1][0],
+                             Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['x'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(petsc_objs['lhs_tmp'].name)])]),
                              Call('PetscCall', [Call('VecDestroy', arguments=[Byref(petsc_objs['x'].name)])]),
                              Call('PetscCall', [Call('VecDestroy', arguments=[Byref(petsc_objs['b'].name)])]),
                              Call('PetscCall', [Call('MatDestroy', arguments=[Byref(petsc_objs['A_matfree'].name)])]),
@@ -442,6 +453,8 @@ class PetscStruct(CompositeObject):
         self._usr_ctx = usr_ctx
 
         pfields = [(i._C_name, dtype_to_ctype(i.dtype)) for i in self.usr_ctx if isinstance(i, Symbol)]
+
+        # pfields.extend(('testing', POINTER(c_float)))
 
         super(PetscStruct, self).__init__('ctx', 'MatContext', pfields)
     
