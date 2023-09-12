@@ -11,7 +11,7 @@ dy = Ly / (ny - 1)
 
 grid = Grid(shape=(nx, ny), extent=(Lx, Ly))
 
-pn = Function(name='pn', grid=grid, space_order=2)
+pn = Function(name='pn', grid=grid, space_order=4)
 p = Function(name='p', dimensions=grid.subdomains['interior'].dimensions, shape=grid.subdomains['interior'].shape, space_order=0)
 
 eqn = Eq(p, pn.laplace, subdomain=grid.subdomains['interior'])
@@ -40,7 +40,8 @@ op = Operator(expressions= [eqn] + bc)
 op.apply()
 
 print(op.ccode)
-print(pn.data[:])
+print(-4*bc_top.data[:][2]/3/dy/dy)
+# print(pn.data[:])
 # print(op.arguments())
 # # print(p.laplace.evaluate)
 
@@ -49,8 +50,8 @@ for_file = pn.data[:]
 
 # from IPython import embed; embed()
 
-# for_file = for_file.reshape((pn.shape[0])**2)
+for_file = for_file.reshape((pn.shape[0])**2)
 
 import pandas as pd
 
-pd.DataFrame(for_file).to_csv("run_laplace_results/1.csv", header=None, index=None)
+# pd.DataFrame(for_file).to_csv("run_laplace_results/5.csv", header=None, index=None)
