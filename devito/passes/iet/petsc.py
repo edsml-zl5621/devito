@@ -221,11 +221,14 @@ def lower_petsc(iet, **kwargs):
                   'size': PetscObject(name='size', petsc_type='PetscMPIInt'),
                   'vec_size': PetscObject(name='vec_size', petsc_type='PetscInt'),
                   'position': PetscObject(name='position', petsc_type='PetscInt'),
-                  'lhs_tmp': PetscObject(name='lhs_tmp', petsc_type='PetscScalar', dimensions=lhs_func.dimensions, shape=lhs_func.shape),
+                  'lhs_tmp': PetscObject(name='lhs_tmp', petsc_type='PetscScalar', dimensions=rhs_func.dimensions, shape=rhs_func.shape),
                   'b_left': PetscObject(name='b_left', petsc_type='PetscScalar'),
                   'b_right': PetscObject(name='b_right', petsc_type='PetscScalar'),
                   'b_down': PetscObject(name='b_down', petsc_type='PetscScalar'),
-                  'b_up': PetscObject(name='b_up', petsc_type='PetscScalar')}
+                  'b_up': PetscObject(name='b_up', petsc_type='PetscScalar'),
+                  'x_extended': PetscObject(name='x_extended', petsc_type='Vec'),
+                  'position_extended': PetscObject(name='position_extended', petsc_type='PetscInt'),
+                  'val_extended': PetscObject(name='val_extended', petsc_type='PetscScalar')}
     
     # from IPython import embed; embed()
 
@@ -245,23 +248,23 @@ def lower_petsc(iet, **kwargs):
 
     eqn_dims = [exprs.expr.ispace[i].dim for i in range(len(exprs.expr.dimensions))]
 
-    b_left_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order-1,
-                                           eqn_dims[1], lhs_func.space_order)
+    # b_left_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order-1,
+    #                                        eqn_dims[1], lhs_func.space_order)
 
-    b_right_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order+1,
-                                            eqn_dims[1], lhs_func.space_order)
+    # b_right_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order+1,
+    #                                         eqn_dims[1], lhs_func.space_order)
     
-    b_down_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order,
-                                           eqn_dims[1], lhs_func.space_order-1)
+    # b_down_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order,
+    #                                        eqn_dims[1], lhs_func.space_order-1)
     
-    b_up_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order,
-                                         eqn_dims[1], lhs_func.space_order+1)
+    # b_up_coeff = '[%s + %s, %s + %s]' % (eqn_dims[0], lhs_func.space_order,
+    #                                      eqn_dims[1], lhs_func.space_order+1)
     
-    # from IPython import embed; embed()
-    expr_left = [expr for expr in flattened_list if b_left_coeff in str(expr)][0]
-    expr_right = [expr for expr in flattened_list if b_right_coeff in str(expr)][0]
-    expr_down = [expr for expr in flattened_list if b_down_coeff in str(expr)][0]
-    expr_up = [expr for expr in flattened_list if b_up_coeff in str(expr)][0]
+    # # from IPython import embed; embed()
+    # expr_left = [expr for expr in flattened_list if b_left_coeff in str(expr)][0]
+    # expr_right = [expr for expr in flattened_list if b_right_coeff in str(expr)][0]
+    # expr_down = [expr for expr in flattened_list if b_down_coeff in str(expr)][0]
+    # expr_up = [expr for expr in flattened_list if b_up_coeff in str(expr)][0]
     
     iters = retrieve_iteration_tree(iet)[0]
 
@@ -327,26 +330,44 @@ def lower_petsc(iet, **kwargs):
 
     new_ptr = IndexedPointer(petsc_objs[lhs_func.name], (FieldFromPointer(sizes[0].name, matctx.name)+2*lhs_func.space_order,FieldFromPointer(sizes[1].name, matctx.name)+2*lhs_func.space_order))
     # build call_back function body 
+    x_exended_xsize = FieldFromPointer(sizes[0].name, matctx.name)+2*lhs_func.space_order
+    x_exended_ysize = FieldFromPointer(sizes[1].name, matctx.name)+2*lhs_func.space_order
+    pos_line_xextended = DummyExpr(petsc_objs['position_extended'], (eqn_dims[0]+lhs_func.space_order)*(FieldFromPointer(sizes[1].name, matctx.name)+2*lhs_func.space_order) + (eqn_dims[1]+lhs_func.space_order), init=True)
+    val2 = DummyExpr(petsc_objs['val_extended'], petsc_objs['lhs_tmp'].indexify(), init=True)
+    vec_extended_setval = Call('PetscCall', [Call('VecSetValue', arguments=[petsc_objs['x_extended'], petsc_objs['position_extended'], petsc_objs['val_extended'], 'ADD_VALUES'])])
+    # initalise_extended = call_back_iters[0](call_back_iters[1](List(body=[pos_line_xextended, val2, vec_extended_setval])))
+    initalise_extended = Transformer({exprs: List(body=[pos_line_xextended, val2, vec_extended_setval])}).visit(iters.root)
+
+
     mymatshellmult_body = List(body=[c.Line('PetscFunctionBegin;'),  # temp solution to forming this line for now
                                      Definition(matctx),
                                      Call('PetscCall', [Call('MatShellGetContext', arguments=[petsc_objs['A_matfree'], Byref(matctx.name)])]),
                                      Definition(petsc_objs['lhs_tmp']),
                                      Definition(petsc_objs[rhs_func.name]),
+                                     Definition(petsc_objs[lhs_func.name]),
                                      # temp solution to forming this line for now
                                      # because ultimately I don't think I will need to create the new tmp pointer
-                                     c.Line('PetscScalar ' + str(new_ptr) +';'),
-                                     Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 0, 0, Byref(petsc_objs['lhs_tmp'])])]),
+                                    #  c.Line('PetscScalar ' + str(new_ptr) +';'),
+                                     Definition(petsc_objs['x_extended']),
+                                     Call('PetscCall', [Call('VecCreate', arguments=['PETSC_COMM_SELF', Byref(petsc_objs['x_extended'].name)])]),
+                                     Call('PetscCall', [Call('VecSetSizes', arguments=[petsc_objs['x_extended'], 'PETSC_DECIDE', x_exended_xsize*x_exended_ysize])]),
+                                     Call('PetscCall', [Call('VecSetFromOptions', arguments=[petsc_objs['x_extended']])]),
+                                     Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(petsc_objs['lhs_tmp'])])]),
                                      Call('PetscCall', [Call('VecGetArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(rhs_func.name)])]),
-                                     initalise,
-                                     mapping,
+                                    #  initalise,
+                                    #  mapping,
+                                     initalise_extended,
+                                     Call('PetscCall', [Call('VecGetArray2dRead', arguments=[petsc_objs['x_extended'], x_exended_xsize, x_exended_ysize, 0, 0, Byref(petsc_objs[lhs_func.name])])]),
                                      iters.root,
-                                     Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 0, 0, Byref(petsc_objs['lhs_tmp'])])]),
+                                     Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['xvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(petsc_objs['lhs_tmp'])])]),
+                                     Call('PetscCall', [Call('VecRestoreArray2dRead', arguments=[petsc_objs['x_extended'], x_exended_xsize, x_exended_ysize, 0, 0, Byref(petsc_objs[lhs_func.name])])]),
                                      Call('PetscCall', [Call('VecRestoreArray2d', arguments=[petsc_objs['yvec'], FieldFromPointer(sizes[0].name, matctx.name)-2, FieldFromPointer(sizes[1].name, matctx.name)-2, 1, 1, Byref(rhs_func.name)])]),
                                      Call('PetscFunctionReturn', arguments=[0])])
 
     call_back = Callable('MyMatShellMult', mymatshellmult_body, retval=petsc_objs['retval'],
                           parameters=(petsc_objs['A_matfree'], petsc_objs['xvec'], petsc_objs['yvec']))
     
+    from IPython import embed; embed()
 
     # replace all of the struct MatContext symbols that appear in the callback function with a fieldfrompointer i.e ctx->symbol
     for i in usr_ctx[:-2]:
@@ -365,6 +386,7 @@ def lower_petsc(iet, **kwargs):
                              Definition(petsc_objs['b']),
                              Definition(petsc_objs['A_matfree']),
                              Definition(petsc_objs['ksp']),
+                             c.Line('PetscBool   flg;'),
                              Definition(petsc_objs['size']),
                              DummyExpr(petsc_objs['vec_size'], rhs_func.size, init=True),
                              c.Line('PetscFunctionBeginUser;'),
@@ -379,6 +401,8 @@ def lower_petsc(iet, **kwargs):
                              Call('PetscCall', [Call('MatCreateShell', arguments=['PETSC_COMM_WORLD', 'PETSC_DECIDE', 'PETSC_DECIDE', petsc_objs['vec_size'], petsc_objs['vec_size'], matctx.name, Byref(petsc_objs['A_matfree'].name)])]),
                              Call('PetscCall', [Call('MatSetFromOptions', arguments=[petsc_objs['A_matfree']])]), 
                              Call('PetscCall', [Call('MatShellSetOperation', arguments=[petsc_objs['A_matfree'], 'MATOP_MULT', call_back_arg])]),
+                             c.Line('PetscCall(MatIsLinear(A_matfree, 10, &flg));'),
+                             c.Line('PetscCheck(flg, PETSC_COMM_WORLD, PETSC_ERR_USER, "shell matrix is non-linear.");'),
                              Call('PetscCall', [Call('KSPCreate', arguments=['PETSC_COMM_WORLD', Byref(petsc_objs['ksp'].name)])]),
                              #  you can then initialise x with initial guess
                              #  Call('PetscCall', [Call('KSPSetInitialGuessNonzero', arguments=[petsc_objs['ksp'], 'PETSC_TRUE'])]),
