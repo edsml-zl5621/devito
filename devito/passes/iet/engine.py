@@ -84,7 +84,6 @@ class Graph(object):
                 continue
 
             # Minimize code size by abstracting semantically identical efuncs
-            # from IPython import embed; embed()
             efunc, efuncs = reuse_efuncs(efunc, metadata.get('efuncs', []),
                                          self.sregistry)
 
@@ -116,7 +115,6 @@ class Graph(object):
 
 
 def iet_pass(func):
-    # from IPython import embed; embed()
     if isinstance(func, tuple):
         assert len(func) == 2 and func[0] is iet_visit
         call = lambda graph: graph.visit
@@ -227,7 +225,6 @@ def reuse_efuncs(root, efuncs, sregistry=None):
     root = efuncs.pop(root.name)
     processed = [afunc if len(efuncs) > 1 else efuncs.pop()
                  for afunc, efuncs in mapper.values()]
-    # from IPython import embed; embed()
     return root, processed
 
 
@@ -241,14 +238,12 @@ def abstract_efunc(efunc):
             - Arrays are renamed as "a0", "a1", ...
             - Objects are renamed as "o0", "o1", ...
     """
-    # from IPython import embed; embed()
     functions = FindSymbols('symbolics|dimensions').visit(efunc)
 
     mapper = abstract_objects(functions)
 
     efunc = Uxreplace(mapper).visit(efunc)
     efunc = efunc._rebuild(name='foo')
-    # from IPython import embed; embed()
     return efunc
 
 

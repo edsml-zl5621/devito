@@ -297,7 +297,6 @@ def make_mpi(iet, mpimode=None, **kwargs):
     """
     # To produce unique object names
     generators = {'msg': generator(), 'comm': generator(), 'comp': generator()}
-    # from IPython import embed; embed()
     sync_heb = HaloExchangeBuilder('basic', generators, **kwargs)
     user_heb = HaloExchangeBuilder(mpimode, generators, **kwargs)
     mapper = {}

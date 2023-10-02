@@ -182,10 +182,8 @@ class Cpu64AdvOperator(Cpu64OperatorMixin, CoreOperator):
 
         # Misc optimizations
         hoist_prodders(graph)
-        # from IPython import embed; embed()
         # Symbol definitions
         cls._Target.DataManager(**kwargs).process(graph)
-        # from IPython import embed; embed()
         # Linearize n-dimensional Indexeds
         linearize(graph, **kwargs)
 

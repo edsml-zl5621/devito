@@ -93,7 +93,6 @@ def filter_iterations(tree, key=lambda i: i):
 
 
 def derive_parameters(iet, drop_locals=False):
-    # from IPython import embed; embed()
     """
     Derive all input parameters (function call arguments) from an IET
     by collecting all symbols not defined in the tree itself.
@@ -122,7 +121,6 @@ def derive_parameters(iet, drop_locals=False):
     # Maybe filter out all other compiler-generated objects
     if drop_locals:
         parameters = [p for p in parameters if not (p.is_ArrayBasic or p.is_LocalObject)]
-    # from IPython import embed; embed()
     return parameters
 
 

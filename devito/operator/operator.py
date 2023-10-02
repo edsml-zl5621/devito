@@ -175,7 +175,6 @@ class Operator(Callable):
     def _build(cls, expressions, **kwargs):
         # Python- (i.e., compile-) and C-level (i.e., run-time) performance
         profiler = create_profile('timers')
-        # from IPython import embed; embed()
         # Lower the input expressions into an IET
         irs, byproduct = cls._lower(expressions, profiler=profiler, **kwargs)
 
@@ -221,8 +220,6 @@ class Operator(Callable):
         op._dtype, op._dspace = irs.clusters.meta
         op._profiler = profiler
 
-        # from IPython import embed; embed()
-
         return op
 
     def __init__(self, *args, **kwargs):
@@ -249,10 +246,8 @@ class Operator(Callable):
         # This may be used by a compilation pass that constructs a new
         # expression for which a partial or complete lowering is desired
         kwargs['rcompile'] = cls._rcompile_wrapper(**kwargs)
-        # from IPython import embed; embed()
         # [Eq] -> [LoweredEq]
         expressions = cls._lower_exprs(expressions, **kwargs)
-        # from IPython import embed; embed()
         # [LoweredEq] -> [Clusters]
         clusters = cls._lower_clusters(expressions, **kwargs)
 
@@ -328,11 +323,8 @@ class Operator(Callable):
         expressions = cls._specialize_exprs(expressions, **kwargs)
 
         # "True" lowering (indexification, shifting, ...)
-        # from IPython import embed; embed()
         expressions = lower_exprs(expressions, **kwargs)
-        # from IPython import embed; embed()
         processed = [LoweredEq(i) for i in expressions]
-        # from IPython import embed; embed()
         return processed
 
     # Compilation -- Cluster level
@@ -451,35 +443,26 @@ class Operator(Callable):
         """
         name = kwargs.get("name", "Kernel")
         sregistry = kwargs['sregistry']
-        # from IPython import embed; embed()
         # Wrap the IET with an EntryFunction (a special Callable representing
         # the entry point of the generated library)
         parameters = derive_parameters(uiet, True)
-        # from IPython import embed; embed()
         iet = EntryFunction(name, uiet, 'int', parameters, ())
 
         # Lower IET to a target-specific IET
         graph = Graph(iet, sregistry=sregistry)
-        # from IPython import embed; embed()
         graph = cls._specialize_iet(graph, **kwargs)
 
-        # from IPython import embed; embed()
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced
         # after this line below, struct profiler * timers becomes an argument to the kernel function
         cls._Target.instrument(graph, profiler=profiler, **kwargs)
-        # from IPython import embed; embed()
-        # from IPython import embed; embed()
         # Extract the necessary macros from the symbolic objects
         generate_macros(graph)
-        # from IPython import embed; embed()
         # Target-independent optimizations
         minimize_symbols(graph)
-        # from IPython import embed; embed()
-        lower_petsc(graph, **kwargs)
 
-        # from IPython import embed; embed()
+        lower_petsc(graph, **kwargs)
 
         return graph.root, graph
 
@@ -714,11 +697,9 @@ class Operator(Callable):
         Operator, reagardless of how many times this method is invoked.
         """
         if self._lib is None:
-            # from IPython import embed; embed()
             with self._profiler.timer_on('jit-compile'):
                 recompiled, src_file = self._compiler.jit_compile(self._soname,
                                                                   str(self.ccode))
-                # from IPython import embed; embed()
 
             elapsed = self._profiler.py_timers['jit-compile']
             if recompiled:
@@ -731,9 +712,7 @@ class Operator(Callable):
     @property
     def cfunction(self):
         """The JIT-compiled C function as a ctypes.FuncPtr object."""
-        # from IPython import embed; embed()
         if self._lib is None:
-            # from IPython import embed; embed()
             self._jit_compile()
             self._lib = self._compiler.load(self._soname)
             self._lib.name = self._soname
@@ -764,7 +743,6 @@ class Operator(Callable):
 
         cfile = name.with_suffix(".%s" % self._compiler.src_ext)
         hfile = name.with_suffix('.h')
-        # from IPython import embed; embed()
         # Generate the .c and .h code
         ccode, hcode = CInterface().visit(self)
 
@@ -845,17 +823,13 @@ class Operator(Callable):
         >>> op = Operator(Eq(u3.forward, u3 + 1))
         >>> summary = op.apply(time_M=10)
         """
-        # from IPython import embed; embed()
         # Build the arguments list to invoke the kernel function
         with self._profiler.timer_on('arguments'):
             args = self.arguments(**kwargs)
-        # from IPython import embed; embed()
         # Invoke kernel function with args
         arg_values = [args[p.name] for p in self.parameters]
-        # from IPython import embed; embed()
         try:
             cfunction = self.cfunction
-            # from IPython import embed; embed()
             with self._profiler.timer_on('apply', comm=args.comm):
                 cfunction(*arg_values)
         except ctypes.ArgumentError as e:

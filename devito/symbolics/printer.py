@@ -253,7 +253,6 @@ PRECEDENCE_VALUES['InlineIf'] = 1
 
 
 def ccode(expr, **settings):
-    # from IPython import embed; embed()
     """Generate C++ code from an expression.
 
     Parameters

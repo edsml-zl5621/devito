@@ -112,7 +112,6 @@ def relax_incr_dimensions(iet, options=None, **kwargs):
 
     """
     mapper = {}
-    from IPython import embed; embed()
     for tree in retrieve_iteration_tree(iet):
         iterations = [i for i in tree if i.dim.is_Block]
         if not iterations:
@@ -159,16 +158,7 @@ def relax_incr_dimensions(iet, options=None, **kwargs):
 def generate_macros(iet):
     applications = FindApplications().visit(iet)
     headers = set().union(*[_generate_macros(i) for i in applications])
-    # from IPython import embed; embed()
     return iet, {'headers': headers}
-
-
-# # playing around with generate_macros
-# # this is how you would add an extra header that is not default?
-# @iet_pass
-# def generate_macros(iet):
-#     # return iet, {'headers': {('MAX(a,b)', ('(((a) > (b)) ? (a) : (b))'))}}
-#     return iet, {'headers': {('PI', ('3.14'))}}
 
 
 @singledispatch
