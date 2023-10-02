@@ -455,7 +455,7 @@ class Operator(Callable):
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced
-        # after this line below, struct profiler * timers becomes an argument to the kernel function
+
         cls._Target.instrument(graph, profiler=profiler, **kwargs)
         # Extract the necessary macros from the symbolic objects
         generate_macros(graph)
