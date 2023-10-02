@@ -97,7 +97,6 @@ class Parameters(OrderedDict, Signer):
 
     def add(self, key, value, accepted=None, preprocessor=None, callback=None,
             impacts_jit=True, deprecate=None):
-        # from IPython import embed; embed()
         """
         Add a new parameter ``key`` with default value ``value``.
 
