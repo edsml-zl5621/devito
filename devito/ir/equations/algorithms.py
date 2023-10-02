@@ -120,11 +120,11 @@ def lower_exprs(expressions, **kwargs):
         for i in retrieve_indexed(expr):
             f = i.function
 
-            # Introduce shifting to align with the computational domain
+            # # Introduce shifting to align with the computational domain
             # indices = [(lower_exprs(a) + o) for a, o in
             #            zip(i.indices, f._size_nodomain.left)]
 
-            # I have changed this temporarily so that the shifting does not take place
+            # turn off this shifting in order to utilise DMDA
             indices = [lower_exprs(a) for a in i.indices]
 
             # Substitute spacing (spacing only used in own dimension)
