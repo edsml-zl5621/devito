@@ -296,5 +296,7 @@ def petsc_type_to_ctype(petsc_type):
         'Vec': c_void_p,
         'PetscErrorCode': c_int,
         'KSP': c_void_p,
+        'PC': c_void_p,
+        'DM': c_void_p,
         'PetscMPIInt': c_int
     }[petsc_type]
