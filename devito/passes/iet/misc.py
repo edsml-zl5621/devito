@@ -112,6 +112,7 @@ def relax_incr_dimensions(iet, options=None, **kwargs):
 
     """
     mapper = {}
+    from IPython import embed; embed()
     for tree in retrieve_iteration_tree(iet):
         iterations = [i for i in tree if i.dim.is_Block]
         if not iterations:

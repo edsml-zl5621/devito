@@ -175,7 +175,7 @@ class Operator(Callable):
     def _build(cls, expressions, **kwargs):
         # Python- (i.e., compile-) and C-level (i.e., run-time) performance
         profiler = create_profile('timers')
-
+        # from IPython import embed; embed()
         # Lower the input expressions into an IET
         irs, byproduct = cls._lower(expressions, profiler=profiler, **kwargs)
 
@@ -249,10 +249,10 @@ class Operator(Callable):
         # This may be used by a compilation pass that constructs a new
         # expression for which a partial or complete lowering is desired
         kwargs['rcompile'] = cls._rcompile_wrapper(**kwargs)
-        
+        # from IPython import embed; embed()
         # [Eq] -> [LoweredEq]
         expressions = cls._lower_exprs(expressions, **kwargs)
-
+        # from IPython import embed; embed()
         # [LoweredEq] -> [Clusters]
         clusters = cls._lower_clusters(expressions, **kwargs)
 
@@ -463,8 +463,6 @@ class Operator(Callable):
         # from IPython import embed; embed()
         graph = cls._specialize_iet(graph, **kwargs)
 
-        # lower_petsc(graph, **kwargs)
-
         # from IPython import embed; embed()
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
@@ -480,9 +478,6 @@ class Operator(Callable):
         minimize_symbols(graph)
         # from IPython import embed; embed()
         lower_petsc(graph, **kwargs)
-
-        # from IPython import embed; embed()
-        graph = cls._specialize_iet(graph, **kwargs)
 
         # from IPython import embed; embed()
 

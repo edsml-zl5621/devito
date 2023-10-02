@@ -182,6 +182,9 @@ class LoweredEq(IREq):
                                   relations=ordering.relations, mode='partial')
         ispace = IterationSpace(intervals, iterators)
 
+
+        # from IPython import embed; embed()
+
         # Construct the conditionals and replace the ConditionalDimensions in `expr`
         conditionals = {}
         for d in ordering:
