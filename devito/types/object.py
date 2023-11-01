@@ -167,20 +167,17 @@ class AbstractObjectWithShape(Basic, sympy.Basic, Pickable):
         return (self._name, self.dtype, self.is_const,
                 self.grid, self.shape, self.dimensions)
 
-    # def _hashable_content(self):
-    #     return (self.name, self.dtype)
+    @property
+    def dtype(self):
+        return self._dtype
 
     @property
     def free_symbols(self):
         return {self}
 
-    # @property
-    # def free_symbols(self):
-    #     return {self}
-
-    # @property
-    # def _C_ctype(self):
-    #     return self.dtype
+    @property
+    def _C_ctype(self):
+        return self.dtype
 
     @property
     def _C_name(self):
