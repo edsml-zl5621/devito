@@ -462,7 +462,7 @@ class Operator(Callable):
         # Target-independent optimizations
         minimize_symbols(graph)
 
-        # lower_petsc(graph, **kwargs)
+        lower_petsc(graph, **kwargs)
 
         return graph.root, graph
 

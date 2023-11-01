@@ -12,6 +12,10 @@ __all__ = ['first_derivative', 'cross_derivative', 'generic_derivative',
 # code generation
 _PRECISION = 9
 
+# could add:
+# import numpy as np
+# _PRECISION = _PRECISION = {np.float32: 9, np.float64: 16}
+
 
 @check_input
 @check_symbolic
@@ -221,6 +225,9 @@ def make_derivative(expr, dim, fd_order, deriv_order, side, matvec, x0, symbolic
 
     # Enforce fixed precision FD coefficients to avoid variations in results
     weights = [sympify(w).evalf(_PRECISION) for w in weights][::matvec.val]
+
+    #if using mapper for precision, could have:
+    # weights = [sympify(w).evalf(_PRECISION[expr.dtype]) for w in weights]
 
     # Transpose the FD, if necessary
     if matvec == transpose:

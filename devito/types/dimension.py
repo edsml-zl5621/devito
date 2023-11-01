@@ -327,9 +327,10 @@ class Dimension(ArgProvider):
         """
         if self.min_name not in args:
             raise InvalidArgument("No runtime value for %s" % self.min_name)
-        if interval.is_Defined and args[self.min_name] + interval.lower < 0:
-            raise InvalidArgument("OOB detected due to %s=%d" % (self.min_name,
-                                                                 args[self.min_name]))
+        # tmp turn off for PETSc
+        # if interval.is_Defined and args[self.min_name] + interval.lower < 0:
+        #     raise InvalidArgument("OOB detected due to %s=%d" % (self.min_name,
+        #                                                          args[self.min_name]))
 
         if self.max_name not in args:
             raise InvalidArgument("No runtime value for %s" % self.max_name)

@@ -124,7 +124,7 @@ def lower_exprs(expressions, **kwargs):
             # indices = [(lower_exprs(a) + o) for a, o in
             #            zip(i.indices, f._size_nodomain.left)]
 
-            # turn off this shifting in order to utilise DMDA
+            # tmp turn off this shifting in order to utilise DMDA in PETSc
             indices = [lower_exprs(a) for a in i.indices]
 
             # Substitute spacing (spacing only used in own dimension)
