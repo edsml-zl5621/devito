@@ -2,35 +2,14 @@ from functools import singledispatch
 
 import cgen
 import sympy
-from ctypes import c_void_p
 
 from devito.finite_differences import Max, Min
 from devito.ir import (Any, Forward, Iteration, List, Prodder, FindApplications,
-                       FindNodes, Transformer, Uxreplace, filter_iterations,
-                       retrieve_iteration_tree, MapExprStmts, FindSymbols, EntryFunction)
+                       FindNodes, FindSymbols, Transformer, Uxreplace,
+                       filter_iterations, retrieve_iteration_tree)
 from devito.passes.iet.engine import iet_pass
 from devito.symbolics import evalrel, has_integer_args
-from devito.tools import as_mapper, split
-from devito import (Grid, Function)
-from devito.ir.iet import (Callable, DummyExpr, Block)
-from devito.tools import as_mapper, as_list, as_tuple, filter_sorted, flatten
-from operator import itemgetter
-from collections import OrderedDict
-
-
-from devito import Grid, Function
-from devito.ir.iet import (Call, Callable, Conditional, DummyExpr, Iteration, List,
-                           Lambda, ElementalFunction, CGen, FindSymbols,
-                           filter_iterations, make_efunc, retrieve_iteration_tree,
-                           Definition, Expression, Transformer)
-from devito.ir import SymbolRegistry
-from devito.passes.iet.engine import Graph
-from devito.passes.iet.languages.C import CDataManager
-from devito.symbolics import Byref, FieldFromComposite, InlineIf, Macro
-from devito.tools import as_tuple
-from devito.types import Array, LocalObject, Symbol
-# from devito.passes.iet.petsc import PetscObject
-from devito.ir.equations import DummyEq
+from devito.tools import as_mapper, filter_ordered, split
 
 __all__ = ['avoid_denormals', 'hoist_prodders', 'relax_incr_dimensions',
            'generate_macros', 'minimize_symbols']
@@ -158,6 +137,7 @@ def relax_incr_dimensions(iet, options=None, **kwargs):
 def generate_macros(iet):
     applications = FindApplications().visit(iet)
     headers = set().union(*[_generate_macros(i) for i in applications])
+
     return iet, {'headers': headers}
 
 
@@ -224,11 +204,3 @@ def remove_redundant_moddims(iet):
     iet = Transformer(subs, nested=True).visit(iet)
 
     return iet
-
-
-# @iet_pass
-# def lower_petsc(iet):
-#     call_back = Callable('call_back', iet.body, 'int', parameters=iet.parameters)
-#     iet = Transformer({iet.body: Call(call_back.name)}).visit(iet)
-#     return iet, {'efuncs': [call_back]}
-
