@@ -118,7 +118,7 @@ def core_objects(iet):
     """
     # from IPython import embed; embed()
 
-    # did it like this to ensure 
+    # temporary
     action = FindNodes(Expression).visit(iet)[0]
 
     rhs_func = action.write
@@ -260,22 +260,11 @@ def build_mat_vec_callback(lhs_func, rhs_func, petsc_objs, matctx, iters):
                                                              arguments=[petsc_objs['da'],
                                                                         petsc_objs['yvec'],
                                                                         Byref(petsc_objs[rhs_func.name])])]),
-                                    #  Call('PetscCall', [Call('DMLocalToGlobalBegin',
-                                    #                          arguments=[petsc_objs['da'],
-                                    #                                     petsc_objs['local_yvec'],
-                                    #                                     'ADD_VALUES',
-                                    #                                     petsc_objs['yvec']])]),
-                                    #  Call('PetscCall', [Call('DMLocalToGlobalEnd',
-                                    #                          arguments=[petsc_objs['da'],
-                                    #                                     petsc_objs['local_yvec'],
-                                    #                                     'ADD_VALUES',
-                                    #                                     petsc_objs['yvec']])]),
+
                                      Call('PetscCall', [Call('DMRestoreLocalVector',
                                                              arguments=[petsc_objs['da'],
                                                                         Byref(petsc_objs['local_xvec'].name)])]),
-                                    #  Call('PetscCall', [Call('DMRestoreLocalVector',
-                                    #                          arguments=[petsc_objs['da'],
-                                    #                                     Byref(petsc_objs['local_yvec'].name)])]),
+
                                      Call('PetscFunctionReturn', arguments=[0])])
     
     return mymatshellmult_body
@@ -287,22 +276,9 @@ def build_preconditioner(iet, iters, rhs_func, petsc_objs, matctx):
 
     new_expr1 = DummyExpr(expressions[1].expr.lhs, 1.0)
     new_expr2 = DummyExpr(expressions[2].expr.lhs, 1.0)
-    # new_expr3 = DummyExpr(expressions[3].expr.lhs, -2.0)
-    # new_expr4 = DummyExpr(expressions[4].expr.lhs, -2.0)
 
-    # new_expr3 = DummyExpr(expressions[3].expr.lhs, -2.0*pow(rhs_func.dimensions[0].spacing, -2))
-    # new_expr4 = DummyExpr(expressions[4].expr.lhs, -2.0*pow(rhs_func.dimensions[1].spacing, -2))
-    
-    # new_expr5 = DummyExpr(expressions[5].expr.lhs, 1.0)
-    # new_expr6 = DummyExpr(expressions[6].expr.lhs, 1.0)
-    # new_expr7 = DummyExpr(expressions[7].expr.lhs, 1.0)
-    # new_expr8 = DummyExpr(expressions[8].expr.lhs, 1.0)
 
     diag_iter1 = Transformer({expressions[1]: new_expr1, expressions[2]: new_expr2}).visit(iters[1].root)
-    # diag_iter2 = Transformer({expressions[3]: new_expr3, expressions[4]: new_expr4}).visit(iters[2].root)
-    # diag_iter3 = Transformer({expressions[5]: new_expr5, expressions[6]: new_expr6}).visit(iters[3].root)
-    # diag_iter4 = Transformer({expressions[7]: new_expr7, expressions[8]: new_expr8}).visit(iters[4].root)
-    
 
     # temporary
     # diag_main_iter = Transformer({expressions[0]: c.Line("p[i0x][i0y] = -2.0*pow(ctx->h_x, -2) - 2.0*pow(ctx->h_y, -2);")}).visit(iters[0].root)
@@ -339,19 +315,7 @@ def build_preconditioner(iet, iters, rhs_func, petsc_objs, matctx):
                                                              arguments=[petsc_objs['da'],
                                                                         petsc_objs['yvec'],
                                                                         Byref(petsc_objs[rhs_func.name])])]),
-                                    #  Call('PetscCall', [Call('DMLocalToGlobalBegin',
-                                    #                          arguments=[petsc_objs['da'],
-                                    #                                     petsc_objs['local_yvec'],
-                                    #                                     'ADD_VALUES',
-                                    #                                     petsc_objs['yvec']])]),
-                                    #  Call('PetscCall', [Call('DMLocalToGlobalEnd',
-                                    #                          arguments=[petsc_objs['da'],
-                                    #                                     petsc_objs['local_yvec'],
-                                    #                                     'ADD_VALUES',
-                                    #                                     petsc_objs['yvec']])]),
-                                    #  Call('PetscCall', [Call('DMRestoreLocalVector',
-                                    #                          arguments=[petsc_objs['da'],
-                                    #                                     Byref(petsc_objs['local_yvec'].name)])]),
+
                                      Call('PetscFunctionReturn', arguments=[0])])
     
 
@@ -422,27 +386,12 @@ def build_main_body(petsc_objs, lhs_func, sizes_lhs, matctx,
                                                                 petsc_objs['b'],
                                                                 Byref(petsc_objs['b_tmp'].name)])]),
                             #  c.Line("PetscCall(VecView(b, PETSC_VIEWER_STDOUT_SELF));"),
-                            #  Call('PetscCall', [Call('DMLocalToGlobalBegin',
-                            #                          arguments=[petsc_objs['da'],
-                            #                                     petsc_objs['b_local'],
-                            #                                     'INSERT_VALUES',
-                            #                                     petsc_objs['b']])]),
-                            #  Call('PetscCall', [Call('DMLocalToGlobalEnd',
-                            #                          arguments=[petsc_objs['da'],
-                            #                                     petsc_objs['b_local'],
-                            #                                     'INSERT_VALUES',
-                            #                                     petsc_objs['b']])]),
                              Call('PetscCall', [Call('KSPCreate',
                                                      arguments=['PETSC_COMM_SELF',
                                                                 Byref(petsc_objs['ksp'].name)])]),
                              Call('PetscCall', [Call('KSPSetOperators',
                                                      arguments=[petsc_objs['ksp'], petsc_objs['A_matfree'],
                                                                 petsc_objs['A_matfree']])]),
-                             # tolerance precision should be set to precision specifed by user
-                            #  Call('PetscCall', [Call('KSPSetTolerances',
-                            #                          arguments=[petsc_objs['ksp'], '1.e-12',
-                            #                                     'PETSC_DEFAULT', 'PETSC_DEFAULT',
-                            #                                     'PETSC_DEFAULT'])]),
                              c.Line("PetscCall(KSPSetTolerances(ksp, 1.e-15, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT));"),
                              Call('PetscCall', [Call('KSPSetType',
                                                      arguments=[petsc_objs['ksp'], 'KSPGMRES'])]),
