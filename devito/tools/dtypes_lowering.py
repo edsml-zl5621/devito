@@ -13,8 +13,7 @@ __all__ = ['int2', 'int3', 'int4', 'float2', 'float3', 'float4', 'double2',  # n
            'double3', 'double4', 'dtypes_vector_mapper', 'dtype_to_mpidtype',
            'dtype_to_cstr', 'dtype_to_ctype', 'dtype_to_mpitype', 'dtype_len',
            'ctypes_to_cstr', 'c_restrict_void_p', 'ctypes_vector_mapper',
-           'is_external_ctype', 'infer_dtype', 'CustomDtype']
-
+           'is_external_ctype', 'infer_dtype', 'CustomDtype', 'petsc_type_to_ctype']
 
 # *** Custom np.dtypes
 
@@ -313,3 +312,20 @@ def infer_dtype(dtypes):
     else:
         # E.g., mixed integer arithmetic
         return max(dtypes, key=lambda i: np.dtype(i).itemsize, default=None)
+    
+
+def petsc_type_to_ctype(dtype):
+    """
+    Map PETSc types to ctypes type.
+    """
+    return {
+        # 'PetscInt': ctypes.c_int,
+        # 'PetscScalar': ctypes.c_float,
+        'Mat': ctypes.c_void_p,
+        'Vec': ctypes.c_void_p,
+        'PetscErrorCode': ctypes.c_int,
+        'KSP': ctypes.c_void_p,
+        'PC': ctypes.c_void_p,
+        'DM': ctypes.c_void_p,
+        'PetscMPIInt': ctypes.c_int
+    }[dtype]
