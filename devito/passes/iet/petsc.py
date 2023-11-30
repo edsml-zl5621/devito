@@ -1,20 +1,29 @@
 from devito.types.basic import AbstractSymbol, AbstractFunction
-from devito.tools import petsc_type_to_ctype, dtype_to_ctype, dtype_to_cstr
+from devito.tools import petsc_type_to_ctype, dtype_to_ctype, dtype_to_cstr, dtype_to_petsctype
 import numpy as np
 from sympy import Expr
-from ctypes import POINTER
+from devito.types import LocalObject
+from ctypes import POINTER, c_void_p
+from devito.ir import Definition
 
 
 
-class PETScObject(AbstractSymbol):
-    """
-    PETScObjects.
-    """
-    @property
-    def _C_ctype(self):
-        ctype = petsc_type_to_ctype(self._dtype)
-        return type(self._dtype, (ctype,), {})
+# class PETScObject(AbstractSymbol):
+#     @property
+#     def _C_ctype(self):
+#         ctype = petsc_type_to_ctype(self._dtype)
+#         return type(self._dtype, (ctype,), {})
     
+
+class PETScDM(LocalObject):
+    dtype = type('DM', (c_void_p,), {})
+
+    
+da = PETScDM('da')
+defn1 = Definition(da)
+print(defn1)
+
+
 
 
 # may need to also inherit from Expr
@@ -36,25 +45,7 @@ class PETScFunction(AbstractFunction):
 
     @property
     def dimensions(self):
-        """Tuple of Dimensions representing the object indices."""
         return self._dimensions
-
-    @classmethod
-    def __indices_setup__(cls, **kwargs):
-        grid = kwargs.get('grid')
-        shape = kwargs.get('shape')
-        dimensions = kwargs.get('dimensions')
-
-        if dimensions is None and shape is None and grid is None:
-            return (), ()
-
-        elif grid is None:
-            if dimensions is None:
-                raise TypeError("Need either `grid` or `dimensions`")
-        elif dimensions is None:
-            dimensions = grid.dimensions
-
-        return dimensions, dimensions
         
     # @classmethod
     # def __shape_setup__(cls, **kwargs):
@@ -78,38 +69,26 @@ class PETScFunction(AbstractFunction):
 
     #     return shape
         
-    # @classmethod
-    # def __indices_setup__(cls, *args, **kwargs):
-    #     grid = kwargs.get('grid')
-    #     dimensions = kwargs.get('dimensions')
-    #     if grid is None:
-    #         if dimensions is None:
-    #             raise TypeError("Need either `grid` or `dimensions`")
-    #     elif dimensions is None:
-    #         dimensions = grid.dimensions
+    @classmethod
+    def __indices_setup__(cls, *args, **kwargs):
+        grid = kwargs.get('grid')
+        dimensions = kwargs.get('dimensions')
+        if grid is None:
+            if dimensions is None:
+                raise TypeError("Need either `grid` or `dimensions`")
+        elif dimensions is None:
+            dimensions = grid.dimensions
 
-    #     return tuple(dimensions), tuple(dimensions)
+        return tuple(dimensions), tuple(dimensions)
 
     @property
     def _C_ctype(self):
-        # from IPython import embed; embed()
-        ctypename = 'Petsc%s' % dtype_to_cstr(self._dtype).capitalize()
+        petsc_type = dtype_to_petsctype(self.dtype)
         ctype = dtype_to_ctype(self.dtype)
-        r = POINTER(type(ctypename, (ctype,), {}))
-        for n in range(len(self.dimensions)-1):
+        r = type(petsc_type, (ctype,), {})
+        for n in range(len(self.dimensions)):
             r = POINTER(r)
         return r
-    
-    # @property
-    # def _C_ctype(self):
-    #     # from IPython import embed; embed()
-    #     ctypename = 'Petsc%s' % dtype_to_cstr(self._dtype).capitalize()
-    #     ctype = dtype_to_ctype(self.dtype)
-    #     r = type(ctypename, (ctype,), {})
-    #     # for n in range(len(self.dimensions)-1):
-    #     #     r = POINTER(r)
-    #     from IPython import embed; embed()
-    #     return r
 
     @property
     def _C_name(self):
@@ -118,19 +97,18 @@ class PETScFunction(AbstractFunction):
     
 
     
-from devito.ir import Definition
-da = PETScObject('da', dtype='DM')
-tmp = Definition(da)
+# from devito.ir import Definition
+# da = PETScObject('da', dtype='DM')
+# tmp = Definition(da)
 # print(tmp)
 
 from devito import *
 grid = Grid((2, 2))
 x, y = grid.dimensions
-# pointer and const functionality
-ptr1 = PETScFunction(name='ptr1', dtype=np.int32, dimensions=grid.dimensions, shape=grid.shape, is_const=True)
-defn1 = Definition(ptr1)
-from IPython import embed; embed()
-print(str(defn1))
+ptr1 = PETScFunction(name='ptr1', dtype=np.float32, dimensions=grid.dimensions, shape=grid.shape)
+defn2 = Definition(ptr1)
+# from IPython import embed; embed()
+print(str(defn2))
 
 
 
