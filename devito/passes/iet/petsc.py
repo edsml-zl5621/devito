@@ -31,6 +31,7 @@ class PETScFunction(AbstractFunction):
     """
     PETScFunctions.
     """
+    _data_alignment = False
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
@@ -106,9 +107,11 @@ from devito import *
 grid = Grid((2, 2))
 x, y = grid.dimensions
 ptr1 = PETScFunction(name='ptr1', dtype=np.float32, dimensions=grid.dimensions, shape=grid.shape)
-defn2 = Definition(ptr1)
+
+from IPython import embed; embed()
+# defn2 = Definition(ptr1)
 # from IPython import embed; embed()
-print(str(defn2))
+# print(/defn2)
 
 
 
