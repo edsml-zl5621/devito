@@ -6,6 +6,7 @@ from .array import *  # noqa
 from .object import *  # noqa
 from .lazy import *  # noqa
 from .misc import *  # noqa
+from .petsc import *  # noqa
 
 # Needed both within and outside Devito
 from .dimension import *  # noqa
