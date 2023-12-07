@@ -5,30 +5,54 @@ from devito.types import LocalObject
 
 
 class DM(LocalObject):
+    """
+    PETSc Data Management object (DM).
+    """
     dtype = CustomDtype('DM')
 
 
 class Mat(LocalObject):
+    """
+    PETSc Matrix object (Mat).
+    """
     dtype = CustomDtype('Mat')
 
 
 class Vec(LocalObject):
+    """
+    PETSc Vector object (Vec).
+    """
     dtype = CustomDtype('Vec')
 
 
 class PetscMPIInt(LocalObject):
+    """
+    PETSc datatype used to represent ‘int’ parameters
+    to MPI functions.
+    """
     dtype = CustomDtype('PetscMPIInt')
 
 
 class KSP(LocalObject):
+    """
+    PETSc KSP : Linear Systems Solvers.
+    Manages Krylov Methods.
+    """
     dtype = CustomDtype('KSP')
 
 
 class PC(LocalObject):
+    """
+    PETSc object that manages all preconditioners (PC).
+    """
     dtype = CustomDtype('PC')
 
 
 class KSPConvergedReason(LocalObject):
+    """
+    PETSc object - reason a Krylov method was determined
+    to have converged or diverged.
+    """
     dtype = CustomDtype('KSPConvergedReason')
 
 
@@ -37,6 +61,12 @@ class PETScFunction(AbstractFunction):
     PETScFunctions.
     """
     _data_alignment = False
+
+    def __init_finalize__(self, *args, **kwargs):
+
+        super(PETScFunction, self).__init_finalize__(*args, **kwargs)
+
+        self._is_const = kwargs.get('is_const', False)
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
@@ -75,3 +105,7 @@ class PETScFunction(AbstractFunction):
     @property
     def _C_name(self):
         return self.name
+
+    @property
+    def is_const(self):
+        return self._is_const
