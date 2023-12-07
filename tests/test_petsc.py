@@ -43,12 +43,15 @@ def test_petsc_functions():
     ptr0 = PETScFunction(name='ptr0', dtype=np.float32, dimensions=grid.dimensions,
                          shape=grid.shape)
     ptr1 = PETScFunction(name='ptr1', dtype=np.float32, grid=grid)
+    ptr2 = PETScFunction(name='ptr2', dtype=np.float32, grid=grid, is_const=True)
 
     defn0 = Definition(ptr0)
     defn1 = Definition(ptr1)
+    defn2 = Definition(ptr2)
 
     expr = DummyExpr(ptr0.indexed[x, y], ptr1.indexed[x, y] + 1)
 
     assert str(defn0) == 'PetscScalar**restrict ptr0;'
     assert str(defn1) == 'PetscScalar**restrict ptr1;'
+    assert str(defn2) == 'const PetscScalar**restrict ptr2;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
