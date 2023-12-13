@@ -361,7 +361,7 @@ class Call(ExprStmt, Node):
 class FuncPtrCall(Call):
 
     """
-    Function Pointer Argument to a Call.
+    Function Pointer Call.
     """
     def __init__(self, name, return_type, parameter_type, **kwargs):
 
