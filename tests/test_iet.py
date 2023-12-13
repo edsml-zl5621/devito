@@ -128,6 +128,26 @@ def test_find_symbols_nested(mode, expected):
     assert [f.name for f in found] == eval(expected)
 
 
+def test_funcptrcall_cgen():
+
+    a = Symbol('a')
+    b = Symbol('b')
+    foo0 = Callable('foo0', Definition(a), 'void', parameters=[b])
+    foo0_arg = FuncPtrCall(foo0.name, foo0.retval, 'int')
+    code0 = CGen().visit(foo0_arg)
+    assert str(code0) == '(void (*)(int))foo0'
+
+    # test nested calls with a FuncPtrCall as an argument
+    call = Call('foo1', [
+        Call('foo2', [foo0_arg])
+    ])
+    code1 = CGen().visit(call)
+    assert str(code1) == 'foo1(foo2((void (*)(int))foo0));'
+
+    callees = FindNodes(Call).visit(call)
+    assert len(callees) == 3
+
+
 def test_list_denesting():
     l0 = List(header=cgen.Line('a'), body=List(header=cgen.Line('b')))
     l1 = l0._rebuild(body=List(header=cgen.Line('c')))
