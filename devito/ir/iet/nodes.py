@@ -27,7 +27,7 @@ __all__ = ['Node', 'Block', 'Expression', 'Callable', 'Call', 'ExprStmt',
            'AugmentedExpression', 'Increment', 'Return', 'While', 'ListMajor',
            'ParallelIteration', 'ParallelBlock', 'Dereference', 'Lambda',
            'SyncSpot', 'Pragma', 'DummyExpr', 'BlankLine', 'ParallelTree',
-           'BusyWait', 'CallableBody', 'Transfer']
+           'BusyWait', 'CallableBody', 'Transfer', 'FuncPtrCall']
 
 # First-class IET nodes
 
@@ -346,6 +346,19 @@ class Call(ExprStmt, Node):
     @property
     def writes(self):
         return self._writes
+
+
+class FuncPtrCall(Call):
+
+    """
+    Function Pointer Argument to a Call.
+    """
+    def __init__(self, name, return_type, parameter_type, **kwargs):
+
+        super().__init__(name=name)
+
+        self.return_type = return_type
+        self.parameter_type = parameter_type
 
 
 class Expression(ExprStmt, Node):
