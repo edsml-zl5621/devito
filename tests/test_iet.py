@@ -10,7 +10,7 @@ from devito import (Eq, Grid, Function, TimeFunction, Operator, Dimension,  # no
 from devito.ir.iet import (Call, Callable, Conditional, DummyExpr, Iteration, List,
                            KernelLaunch, Lambda, ElementalFunction, CGen, FindSymbols,
                            filter_iterations, make_efunc, retrieve_iteration_tree,
-                           Transformer, FuncPtrCall, FindNodes, Definition)
+                           Transformer, Callback, FindNodes, Definition)
 from devito.ir import SymbolRegistry
 from devito.passes.iet.engine import Graph
 from devito.passes.iet.languages.C import CDataManager
@@ -128,16 +128,16 @@ def test_find_symbols_nested(mode, expected):
     assert [f.name for f in found] == eval(expected)
 
 
-def test_funcptrcall_cgen():
+def test_callback_cgen():
 
     a = Symbol('a')
     b = Symbol('b')
     foo0 = Callable('foo0', Definition(a), 'void', parameters=[b])
-    foo0_arg = FuncPtrCall(foo0.name, foo0.retval, 'int')
+    foo0_arg = Callback(foo0.name, foo0.retval, 'int')
     code0 = CGen().visit(foo0_arg)
     assert str(code0) == '(void (*)(int))foo0'
 
-    # test nested calls with a FuncPtrCall as an argument
+    # test nested calls with a Callback as an argument.
     call = Call('foo1', [
         Call('foo2', [foo0_arg])
     ])

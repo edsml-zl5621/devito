@@ -27,7 +27,7 @@ __all__ = ['Node', 'Block', 'Expression', 'Callable', 'Call', 'ExprStmt',
            'AugmentedExpression', 'Increment', 'Return', 'While', 'ListMajor',
            'ParallelIteration', 'ParallelBlock', 'Dereference', 'Lambda',
            'SyncSpot', 'Pragma', 'DummyExpr', 'BlankLine', 'ParallelTree',
-           'BusyWait', 'CallableBody', 'Transfer', 'FuncPtrCall']
+           'BusyWait', 'CallableBody', 'Transfer', 'Callback']
 
 # First-class IET nodes
 
@@ -346,19 +346,6 @@ class Call(ExprStmt, Node):
     @property
     def writes(self):
         return self._writes
-
-
-class FuncPtrCall(Call):
-
-    """
-    Function Pointer Call.
-    """
-    def __init__(self, name, return_type, parameter_type, **kwargs):
-
-        super().__init__(name=name)
-
-        self.return_type = return_type
-        self.parameter_type = parameter_type
 
 
 class Expression(ExprStmt, Node):
@@ -1108,6 +1095,28 @@ class Lambda(Node):
     @property
     def defines(self):
         return tuple(self.parameters)
+
+
+class Callback(Call):
+
+    """
+    Callback as a function pointer.
+
+    Parameters
+    ----------
+    name : str
+        The name of the callback.
+    retval : str
+        The return type of the callback.
+    param_types : str or list of str
+        The return type for each argument of the callback.
+    """
+    def __init__(self, name, retval, param_types):
+
+        super().__init__(name=name)
+
+        self.retval = retval
+        self.param_types = as_tuple(param_types)
 
 
 class Section(List):
