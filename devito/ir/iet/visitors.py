@@ -506,12 +506,6 @@ class CGen(Visitor):
             else:
                 return c.Initializer(c.Value(rettype, retobj._C_name), call)
 
-    def visit_FuncPtrCall(self, o, nested_call=False):
-        name = o.name
-        return_type = o.return_type
-        parameter_type = o.parameter_type
-        return FuncPtrArg(name, return_type, parameter_type)
-
     def visit_Conditional(self, o):
         try:
             then_body, else_body = self._blankline_logic(o.children)
@@ -617,6 +611,9 @@ class CGen(Visitor):
         top = c.Line('[%s](%s)%s' %
                      (', '.join(captures), ', '.join(decls), ''.join(extra)))
         return LambdaCollection([top, c.Block(body)])
+
+    def visit_Callback(self, o, nested_call=False):
+        return CallbackArg(o.name, o.retval, o.param_types)
 
     def visit_HaloSpot(self, o):
         body = flatten(self._visit(i) for i in o.children)
@@ -1394,12 +1391,13 @@ def sorted_efuncs(efuncs):
     return sorted_priority(efuncs, priority)
 
 
-class FuncPtrArg(c.Generable):
+class CallbackArg(c.Generable):
 
-    def __init__(self, name, return_type, parameter_type):
+    def __init__(self, name, retval, param_types):
         self.name = name
-        self.return_type = return_type
-        self.parameter_type = parameter_type
+        self.retval = retval
+        self.param_types = param_types
 
     def generate(self):
-        yield "(%s (*)(%s))%s" % (self.return_type, self.parameter_type, self.name)
+        param_types_str = ', '.join([str(t) for t in self.param_types])
+        yield "(%s (*)(%s))%s" % (self.retval, param_types_str, self.name)
