@@ -130,14 +130,19 @@ def test_find_symbols_nested(mode, expected):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def test_callback_cgen():
 =======
 def test_funcptrcall_cgen():
 >>>>>>> 8677a933f (compiler: Add FuncPtrCall)
+=======
+def test_callback_cgen():
+>>>>>>> f15e61d35 (compiler: Edit names, move position of Callback and other small edits)
 
     a = Symbol('a')
     b = Symbol('b')
     foo0 = Callable('foo0', Definition(a), 'void', parameters=[b])
+<<<<<<< HEAD
 <<<<<<< HEAD
     foo0_arg = Callback(foo0.name, foo0.retval, 'int')
     code0 = CGen().visit(foo0_arg)
@@ -151,6 +156,13 @@ def test_funcptrcall_cgen():
 
     # test nested calls with a FuncPtrCall as an argument
 >>>>>>> 8677a933f (compiler: Add FuncPtrCall)
+=======
+    foo0_arg = Callback(foo0.name, foo0.retval, 'int')
+    code0 = CGen().visit(foo0_arg)
+    assert str(code0) == '(void (*)(int))foo0'
+
+    # test nested calls with a Callback as an argument.
+>>>>>>> f15e61d35 (compiler: Edit names, move position of Callback and other small edits)
     call = Call('foo1', [
         Call('foo2', [foo0_arg])
     ])

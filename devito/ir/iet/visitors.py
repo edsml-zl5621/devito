@@ -506,12 +506,6 @@ class CGen(Visitor):
             else:
                 return c.Initializer(c.Value(rettype, retobj._C_name), call)
 
-    def visit_FuncPtrCall(self, o, nested_call=False):
-        name = o.name
-        return_type = o.return_type
-        parameter_type = o.parameter_type
-        return FuncPtrArg(name, return_type, parameter_type)
-
     def visit_Conditional(self, o):
         try:
             then_body, else_body = self._blankline_logic(o.children)
