@@ -2,6 +2,7 @@ from devito.types.basic import AbstractFunction
 from devito.tools import dtype_to_petsctype, CustomDtype
 import numpy as np
 from devito.types import LocalObject
+# from devito.types.dense import DiscreteFunction
 
 
 class DM(LocalObject):
@@ -104,3 +105,42 @@ class PETScFunction(AbstractFunction):
     @property
     def is_const(self):
         return self._is_const
+
+
+# class PETScFunction(DiscreteFunction):
+#     """
+#     PETScFunctions.
+#     """
+#     _data_alignment = False
+
+#     def __init_finalize__(self, *args, **kwargs):
+
+#         super().__init_finalize__(*args, **kwargs)
+
+#         self._is_const = kwargs.get('is_const', False)
+
+#     @classmethod
+#     def __indices_setup__(cls, *args, **kwargs):
+#         grid = kwargs.get('grid')
+#         dimensions = kwargs.get('dimensions')
+#         if grid is None:
+#             if dimensions is None:
+#                 raise TypeError("Need either `grid` or `dimensions`")
+#         elif dimensions is None:
+#             dimensions = grid.dimensions
+
+#         return tuple(dimensions), tuple(dimensions)
+
+#     @property
+#     def _C_ctype(self):
+#         petsc_type = dtype_to_petsctype(self.dtype)
+#         modifier = '*' * len(self.dimensions)
+#         return CustomDtype(petsc_type, modifier=modifier)
+
+#     @property
+#     def _C_name(self):
+#         return self.name
+
+#     @property
+#     def is_const(self):
+#         return self._is_const
