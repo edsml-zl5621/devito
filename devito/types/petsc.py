@@ -27,7 +27,7 @@ class Vec(LocalObject):
 
 class PetscMPIInt(LocalObject):
     """
-    PETSc datatype used to represent ‘int’ parameters
+    PETSc datatype used to represent `int` parameters
     to MPI functions.
     """
     dtype = CustomDtype('PetscMPIInt')
@@ -64,7 +64,7 @@ class PETScFunction(AbstractFunction):
 
     def __init_finalize__(self, *args, **kwargs):
 
-        super(PETScFunction, self).__init_finalize__(*args, **kwargs)
+        super().__init_finalize__(*args, **kwargs)
 
         self._is_const = kwargs.get('is_const', False)
 
@@ -92,15 +92,10 @@ class PETScFunction(AbstractFunction):
         return tuple(dimensions), tuple(dimensions)
 
     @property
-    def dimensions(self):
-        return self._dimensions
-
-    @property
     def _C_ctype(self):
         petsc_type = dtype_to_petsctype(self.dtype)
         modifier = '*' * len(self.dimensions)
-        customtype = CustomDtype(petsc_type, modifier=modifier)
-        return customtype
+        return CustomDtype(petsc_type, modifier=modifier)
 
     @property
     def _C_name(self):
