@@ -1,8 +1,6 @@
-from devito.tools import (dtype_to_petsctype, CustomDtype,
-                          dtype_to_ctype)
+from devito.tools import dtype_to_petsctype, CustomDtype
 from devito.types import LocalObject
 from devito.types.array import ArrayBasic
-from ctypes import POINTER
 import numpy as np
 
 
@@ -77,11 +75,9 @@ class PETScFunction(ArrayBasic):
     @property
     def _C_ctype(self):
         petsc_type = dtype_to_petsctype(self.dtype)
-        ctype = dtype_to_ctype(self.dtype)
-        r = type(petsc_type, (ctype,), {})
-        for n in range(len(self.dimensions)):
-            r = POINTER(r)
-        return r
+        modifier = '*' * len(self.dimensions)
+        customtype = CustomDtype(petsc_type, modifier=modifier)
+        return customtype
 
     @property
     def _C_name(self):
