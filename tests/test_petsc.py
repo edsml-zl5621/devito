@@ -60,6 +60,6 @@ def test_petsc_functions():
     assert str(defn0) == 'PetscScalar **restrict ptr0;'
     assert str(defn1) == 'const PetscScalar **restrict ptr1;'
     assert str(defn2) == 'const PetscScalar **restrict ptr2;'
-    assert str(defn3) == 'PetscInt**restrict ptr3;'
+    assert str(defn3) == 'PetscInt **restrict ptr3;'
     assert str(defn4) == 'const PetscInt **restrict ptr4;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
