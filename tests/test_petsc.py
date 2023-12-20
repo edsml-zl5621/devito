@@ -40,12 +40,14 @@ def test_petsc_functions():
     grid = Grid((2, 2))
     x, y = grid.dimensions
 
-    ptr0 = PETScFunction(name='ptr0', dtype=np.float32, dimensions=grid.dimensions,
-                         shape=grid.shape)
-    ptr1 = PETScFunction(name='ptr1', dtype=np.float32, grid=grid)
-    ptr2 = PETScFunction(name='ptr2', dtype=np.float64, grid=grid, is_const=True)
-    ptr3 = PETScFunction(name='ptr3', dtype=np.int32, grid=grid, is_const=True)
-    ptr4 = PETScFunction(name='ptr4', dtype=np.int64, grid=grid, is_const=True)
+    ptr0 = PETScFunction(name='ptr0', dimensions=grid.dimensions, dtype=np.float32)
+    ptr1 = PETScFunction(name='ptr1', dimensions=grid.dimensions, dtype=np.float32,
+                         is_const=True)
+    ptr2 = PETScFunction(name='ptr2', dimensions=grid.dimensions, dtype=np.float64,
+                         is_const=True)
+    ptr3 = PETScFunction(name='ptr3', dimensions=grid.dimensions, dtype=np.int32)
+    ptr4 = PETScFunction(name='ptr4', dimensions=grid.dimensions, dtype=np.int64,
+                         is_const=True)
 
     defn0 = Definition(ptr0)
     defn1 = Definition(ptr1)
@@ -56,8 +58,8 @@ def test_petsc_functions():
     expr = DummyExpr(ptr0.indexed[x, y], ptr1.indexed[x, y] + 1)
 
     assert str(defn0) == 'PetscScalar**restrict ptr0;'
-    assert str(defn1) == 'PetscScalar**restrict ptr1;'
+    assert str(defn1) == 'const PetscScalar**restrict ptr1;'
     assert str(defn2) == 'const PetscScalar**restrict ptr2;'
-    assert str(defn3) == 'const PetscInt**restrict ptr3;'
+    assert str(defn3) == 'PetscInt**restrict ptr3;'
     assert str(defn4) == 'const PetscInt**restrict ptr4;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
