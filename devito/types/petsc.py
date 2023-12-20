@@ -1,8 +1,5 @@
-from devito.types.basic import AbstractFunction
 from devito.tools import dtype_to_petsctype, CustomDtype
-import numpy as np
-from devito.types import LocalObject
-# from devito.types.dense import DiscreteFunction
+from devito.types import LocalObject, Array
 
 
 class DM(LocalObject):
@@ -57,7 +54,7 @@ class KSPConvergedReason(LocalObject):
     dtype = CustomDtype('KSPConvergedReason')
 
 
-class PETScFunction(AbstractFunction):
+class PETScFunction(Array):
     """
     PETScFunctions.
     """
@@ -68,29 +65,6 @@ class PETScFunction(AbstractFunction):
         super().__init_finalize__(*args, **kwargs)
 
         self._is_const = kwargs.get('is_const', False)
-
-    @classmethod
-    def __dtype_setup__(cls, **kwargs):
-        grid = kwargs.get('grid')
-        dtype = kwargs.get('dtype')
-        if dtype is not None:
-            return dtype
-        elif grid is not None:
-            return grid.dtype
-        else:
-            return np.float32
-
-    @classmethod
-    def __indices_setup__(cls, *args, **kwargs):
-        grid = kwargs.get('grid')
-        dimensions = kwargs.get('dimensions')
-        if grid is None:
-            if dimensions is None:
-                raise TypeError("Need either `grid` or `dimensions`")
-        elif dimensions is None:
-            dimensions = grid.dimensions
-
-        return tuple(dimensions), tuple(dimensions)
 
     @property
     def _C_ctype(self):
@@ -105,42 +79,3 @@ class PETScFunction(AbstractFunction):
     @property
     def is_const(self):
         return self._is_const
-
-
-# class PETScFunction(DiscreteFunction):
-#     """
-#     PETScFunctions.
-#     """
-#     _data_alignment = False
-
-#     def __init_finalize__(self, *args, **kwargs):
-
-#         super().__init_finalize__(*args, **kwargs)
-
-#         self._is_const = kwargs.get('is_const', False)
-
-#     @classmethod
-#     def __indices_setup__(cls, *args, **kwargs):
-#         grid = kwargs.get('grid')
-#         dimensions = kwargs.get('dimensions')
-#         if grid is None:
-#             if dimensions is None:
-#                 raise TypeError("Need either `grid` or `dimensions`")
-#         elif dimensions is None:
-#             dimensions = grid.dimensions
-
-#         return tuple(dimensions), tuple(dimensions)
-
-#     @property
-#     def _C_ctype(self):
-#         petsc_type = dtype_to_petsctype(self.dtype)
-#         modifier = '*' * len(self.dimensions)
-#         return CustomDtype(petsc_type, modifier=modifier)
-
-#     @property
-#     def _C_name(self):
-#         return self.name
-
-#     @property
-#     def is_const(self):
-#         return self._is_const
