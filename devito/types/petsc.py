@@ -76,8 +76,7 @@ class PETScFunction(ArrayBasic):
     def _C_ctype(self):
         petsc_type = dtype_to_petsctype(self.dtype)
         modifier = '*' * len(self.dimensions)
-        customtype = CustomDtype(petsc_type, modifier=modifier)
-        return customtype
+        return CustomDtype(petsc_type, modifier=modifier)
 
     @property
     def _C_name(self):
