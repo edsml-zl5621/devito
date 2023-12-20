@@ -220,6 +220,14 @@ class DataManager(object):
 
         storage.update(obj, site, allocs=decl)
 
+    def _alloc_petsc_array_on_low_lat_mem(self, site, obj, storage):
+        """
+        Allocate a PETScArray in the low latency memory.
+        """
+        decl = Definition(obj)
+        definition = (decl)
+        storage.update(obj, site, standalones=definition)
+
     def _alloc_pointed_array_on_high_bw_mem(self, site, obj, storage):
         """
         Allocate the following objects in the high bandwidth memory:
@@ -357,6 +365,8 @@ class DataManager(object):
                 self._alloc_object_array_on_low_lat_mem(iet, i, storage)
             elif i.is_PointerArray:
                 self._alloc_pointed_array_on_high_bw_mem(iet, i, storage)
+            elif i.is_PETScArray:
+                self._alloc_petsc_array_on_low_lat_mem(iet, i, storage)
 
         # Handle postponed global objects
         includes = set()
