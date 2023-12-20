@@ -1,5 +1,9 @@
-from devito.tools import dtype_to_petsctype, CustomDtype
-from devito.types import LocalObject, Array
+from devito.tools import (dtype_to_petsctype, CustomDtype,
+                          dtype_to_ctype)
+from devito.types import LocalObject
+from devito.types.array import ArrayBasic
+from ctypes import POINTER
+import numpy as np
 
 
 class DM(LocalObject):
@@ -54,11 +58,11 @@ class KSPConvergedReason(LocalObject):
     dtype = CustomDtype('KSPConvergedReason')
 
 
-class PETScFunction(Array):
-    """
-    PETScFunctions.
-    """
+class PETScFunction(ArrayBasic):
+
     _data_alignment = False
+
+    is_PETScArray = True
 
     def __init_finalize__(self, *args, **kwargs):
 
@@ -66,11 +70,18 @@ class PETScFunction(Array):
 
         self._is_const = kwargs.get('is_const', False)
 
+    @classmethod
+    def __dtype_setup__(cls, **kwargs):
+        return kwargs.get('dtype', np.float32)
+
     @property
     def _C_ctype(self):
         petsc_type = dtype_to_petsctype(self.dtype)
-        modifier = '*' * len(self.dimensions)
-        return CustomDtype(petsc_type, modifier=modifier)
+        ctype = dtype_to_ctype(self.dtype)
+        r = type(petsc_type, (ctype,), {})
+        for n in range(len(self.dimensions)):
+            r = POINTER(r)
+        return r
 
     @property
     def _C_name(self):
