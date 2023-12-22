@@ -1,7 +1,5 @@
 from devito.tools import timed_pass
-from devito.types import LinearSolveExpr
-
-__all__ = ['petsc_lift']
+from devito.petsc.types import LinearSolveExpr
 
 
 @timed_pass()
@@ -17,7 +15,7 @@ def petsc_lift(clusters):
     for c in clusters:
 
         if isinstance(c.exprs[0].rhs, LinearSolveExpr):
-            ispace = c.ispace.lift(c.exprs[0].rhs.target.dimensions)
+            ispace = c.ispace.lift(c.exprs[0].rhs.target.space_dimensions)
             processed.append(c.rebuild(ispace=ispace))
         else:
             processed.append(c)

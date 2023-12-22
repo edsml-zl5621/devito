@@ -35,7 +35,6 @@ RUN apt-get update -y && \
     apt-get install -y intel-oneapi-advisor
 
 # Drivers mandatory for intel gpu
-<<<<<<< HEAD
 # https://dgpu-docs.intel.com/driver/installation.html#ubuntu-install-steps
 RUN wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | gpg --dearmor > /usr/share/keyrings/intel-graphics.gpg
 RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/graphics/ubuntu jammy unified" >  /etc/apt/sources.list.d/intel-gpu-jammy.list
@@ -51,16 +50,6 @@ RUN apt-get update -y && apt-get dist-upgrade -y && \
             pciutils libkmod-dev intel-fw-gpu xpu-smi \
             # Development packages
             libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev level-zero-dev
-=======
-# https://dgpu-docs.intel.com/installation-guides/ubuntu/ubuntu-focal.html#ubuntu-20-04-focal
-RUN wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | gpg --dearmor > /usr/share/keyrings/intel-graphics.gpg
-RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/graphics/ubuntu focal main" >  /etc/apt/sources.list.d/intel.list
-
-RUN apt-get update -y && apt-get dist-upgrade -y && \
-    apt-get install -y intel-opencl-icd intel-level-zero-gpu level-zero level-zero-dev \
-                     intel-media-va-driver-non-free libmfx1 libmfxgen1 libvpl2 \
-                     libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev level-zero-dev
->>>>>>> c4373f90e (misc: Split Dockerfile.cpu into .cpu and .intel)
 
 ENV MPI4PY_FLAGS='. /opt/intel/oneapi/setvars.sh intel64 && '
 ENV MPI4PY_RC_RECV_MPROBE=0
@@ -87,11 +76,7 @@ ENV DEVITO_PLATFORM="intel64"
 ENV MPICC=mpiicc
 
 ##############################################################
-<<<<<<< HEAD
 # ICX OpenMP image
-=======
-# ICX image
->>>>>>> c4373f90e (misc: Split Dockerfile.cpu into .cpu and .intel)
 ##############################################################
 FROM oneapi AS icx
 
@@ -108,35 +93,6 @@ ENV DEVITO_LANGUAGE="openmp"
 ENV MPICC=mpiicc
 
 ##############################################################
-<<<<<<< HEAD
-=======
-# ICX hpc image
-##############################################################
-FROM oneapi as icx-hpc
-
-# Install both icc and icx to avoid missing dependencies
-RUN apt-get update -y && \
-    apt-get install -y intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mpi-devel  && \
-    apt-get install -y intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic
-
-# Missig components
-# https://www.intel.com/content/www/us/en/developer/tools/oneapi/hpc-toolkit-download.html?operatingsystem=linux&distributions=aptpackagemanager
-RUN curl -f "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/ebf5d9aa-17a7-46a4-b5df-ace004227c0e/l_dpcpp-cpp-compiler_p_2023.2.1.8.sh" -O && \
-    chmod +x l_dpcpp-cpp-compiler_p_2023.2.1.8.sh && ./l_dpcpp-cpp-compiler_p_2023.2.1.8.sh -a -s  --eula accept && \
-    rm l_dpcpp-cpp-compiler_p_2023.2.1.8.sh
-
-RUN apt-get clean && apt-get autoclean &&  apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/*
-
-# Devito config
-ENV DEVITO_ARCH="icx"
-ENV DEVITO_LANGUAGE="openmp"
-# MPICC compiler for mpi4py
-ENV MPICC=mpiicc
-ENV MPI4PY_FLAGS='. /opt/intel/oneapi/setvars.sh && CFLAGS="-cc=icx"'
-
-##############################################################
->>>>>>> c4373f90e (misc: Split Dockerfile.cpu into .cpu and .intel)
 # ICX SYCL CPU image
 ##############################################################
 FROM icx AS cpu-sycl
@@ -151,12 +107,6 @@ ENV DEVITO_PLATFORM="intel64"
 ##############################################################
 FROM icx as gpu-sycl
 
-<<<<<<< HEAD
-=======
-# NOTE: the name of this file ends with ".cpu" but this is a GPU image.
-# It then feels a bit akward, so some restructuring might be needed
-
->>>>>>> c4373f90e (misc: Split Dockerfile.cpu into .cpu and .intel)
 # Devito config
 ENV DEVITO_ARCH="sycl"
 ENV DEVITO_LANGUAGE="sycl"

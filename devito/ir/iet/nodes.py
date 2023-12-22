@@ -10,7 +10,7 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpMatVec, OpRHS
+from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, WithLock, PrefetchUpdate, detect_io)
@@ -28,7 +28,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'MatVecAction', 'RHSLinearSystem']
+           'CallableBody', 'Transfer', 'Callback']
 
 # First-class IET nodes
 
@@ -482,35 +482,6 @@ class Increment(AugmentedExpression):
 
     def __init__(self, expr, pragmas=None):
         super().__init__(expr, pragmas=pragmas, operation=OpInc)
-
-
-class LinearSolverExpression(Expression):
-
-    """
-    Base class for general expressions required by a
-    matrix-free linear solve of the form Ax=b.
-    """
-    pass
-
-
-class MatVecAction(LinearSolverExpression):
-
-    """
-    Expression representing matrix-vector multiplication.
-    """
-
-    def __init__(self, expr, pragmas=None, operation=OpMatVec):
-        super().__init__(expr, pragmas=pragmas, operation=operation)
-
-
-class RHSLinearSystem(LinearSolverExpression):
-
-    """
-    Expression to build the RHS of a linear system.
-    """
-
-    def __init__(self, expr, pragmas=None, operation=OpRHS):
-        super().__init__(expr, pragmas=pragmas, operation=operation)
 
 
 class Iteration(Node):
@@ -1182,8 +1153,9 @@ class Callback(Call):
     engine fails to bind the callback to a specific Call. Consequently,
     errors occur during the creation of the call graph.
     """
-
-    def __init__(self, name, retval, param_types):
+    # TODO: Create a common base class for Call and Callback to avoid
+    # having arguments=None here
+    def __init__(self, name, retval, param_types, arguments=None):
         super().__init__(name=name)
         self.retval = retval
         self.param_types = as_tuple(param_types)
