@@ -456,7 +456,9 @@ class DataManager:
         # Some objects don't distinguish their _C_symbol because they are known,
         # by construction, not to require it, thus making the generated code
         # cleaner. These objects don't need a cast
-        bases = [i for i in bases if i.name != i.function._C_name]
+        bases = [
+            i for i in bases
+            if i.name != i.function._C_name and not isinstance(i.function, PETScArray)]
 
         # Create and attach the type casts
         casts = tuple(self.lang.PointerCast(i.function, obj=i) for i in bases

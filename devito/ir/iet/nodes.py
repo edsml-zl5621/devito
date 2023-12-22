@@ -29,7 +29,11 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
+<<<<<<< HEAD
            'CallableBody', 'Transfer', 'Callback', 'FixedArgsCallable']
+=======
+           'CallableBody', 'Transfer', 'Callback']
+>>>>>>> f921beaef (misc: Update file due to incorrect rebase)
 
 # First-class IET nodes
 
