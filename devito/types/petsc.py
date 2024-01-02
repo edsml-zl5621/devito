@@ -56,7 +56,7 @@ class KSPConvergedReason(LocalObject):
     dtype = CustomDtype('KSPConvergedReason')
 
 
-class PETScFunction(ArrayBasic):
+class PETScArray(ArrayBasic):
 
     _data_alignment = False
 
