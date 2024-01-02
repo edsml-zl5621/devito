@@ -2,7 +2,7 @@ from devito import Grid
 from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
-                          PC, KSPConvergedReason, PETScFunction)
+                          PC, KSPConvergedReason, PETScArray)
 import numpy as np
 
 
@@ -35,19 +35,19 @@ def test_petsc_local_object():
 
 def test_petsc_functions():
     """
-    Test C++ support for PETScFunctions.
+    Test C++ support for PETScArrays.
     """
     grid = Grid((2, 2))
     x, y = grid.dimensions
 
-    ptr0 = PETScFunction(name='ptr0', dimensions=grid.dimensions, dtype=np.float32)
-    ptr1 = PETScFunction(name='ptr1', dimensions=grid.dimensions, dtype=np.float32,
-                         is_const=True)
-    ptr2 = PETScFunction(name='ptr2', dimensions=grid.dimensions, dtype=np.float64,
-                         is_const=True)
-    ptr3 = PETScFunction(name='ptr3', dimensions=grid.dimensions, dtype=np.int32)
-    ptr4 = PETScFunction(name='ptr4', dimensions=grid.dimensions, dtype=np.int64,
-                         is_const=True)
+    ptr0 = PETScArray(name='ptr0', dimensions=grid.dimensions, dtype=np.float32)
+    ptr1 = PETScArray(name='ptr1', dimensions=grid.dimensions, dtype=np.float32,
+                      is_const=True)
+    ptr2 = PETScArray(name='ptr2', dimensions=grid.dimensions, dtype=np.float64,
+                      is_const=True)
+    ptr3 = PETScArray(name='ptr3', dimensions=grid.dimensions, dtype=np.int32)
+    ptr4 = PETScArray(name='ptr4', dimensions=grid.dimensions, dtype=np.int64,
+                      is_const=True)
 
     defn0 = Definition(ptr0)
     defn1 = Definition(ptr1)
