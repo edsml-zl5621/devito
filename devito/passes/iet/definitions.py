@@ -352,7 +352,7 @@ class DataManager(object):
                 elif globs is not None:
                     # Track, to be handled by the EntryFunction being a global obj!
                     globs.add(i)
-            elif i.is_ObjectArray or i.is_PETScArray:
+            elif i.is_ObjectArray or i.is_AbstractArray:
                 self._alloc_object_array_on_low_lat_mem(iet, i, storage)
             elif i.is_PointerArray:
                 self._alloc_pointed_array_on_high_bw_mem(iet, i, storage)
