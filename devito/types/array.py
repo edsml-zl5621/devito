@@ -17,6 +17,14 @@ class ArrayBasic(AbstractFunction):
 
     is_ArrayBasic = True
 
+    __rkwargs__ = AbstractFunction.__rkwargs__ + ('is_const',)
+
+    def __init_finalize__(self, *args, **kwargs):
+
+        super().__init_finalize__(*args, **kwargs)
+
+        self._is_const = kwargs.get('is_const', False)
+
     @classmethod
     def __indices_setup__(cls, *args, **kwargs):
         dimensions = kwargs['dimensions']
@@ -45,6 +53,10 @@ class ArrayBasic(AbstractFunction):
     @property
     def shape_allocated(self):
         return self.symbolic_shape
+
+    @property
+    def is_const(self):
+        return self._is_const
 
 
 class Array(ArrayBasic):
