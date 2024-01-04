@@ -65,8 +65,6 @@ class PETScArray(ArrayBasic):
 
     _data_alignment = False
 
-    is_PETScArray = True
-
     @classmethod
     def __dtype_setup__(cls, **kwargs):
         return kwargs.get('dtype', np.float32)
