@@ -355,10 +355,12 @@ class DataManager:
                 elif globs is not None:
                     # Track, to be handled by the EntryFunction being a global obj!
                     globs.add(i)
-            elif i.is_ObjectArray or i.is_AbstractArray:
+            elif i.is_ObjectArray:
                 self._alloc_object_array_on_low_lat_mem(iet, i, storage)
             elif i.is_PointerArray:
                 self._alloc_pointed_array_on_high_bw_mem(iet, i, storage)
+            else:
+                self._alloc_object_array_on_low_lat_mem(iet, i, storage)
 
         # Handle postponed global objects
         includes = set()
