@@ -56,11 +56,20 @@ class KSPConvergedReason(LocalObject):
     dtype = CustomDtype('KSPConvergedReason')
 
 
-class PETScArray(ArrayBasic):
+class AbstractArray(ArrayBasic):
+
+    """
+    A customised version of ArrayBasic that allows objects to
+    be generated without a cast. This is particularly useful for
+    PETSc objects. Also, AbstractArray objects can
+    be explicitly specifed as constant.
+    """
 
     _data_alignment = False
 
-    is_PETScArray = True
+    is_AbstractArray = True
+
+    __rkwargs__ = ArrayBasic.__rkwargs__ + ('is_const',)
 
     def __init_finalize__(self, *args, **kwargs):
 
@@ -73,15 +82,18 @@ class PETScArray(ArrayBasic):
         return kwargs.get('dtype', np.float32)
 
     @property
-    def _C_ctype(self):
-        petsc_type = dtype_to_petsctype(self.dtype)
-        modifier = '*' * len(self.dimensions)
-        return CustomDtype(petsc_type, modifier=modifier)
-
-    @property
     def _C_name(self):
         return self.name
 
     @property
     def is_const(self):
         return self._is_const
+
+
+class PETScArray(AbstractArray):
+
+    @property
+    def _C_ctype(self):
+        petsc_type = dtype_to_petsctype(self.dtype)
+        modifier = '*' * len(self.dimensions)
+        return CustomDtype(petsc_type, modifier=modifier)
