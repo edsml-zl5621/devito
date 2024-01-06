@@ -1129,7 +1129,6 @@ class Lambda(Node):
 
 
 class Callback(Call):
-
     """
     Callback as a function pointer.
 
@@ -1151,9 +1150,7 @@ class Callback(Call):
     """
 
     def __init__(self, name, retval, param_types):
-
         super().__init__(name=name)
-
         self.retval = retval
         self.param_types = as_tuple(param_types)
 
