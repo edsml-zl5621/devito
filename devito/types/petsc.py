@@ -105,7 +105,8 @@ def PETScSolve(eq, target, **kwargs):
 
     p = PETScArray(name='p', dtype=target.dtype, dimensions=target.dimensions,
                    shape=target.shape, liveness='eager')
-    
+
+    # The eq.lhs.evaluate is just temporary
     action = PETScAction(p, eq.lhs.evaluate)
 
     return [action]

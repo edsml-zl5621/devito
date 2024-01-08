@@ -136,7 +136,7 @@ class Eq(sympy.Eq, Evaluable):
     @property
     def implicit_dims(self):
         return self._implicit_dims
-    
+
     @property
     def is_action(self):
         return False

@@ -1,5 +1,4 @@
-from devito.passes.iet.engine import iet_pass, FindNodes
-from devito.ir.iet import Expression
+from devito.passes.iet.engine import iet_pass
 
 
 __all__ = ['lower_petsc']
@@ -8,10 +7,9 @@ __all__ = ['lower_petsc']
 @iet_pass
 def lower_petsc(iet, **kwargs):
 
-    tmp = FindNodes(Expression).visit(iet)
-
-    action = [i for i in tmp if i.expr.is_action]
-
+    # Then I can access the is_action expression via:
+    # tmp = FindNodes(Expression).visit(iet)
+    # action = [i for i in tmp if i.expr.is_action]
 
     # add necessary include directories for petsc (TEMP)
     kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/include')
