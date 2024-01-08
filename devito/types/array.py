@@ -22,9 +22,7 @@ class ArrayBasic(AbstractFunction):
     __rkwargs__ = AbstractFunction.__rkwargs__ + ('is_const',)
 
     def __init_finalize__(self, *args, **kwargs):
-
         super().__init_finalize__(*args, **kwargs)
-
         self._is_const = kwargs.get('is_const', False)
 
     @classmethod
