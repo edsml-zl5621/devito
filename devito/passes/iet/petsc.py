@@ -11,4 +11,4 @@ def lower_petsc(iet, **kwargs):
     # tmp = FindNodes(Expression).visit(iet)
     # action = [i for i in tmp if i.expr.is_action]
 
-    return iet, {'includes': ['petscksp.h', 'petscdmda.h']}
+    return iet, {}
