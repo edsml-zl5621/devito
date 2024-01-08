@@ -15,6 +15,7 @@ __all__ = ['int2', 'int3', 'int4', 'float2', 'float3', 'float4', 'double2',  # n
            'ctypes_to_cstr', 'c_restrict_void_p', 'ctypes_vector_mapper',
            'is_external_ctype', 'infer_dtype', 'CustomDtype']
 
+
 # *** Custom np.dtypes
 
 # NOTE: the following is inspired by pyopencl.cltypes
