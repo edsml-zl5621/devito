@@ -598,6 +598,9 @@ class CGen(Visitor):
         top = c.Line('[%s](%s)' % (', '.join(captures), ', '.join(decls)))
         return LambdaCollection([top, c.Block(body)])
 
+    def visit_Callback(self, o, nested_call=False):
+        return CallbackArg(o.name, o.retval, o.param_types)
+
     def visit_HaloSpot(self, o):
         body = flatten(self._visit(i) for i in o.children)
         return c.Collection(body)
@@ -1358,3 +1361,15 @@ def sorted_efuncs(efuncs):
         CommCallable: 1
     }
     return sorted_priority(efuncs, priority)
+
+
+class CallbackArg(c.Generable):
+
+    def __init__(self, name, retval, param_types):
+        self.name = name
+        self.retval = retval
+        self.param_types = param_types
+
+    def generate(self):
+        param_types_str = ', '.join([str(t) for t in self.param_types])
+        yield "(%s (*)(%s))%s" % (self.retval, param_types_str, self.name)
