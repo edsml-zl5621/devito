@@ -2,7 +2,7 @@ from devito import Grid
 from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
 from devito.passes.iet.languages.C import CDataManager
 from devito.types.petsc import (DM, Mat, Vec, PetscMPIInt, KSP,
-                          PC, KSPConvergedReason, PETScArray)
+                                PC, KSPConvergedReason, PETScArray)
 import numpy as np
 
 
