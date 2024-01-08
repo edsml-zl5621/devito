@@ -15,7 +15,8 @@ __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax']
 class IREq(sympy.Eq, Pickable):
 
     __rargs__ = ('lhs', 'rhs')
-    __rkwargs__ = ('ispace', 'conditionals', 'implicit_dims', 'operation')
+    __rkwargs__ = ('ispace', 'conditionals', 'implicit_dims', 'operation',
+                   'is_action')
 
     @property
     def is_Scalar(self):
@@ -62,6 +63,10 @@ class IREq(sympy.Eq, Pickable):
     @property
     def is_Increment(self):
         return self.operation is OpInc
+
+    @property
+    def is_action(self):
+        return self._is_action
 
     def apply(self, func):
         """
@@ -206,6 +211,7 @@ class LoweredEq(IREq):
         expr._reads, expr._writes = detect_io(expr)
         expr._implicit_dims = input_expr.implicit_dims
         expr._operation = Operation.detect(input_expr)
+        expr._is_action = input_expr.is_action
 
         return expr
 
@@ -262,6 +268,7 @@ class ClusterizedEq(IREq):
                 expr._conditionals = kwargs.get('conditionals', frozendict())
                 expr._implicit_dims = input_expr.implicit_dims
                 expr._operation = Operation.detect(input_expr)
+                expr._is_action = input_expr.is_action
         elif len(args) == 2:
             # origin: ClusterizedEq(lhs, rhs, **kwargs)
             expr = sympy.Eq.__new__(cls, *args, evaluate=False)
