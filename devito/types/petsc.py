@@ -1,7 +1,8 @@
-from devito.tools import dtype_to_petsctype, CustomDtype
+from devito.tools import CustomDtype
 from devito.types import LocalObject
 from devito.types.array import ArrayBasic
 import numpy as np
+from cached_property import cached_property
 
 
 class DM(LocalObject):
@@ -69,7 +70,7 @@ class PETScArray(ArrayBasic):
     def __dtype_setup__(cls, **kwargs):
         return kwargs.get('dtype', np.float32)
 
-    @property
+    @cached_property
     def _C_ctype(self):
         petsc_type = dtype_to_petsctype(self.dtype)
         modifier = '*' * len(self.dimensions)
@@ -78,3 +79,14 @@ class PETScArray(ArrayBasic):
     @property
     def _C_name(self):
         return self.name
+
+
+def dtype_to_petsctype(dtype):
+    """Map numpy types to PETSc datatypes."""
+
+    return {
+        np.int32: 'PetscInt',
+        np.float32: 'PetscScalar',
+        np.int64: 'PetscInt',
+        np.float64: 'PetscScalar'
+    }[dtype]
