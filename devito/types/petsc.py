@@ -96,10 +96,7 @@ def dtype_to_petsctype(dtype):
 
 
 class PETScAction(Eq):
-
-    @property
-    def is_action(self):
-        return True
+    pass
 
 
 def PETScSolve(eq, target, **kwargs):
