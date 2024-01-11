@@ -114,11 +114,12 @@ class Action(Eq):
 
 def PETScSolve(eq, target, **kwargs):
 
-    p = PETScArray(name='p', dtype=target.dtype, dimensions=target.dimensions,
-                   shape=target.shape, liveness='eager')
+    yvec_tmp = PETScArray(name='yvec_tmp', dtype=target.dtype,
+                          dimensions=target.dimensions,
+                          shape=target.shape, liveness='eager')
 
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
-    action = Action(p, eq.lhs.evaluate)
+    action = Action(yvec_tmp, eq.lhs.evaluate)
 
     return [action]
