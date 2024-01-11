@@ -95,7 +95,12 @@ def dtype_to_petsctype(dtype):
     }[dtype]
 
 
-class PETScAction(Eq):
+class Action(Eq):
+    """
+    Represents the mathematical expression of applying a linear
+    operator to a vector. This is a key component
+    for running matrix-free solvers.
+    """
     pass
 
 
@@ -104,7 +109,8 @@ def PETScSolve(eq, target, **kwargs):
     p = PETScArray(name='p', dtype=target.dtype, dimensions=target.dimensions,
                    shape=target.shape, liveness='eager')
 
-    # The eq.lhs.evaluate is just temporary
-    action = PETScAction(p, eq.lhs.evaluate)
+    # For now, assume the application of the linear operator on
+    # a vector is eqn.lhs
+    action = Action(p, eq.lhs.evaluate)
 
     return [action]

@@ -473,6 +473,7 @@ class Operator(Callable):
         # Target-independent optimizations
         minimize_symbols(graph)
 
+        # TODO: only lower_petsc if a PETScArray is present
         lower_petsc(graph, **kwargs)
 
         return graph.root, graph
