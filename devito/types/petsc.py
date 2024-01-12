@@ -1,5 +1,6 @@
-from devito.tools import CustomDtype
-from devito.types import LocalObject
+from devito.tools import CustomDtype, dtype_to_ctype
+from devito.types import LocalObject, CompositeObject
+from devito.types.basic import Symbol
 from devito.types.array import ArrayBasic
 import numpy as np
 from cached_property import cached_property
@@ -93,8 +94,13 @@ class PETScArray(ArrayBasic):
 
 
 def dtype_to_petsctype(dtype):
-    """Map numpy types to PETSc datatypes."""
+    """
+    Map numpy types to PETSc datatypes.
 
+    TODO: If a user creates an object e.g a Function with
+    double precision but their PETSc is configured to single
+    precision then throw a warning etc.
+    """
     return {
         np.int32: 'PetscInt',
         np.float32: 'PetscScalar',
@@ -112,14 +118,47 @@ class Action(Eq):
     pass
 
 
+class Solution(Eq):
+    """
+    """
+    pass
+
+
 def PETScSolve(eq, target, **kwargs):
 
     yvec_tmp = PETScArray(name='yvec_tmp', dtype=target.dtype,
                           dimensions=target.dimensions,
                           shape=target.shape, liveness='eager')
 
+    solution_tmp = PETScArray(name='solution_tmp', dtype=target.dtype,
+                              dimensions=target.dimensions,
+                              shape=target.shape, liveness='eager')
+
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
     action = Action(yvec_tmp, eq.lhs.evaluate)
 
-    return [action]
+    solution = Solution(target, solution_tmp)
+
+    return [action] + [solution]
+
+
+class PETScStruct(CompositeObject):
+
+    __rargs__ = ('name', 'usr_ctx',)
+
+    def __init__(self, name, usr_ctx):
+        pfields = [(i._C_name,
+                    dtype_to_ctype(i.dtype)) for i in usr_ctx if isinstance(i, Symbol)]
+        self._usr_ctx = usr_ctx
+        super().__init__(name, 'MatContext', pfields)
+
+    @property
+    def usr_ctx(self):
+        return self._usr_ctx
+
+    def _arg_values(self, **kwargs):
+        values = super()._arg_values(**kwargs)
+        for i in self.fields:
+            setattr(values[self.name]._obj, i, kwargs['args'][i])
+        return values

@@ -1135,7 +1135,7 @@ class Callback(Call):
     errors occur during the creation of the call graph.
     """
 
-    def __init__(self, name, retval, param_types):
+    def __init__(self, name, retval, param_types, arguments=None):
         super().__init__(name=name)
         self.retval = retval
         self.param_types = as_tuple(param_types)
