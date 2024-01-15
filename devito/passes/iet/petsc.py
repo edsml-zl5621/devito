@@ -12,37 +12,45 @@ __all__ = ['lower_petsc']
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
+    # NOTE: Currently only considering the case when opt='noop'. This
+    # does not deal with the Temp Expressions generated when opt is not set
+    # to 'noop' etc.
 
-    # Find the Section containing the 'action'.
+    # Find the Section containing the 'action'. For now, assume we're only solving
+    # 1 equation via PETSc so only 1 action exists within a single Section.
     sections = FindNodes(Section).visit(iet)
-    sections_with_action = []
-    for section in sections:
-        section_exprs = FindNodes(Expression).visit(section)
-        if any(expr.operation is OpAction for expr in section_exprs):
-            sections_with_action.append(section)
+    section_with_action = [
+        sec
+        for sec in sections
+        if any(expr.operation is OpAction for expr in FindNodes(Expression).visit(sec))
+    ][0]
 
-    # TODO: Extend to multiple targets but for now I am assuming we
-    # are only solving 1 equation via PETSc.
-    target = FindNodes(Expression).visit(sections_with_action[0])
+    # Find the original target (i.e the field we are solving for)
+    # TODO: Extend to multiple targets but for now assume
+    # we are only solving 1 equation via PETSc.
+    target = FindNodes(Expression).visit(section_with_action)
     target = [i for i in target[0].functions if not isinstance(i, PETScArray)][0]
 
     # Build PETSc objects required for the solve.
     petsc_objs = build_petsc_objects(target)
 
-    # Replace target with a PETScArray inside 'action'.
-    mapper = {target.indexed: petsc_objs['xvec_tmp'].indexed}
-    updated_action = Uxreplace(mapper).visit(sections_with_action[0])
-
-    struct = build_struct(updated_action)
+    # Build the struct that is needed within the matvec callback
+    struct = build_struct(section_with_action)
 
     # Build the body of the matvec callback
-    matvec_body = build_matvec_body(updated_action, petsc_objs, struct)
+    matvec_body = build_matvec_body(section_with_action, petsc_objs, struct)
 
     matvec_callback, solve_body = build_solve(matvec_body, petsc_objs, struct)
 
-    # TODO: Eventually, this will be extended to deal with multiple
+    # Replace target with a PETScArray inside the matvec callback function.
+    mapper = {target.indexed: petsc_objs['xvec_tmp'].indexed}
+    matvec_callback = Uxreplace(mapper).visit(matvec_callback)
+
+    # Replace the Section that contains the action inside the Entry Function with
+    # the corresponding PETSc calls.
+    # TODO: Eventually, this will be extended to deal with multiple different
     # 'actions' associated with different equations to solve.
-    iet = Transformer({sections_with_action[0]: solve_body}).visit(iet)
+    iet = Transformer({section_with_action: solve_body}).visit(iet)
 
     return iet, {'efuncs': [matvec_callback]}
 
@@ -63,17 +71,14 @@ def build_petsc_objects(target):
 
 
 def build_struct(action):
-
     # Build the struct
     tmp1 = FindSymbols('basics').visit(action)
     tmp2 = FindSymbols('dimensions|indexedbases').visit(action)
-    usr_ctx = [i for i in tmp1 if i not in tmp2]
-
+    usr_ctx = [symb for symb in tmp1 if symb not in tmp2]
     return PETScStruct('ctx', usr_ctx)
 
 
 def build_matvec_body(action, objs, struct):
-
     get_context = Call('PetscCall', [Call('MatShellGetContext',
                                           arguments=[objs['A_matfree'],
                                                      Byref(struct.name)])])
@@ -81,10 +86,9 @@ def build_matvec_body(action, objs, struct):
                       get_context,
                       action])
     # Replace all symbols in the body that appear in the struct
-    # with a pointer to the struct
+    # with a pointer to the struct.
     for i in struct.usr_ctx:
         body = Uxreplace({i: FieldFromPointer(i, struct)}).visit(body)
-
     return body
 
 

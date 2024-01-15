@@ -1,9 +1,11 @@
-from devito import Grid
+from devito import Eq, Grid, Operator, Function
 from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
 from devito.passes.iet.languages.C import CDataManager
 from devito.types.petsc import (DM, Mat, Vec, PetscMPIInt, KSP,
-                                PC, KSPConvergedReason, PETScArray)
+                                PC, KSPConvergedReason, PETScArray,
+                                PETScStruct, PETScSolve)
 import numpy as np
+import os
 
 
 def test_petsc_local_object():
@@ -63,3 +65,34 @@ def test_petsc_functions():
     assert str(defn3) == 'PetscInt**restrict ptr3;'
     assert str(defn4) == 'const PetscInt**restrict ptr4;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
+
+
+def test_cinterface_petsc_struct():
+    grid = Grid(shape=(4, 4))
+
+    f = Function(name='f', grid=grid, space_order=2)
+
+    eq = Eq(f.laplace, 10)
+
+    petsc = PETScSolve(eq, f)
+
+    name = "foo"
+    op = Operator(petsc, name=name)
+
+    # Trigger the generation of a .c and a .h files
+    ccode, hcode = op.cinterface(force=True)
+
+    dirname = op._compiler.get_jit_dir()
+    assert os.path.isfile(os.path.join(dirname, "%s.c" % name))
+    assert os.path.isfile(os.path.join(dirname, "%s.h" % name))
+
+    ccode = str(ccode)
+    hcode = str(hcode)
+
+    assert 'include "%s.h"' % name in ccode
+
+    # The public `struct MatContext` only appears in the header file
+    petsc_struct = op.parameters[-1]
+    assert isinstance(petsc_struct, PETScStruct)
+    assert 'struct MatContext\n{' not in ccode
+    assert 'struct MatContext\n{' in hcode

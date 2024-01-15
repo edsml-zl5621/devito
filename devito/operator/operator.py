@@ -462,12 +462,13 @@ class Operator(Callable):
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
 
+        # from IPython import embed; embed()
         exprs = FindNodes(Expression).visit(graph.root)
         if any(isinstance(func, PETScArray) for expr in exprs for func in expr.functions):
             lower_petsc(graph, **kwargs)
 
         graph = cls._specialize_iet(graph, **kwargs)
-
+        # from IPython import embed; embed()
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced
