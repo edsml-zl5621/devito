@@ -139,12 +139,6 @@ class Action(Eq):
     pass
 
 
-class Solution(Eq):
-    """
-    """
-    pass
-
-
 def PETScSolve(eq, target, **kwargs):
 
     yvec_tmp = PETScArray(name='yvec_tmp', dtype=target.dtype,
