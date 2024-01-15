@@ -78,6 +78,15 @@ class PETScArray(ArrayBasic):
 
     _data_alignment = False
 
+    __rkwargs__ = (ArrayBasic.__rkwargs__ +
+                   ('liveness',))
+
+    def __init_finalize__(self, *args, **kwargs):
+        super().__init_finalize__(*args, **kwargs)
+
+        self._liveness = kwargs.get('liveness', 'lazy')
+        assert self._liveness in ['eager', 'lazy']
+
     @classmethod
     def __dtype_setup__(cls, **kwargs):
         return kwargs.get('dtype', np.float32)
@@ -91,6 +100,18 @@ class PETScArray(ArrayBasic):
     @property
     def _C_name(self):
         return self.name
+
+    @property
+    def liveness(self):
+        return self._liveness
+
+    @property
+    def _mem_internal_eager(self):
+        return self._liveness == 'eager'
+
+    @property
+    def _mem_internal_lazy(self):
+        return self._liveness == 'lazy'
 
 
 def dtype_to_petsctype(dtype):
@@ -130,17 +151,11 @@ def PETScSolve(eq, target, **kwargs):
                           dimensions=target.dimensions,
                           shape=target.shape, liveness='eager')
 
-    solution_tmp = PETScArray(name='solution_tmp', dtype=target.dtype,
-                              dimensions=target.dimensions,
-                              shape=target.shape, liveness='eager')
-
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
     action = Action(yvec_tmp, eq.lhs.evaluate)
 
-    solution = Solution(target, solution_tmp)
-
-    return [action] + [solution]
+    return [action]
 
 
 class PETScStruct(CompositeObject):

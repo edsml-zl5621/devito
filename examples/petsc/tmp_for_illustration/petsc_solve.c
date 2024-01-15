@@ -32,23 +32,12 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict u_vec, stru
 {
   Mat A_matfree;
 
-  PetscScalar**restrict solution_tmp;
-
   float (*restrict pn)[pn_vec->size[1]] __attribute__ ((aligned (64))) = (float (*)[pn_vec->size[1]]) pn_vec->data;
   float (*restrict u)[u_vec->size[1]][u_vec->size[2]] __attribute__ ((aligned (64))) = (float (*)[u_vec->size[1]][u_vec->size[2]]) u_vec->data;
   float (*restrict v)[v_vec->size[1]][v_vec->size[2]] __attribute__ ((aligned (64))) = (float (*)[v_vec->size[1]][v_vec->size[2]]) v_vec->data;
 
   PetscCall(MatShellSetContext(A_matfree,ctx));
   PetscCall(MatShellSetOperation(A_matfree,MATOP_MULT,(void (*)(void))MyMatShellMult));
-
-  for (int x = x_m; x <= x_M; x += 1)
-  {
-    for (int y = y_m; y <= y_M; y += 1)
-    {
-      pn[x + 2][y + 2] = solution_tmp[x][y];
-    }
-  }
-
   for (int time = time_m, t0 = (time)%(2), t1 = (time + 1)%(2); time <= time_M; time += 1, t0 = (time)%(2), t1 = (time + 1)%(2))
   {
     for (int x = x_m; x <= x_M; x += 1)
@@ -71,6 +60,7 @@ PetscErrorCode MyMatShellMult(Mat A_matfree, Vec xvec, Vec yvec)
   PetscScalar**restrict yvec_tmp;
 
   struct MatContext * ctx;
+  PetscCall(MatShellGetContext(A_matfree,&ctx));
 
   for (int x = ctx->x_m; x <= ctx->x_M; x += 1)
   {

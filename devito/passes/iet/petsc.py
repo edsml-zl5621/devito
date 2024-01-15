@@ -2,9 +2,9 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (Expression, FindNodes, Section, List,
                            Callable, Call, Transformer, Callback,
                            Definition, Uxreplace, FindSymbols)
-from devito.ir.equations.equation import OpAction, OpSolution
+from devito.ir.equations.equation import OpAction
 from devito.types.petsc import Mat, Vec, DM, PetscErrorCode, PETScStruct, PETScArray
-from devito.symbolics import FieldFromPointer
+from devito.symbolics import FieldFromPointer, Byref
 
 
 __all__ = ['lower_petsc']
@@ -13,28 +13,25 @@ __all__ = ['lower_petsc']
 @iet_pass
 def lower_petsc(iet, **kwargs):
 
-    # Find the Section containing the 'action' and the Section
-    # containing the 'solution'
+    # Find the Section containing the 'action'.
     sections = FindNodes(Section).visit(iet)
-    secs_with_action = []
-    secs_with_solution = []
+    sections_with_action = []
     for section in sections:
         section_exprs = FindNodes(Expression).visit(section)
         if any(expr.operation is OpAction for expr in section_exprs):
-            secs_with_action.append(section)
-        if any(expr.operation is OpSolution for expr in section_exprs):
-            secs_with_solution.append(section)
+            sections_with_action.append(section)
 
     # TODO: Extend to multiple targets but for now I am assuming we
     # are only solving 1 equation via PETSc.
-    target = FindNodes(Expression).visit(secs_with_solution[0])
+    target = FindNodes(Expression).visit(sections_with_action[0])
     target = [i for i in target[0].functions if not isinstance(i, PETScArray)][0]
 
     # Build PETSc objects required for the solve.
     petsc_objs = build_petsc_objects(target)
 
+    # Replace target with a PETScArray inside 'action'.
     mapper = {target.indexed: petsc_objs['xvec_tmp'].indexed}
-    updated_action = Uxreplace(mapper).visit(secs_with_action[0])
+    updated_action = Uxreplace(mapper).visit(sections_with_action[0])
 
     struct = build_struct(updated_action)
 
@@ -45,7 +42,7 @@ def lower_petsc(iet, **kwargs):
 
     # TODO: Eventually, this will be extended to deal with multiple
     # 'actions' associated with different equations to solve.
-    iet = Transformer({secs_with_action[0]: solve_body}).visit(iet)
+    iet = Transformer({sections_with_action[0]: solve_body}).visit(iet)
 
     return iet, {'efuncs': [matvec_callback]}
 
@@ -65,19 +62,6 @@ def build_petsc_objects(target):
                                    shape=target.shape, liveness='eager')}
 
 
-class PETScCallable(Callable):
-    """
-    Special Callable class that does not update the arguments
-    of the function based on the parameters found inside the
-    body.
-    TODO: Pretty sure this is hacky but it works?
-    """
-
-    @property
-    def all_parameters(self):
-        return ()
-
-
 def build_struct(action):
 
     # Build the struct
@@ -90,7 +74,11 @@ def build_struct(action):
 
 def build_matvec_body(action, objs, struct):
 
+    get_context = Call('PetscCall', [Call('MatShellGetContext',
+                                          arguments=[objs['A_matfree'],
+                                                     Byref(struct.name)])])
     body = List(body=[Definition(struct),
+                      get_context,
                       action])
     # Replace all symbols in the body that appear in the struct
     # with a pointer to the struct
@@ -102,12 +90,12 @@ def build_matvec_body(action, objs, struct):
 
 def build_solve(matvec_body, petsc_objs, struct):
 
-    matvec_callback = PETScCallable('MyMatShellMult',
-                                    matvec_body,
-                                    retval=petsc_objs['err'],
-                                    parameters=(petsc_objs['A_matfree'],
-                                                petsc_objs['xvec'],
-                                                petsc_objs['yvec']))
+    matvec_callback = Callable('MyMatShellMult',
+                               matvec_body,
+                               retval=petsc_objs['err'],
+                               parameters=(petsc_objs['A_matfree'],
+                                           petsc_objs['xvec'],
+                                           petsc_objs['yvec']))
 
     matvec_operation = Call('PetscCall', [Call('MatShellSetOperation',
                                                arguments=[petsc_objs['A_matfree'],
