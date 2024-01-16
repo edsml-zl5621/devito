@@ -1,7 +1,7 @@
 from collections import OrderedDict
 
 from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, SyncSpot,
-                           Section, HaloSpot, ExpressionBundle, Action)
+                           Section, HaloSpot, ExpressionBundle, ActionExpr)
 from devito.tools import timed_pass
 from devito.ir.equations import OpAction
 
@@ -26,7 +26,7 @@ def iet_build(stree):
                 if e.is_Increment:
                     exprs.append(Increment(e))
                 elif e.operation is OpAction:
-                    exprs.append(Action(e, operation=e.operation))
+                    exprs.append(ActionExpr(e, operation=e.operation))
                 else:
                     exprs.append(Expression(e, operation=e.operation))
             body = ExpressionBundle(i.ispace, i.ops, i.traffic, body=exprs)

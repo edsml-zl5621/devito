@@ -1,7 +1,7 @@
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (Action, List, Callable, Call, Transformer,
+from devito.ir.iet import (List, Callable, Call, Transformer,
                            Callback, Definition, Uxreplace, FindSymbols,
-                           Iteration, MapNodes)
+                           Iteration, MapNodes, ActionExpr)
 from devito.types.petsc import Mat, Vec, DM, PetscErrorCode, PETScStruct, PETScArray
 from devito.symbolics import FieldFromPointer, Byref
 
@@ -16,7 +16,7 @@ def lower_petsc(iet, **kwargs):
     # to 'noop' etc.
 
     # Find the largest Iteration loop containing the Action
-    iter_expr_mapper = MapNodes(Iteration, Action).visit(iet)
+    iter_expr_mapper = MapNodes(Iteration, ActionExpr).visit(iet)
     section_with_action = next(iter(iter_expr_mapper), None)
 
     # Find the original target (i.e the field we are solving for)

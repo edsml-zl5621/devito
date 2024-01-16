@@ -28,7 +28,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'Action']
+           'CallableBody', 'Transfer', 'Callback', 'ActionExpr']
 
 # First-class IET nodes
 
@@ -484,7 +484,7 @@ class Increment(AugmentedExpression):
         super().__init__(expr, pragmas=pragmas, operation=OpInc)
 
 
-class Action(Expression):
+class ActionExpr(Expression):
 
     def __init__(self, expr, pragmas=None, operation=None):
         super().__init__(expr, pragmas=pragmas, operation=OpAction)
