@@ -1,8 +1,7 @@
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (Expression, FindNodes, Section, List,
-                           Callable, Call, Transformer, Callback,
-                           Definition, Uxreplace, FindSymbols)
-from devito.ir.equations.equation import OpAction
+from devito.ir.iet import (Action, List, Callable, Call, Transformer,
+                           Callback, Definition, Uxreplace, FindSymbols,
+                           Iteration, MapNodes)
 from devito.types.petsc import Mat, Vec, DM, PetscErrorCode, PETScStruct, PETScArray
 from devito.symbolics import FieldFromPointer, Byref
 
@@ -16,19 +15,14 @@ def lower_petsc(iet, **kwargs):
     # does not deal with the Temp Expressions generated when opt is not set
     # to 'noop' etc.
 
-    # Find the Section containing the 'action'. For now, assume we're only solving
-    # 1 equation via PETSc so only 1 action exists within a single Section.
-    sections = FindNodes(Section).visit(iet)
-    section_with_action = [
-        sec
-        for sec in sections
-        if any(expr.operation is OpAction for expr in FindNodes(Expression).visit(sec))
-    ][0]
+    # Find the largest Iteration loop containing the Action
+    iter_expr_mapper = MapNodes(Iteration, Action).visit(iet)
+    section_with_action = next(iter(iter_expr_mapper), None)
 
     # Find the original target (i.e the field we are solving for)
     # TODO: Extend to multiple targets but for now assume
     # we are only solving 1 equation via PETSc.
-    target = FindNodes(Expression).visit(section_with_action)
+    target = next(iter(iter_expr_mapper.values()), None)
     target = [i for i in target[0].functions if not isinstance(i, PETScArray)][0]
 
     # Build PETSc objects required for the solve.

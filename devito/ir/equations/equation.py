@@ -10,7 +10,8 @@ from devito.tools import Pickable, Tag, frozendict
 from devito.types import Eq, Inc, ReduceMax, ReduceMin
 from devito.types.petsc import Action
 
-__all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax']
+__all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
+           'OpAction']
 
 
 class IREq(sympy.Eq, Pickable):

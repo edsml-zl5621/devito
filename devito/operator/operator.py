@@ -462,6 +462,7 @@ class Operator(Callable):
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
 
+        # TODO: This logic should be moved inside the pass itself.
         exprs = FindNodes(Expression).visit(graph.root)
         if any(isinstance(func, PETScArray) for expr in exprs for func in expr.functions):
             lower_petsc(graph, **kwargs)
@@ -470,10 +471,8 @@ class Operator(Callable):
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced
-        # TODO: Figure out how to include the timers with PETSc
-        if not any(isinstance(func,
-                              PETScArray) for expr in exprs for func in expr.functions):
-            cls._Target.instrument(graph, profiler=profiler, **kwargs)
+        # TODO: Figure out how to work the timers around PETSc.
+        cls._Target.instrument(graph, profiler=profiler, **kwargs)
 
         # Extract the necessary macros from the symbolic objects
         generate_macros(graph)
