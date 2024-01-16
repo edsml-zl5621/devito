@@ -92,7 +92,7 @@ def test_cinterface_petsc_struct():
     assert 'include "%s.h"' % name in ccode
 
     # The public `struct MatContext` only appears in the header file
-    petsc_struct = op.parameters[-1]
+    petsc_struct = op.parameters[-2]
     assert isinstance(petsc_struct, PETScStruct)
     assert 'struct MatContext\n{' not in ccode
     assert 'struct MatContext\n{' in hcode
