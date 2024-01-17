@@ -1,4 +1,4 @@
-from devito import Eq, Grid, Operator, Function
+from devito import Eq, Grid, Operator, TimeFunction, Function
 from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
 from devito.passes.iet.languages.C import CDataManager
 from devito.types.petsc import (DM, Mat, Vec, PetscMPIInt, KSP,
@@ -68,13 +68,16 @@ def test_petsc_functions():
 
 
 def test_cinterface_petsc_struct():
-    grid = Grid(shape=(4, 4))
 
-    f = Function(name='f', grid=grid, space_order=2)
+    grid = Grid(shape=(11, 11), extent=(1., 1.))
 
-    eq = Eq(f.laplace, 10)
+    f = TimeFunction(name='f', grid=grid, space_order=2)
+    g = TimeFunction(name='g', grid=grid, space_order=2)
+    h = Function(name='h', grid=grid, space_order=2)
 
-    petsc = PETScSolve(eq, f)
+    eq = Eq(h.laplace, f.dxc+g.dyc)
+
+    petsc = PETScSolve(eq, h)
 
     name = "foo"
     op = Operator(petsc, name=name)
