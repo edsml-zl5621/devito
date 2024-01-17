@@ -21,8 +21,6 @@ def lower_petsc(iet, **kwargs):
     iter_expr_mapper = MapNodes(Iteration, ActionExpr).visit(iet)
 
     # from IPython import embed; embed()
-    # expr_target = next(iter(iter_expr_mapper.values()), None)
-    # from IPython import embed; embed()
 
     if bool(iter_expr_mapper):
 
@@ -30,6 +28,7 @@ def lower_petsc(iet, **kwargs):
         # TODO: Extend to multiple targets but for now assume
         # we are only solving 1 equation via PETSc.
         action_expr = next(iter(iter_expr_mapper.values()))
+        # from IPython import embed; embed()
         target = [i for i in action_expr[0].functions if not isinstance(i, PETScArray)][0]
 
         # Build PETSc objects required for the solve.
@@ -94,9 +93,6 @@ def build_struct(action):
 
 def build_matvec_body(action, objs, struct, expr_target):
 
-    # TODO: Create class type that generates this line
-    func_begin_user = c.Line('PetscFunctionBeginUser;')
-
     get_context = Call('PetscCall', [Call('MatShellGetContext',
                                           arguments=[objs['A_matfree'],
                                                      Byref(struct)])])
@@ -152,8 +148,8 @@ def build_matvec_body(action, objs, struct, expr_target):
 
     func_return = Call('PetscFunctionReturn', arguments=[0])
 
-    body = List(body=[func_begin_user,
-                      Definition(struct),
+    body = List(header=c.Line('PetscFunctionBeginUser;'),
+                body=[Definition(struct),
                       get_context,
                       mat_get_dm,
                       dm_get_local_xvec,

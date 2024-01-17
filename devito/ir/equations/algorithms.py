@@ -4,6 +4,7 @@ from devito.symbolics import retrieve_indexed, uxreplace, retrieve_dimensions
 from devito.tools import Ordering, as_tuple, flatten, filter_sorted, filter_ordered
 from devito.types import Dimension, IgnoreDimSort
 from devito.types.basic import AbstractFunction
+from devito.types.petsc import Action
 
 __all__ = ['dimension_sort', 'lower_exprs']
 
@@ -112,16 +113,75 @@ def _lower_exprs(expressions, subs):
             dimension_map = {}
 
         # Handle Functions (typical case)
-        mapper = {f: _lower_exprs(f.indexify(subs=dimension_map), subs)
+        # TODO: cleaner way? Need to indexify the Action expression but NOT
+        # shift it to align with the computational domain since PETSc
+        # has its own local<->global mapping.
+        if not isinstance(expr, Action):
+            mapper = {f: lower_exprs(f.indexify(subs=dimension_map), **kwargs)
+                      for f in expr.find(AbstractFunction)}
+        else:
+            mapper = {f: lower_exprs_petsc(f.indexify(subs=dimension_map), **kwargs)
+                      for f in expr.find(AbstractFunction)}
+
+        # Handle Indexeds (from index notation)
+        for i in retrieve_indexed(expr):
+            f = i.function
+            # Introduce shifting to align with the computational domain
+            indices = [_lower_exprs(a, subs) + o for a, o in
+                       zip(i.indices, f._size_nodomain.left)]
+
+            # Substitute spacing (spacing only used in own dimension)
+            indices = [i.xreplace({d.spacing: 1, -d.spacing: -1})
+                       for i, d in zip(indices, f.dimensions)]
+
+            # Apply substitutions, if necessary
+            if dimension_map:
+                indices = [j.xreplace(dimension_map) for j in indices]
+
+            mapper[i] = f.indexed[indices]
+
+        # Add dimensions map to the mapper in case dimensions are used
+        # as an expression, i.e. Eq(u, x, subdomain=xleft)
+        mapper.update(dimension_map)
+        # Add the user-supplied substitutions
+        mapper.update(subs)
+        # Apply mapper to expression
+        processed.append(uxreplace(expr, mapper))
+
+    if isinstance(expressions, Iterable):
+        return processed
+    else:
+        assert len(processed) == 1
+        return processed.pop()
+
+
+def lower_exprs_petsc(expressions, **kwargs):
+    """
+    TODO: Probably a neater way of doing this but need to indexify the Action
+    expression but NOT shift it to align with the computational domain since PETSc
+    has its own local<->global mapping.
+    """
+    # Normalize subs
+    subs = {k: sympify(v) for k, v in kwargs.get('subs', {}).items()}
+
+    processed = []
+    for expr in as_tuple(expressions):
+        try:
+            dimension_map = expr.subdomain.dimension_map
+        except AttributeError:
+            # Some Relationals may be pure SymPy objects, thus lacking the subdomain
+            dimension_map = {}
+
+        # Handle Functions (typical case)
+        mapper = {f: lower_exprs_petsc(f.indexify(subs=dimension_map), **kwargs)
                   for f in expr.find(AbstractFunction)}
 
         # Handle Indexeds (from index notation)
         for i in retrieve_indexed(expr):
             f = i.function
-
             # Introduce shifting to align with the computational domain
-            indices = [_lower_exprs(a, subs) + o for a, o in
-                       zip(i.indices, f._size_nodomain.left)]
+
+            indices = [lower_exprs(a) for a in i.indices]
 
             # Substitute spacing (spacing only used in own dimension)
             indices = [i.xreplace({d.spacing: 1, -d.spacing: -1})
