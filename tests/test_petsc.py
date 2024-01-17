@@ -6,6 +6,7 @@ from devito.types.petsc import (DM, Mat, Vec, PetscMPIInt, KSP,
                                 PETScSolve)
 import numpy as np
 import os
+from devito.types.petsc import PETScStruct
 
 
 def test_petsc_local_object():
@@ -95,5 +96,6 @@ def test_cinterface_petsc_struct():
     assert 'include "%s.h"' % name in ccode
 
     # The public `struct MatContext` only appears in the header file
+    assert any(isinstance(i, PETScStruct) for i in op.parameters)
     assert 'struct MatContext\n{' not in ccode
     assert 'struct MatContext\n{' in hcode
