@@ -48,8 +48,8 @@ def lower_petsc(iet, **kwargs):
     # the corresponding PETSc calls.
     # TODO: Eventually, this will be extended to deal with multiple different
     # 'actions' associated with different equations to solve.
-    action_mapper = {with_action: solve_body}
-    iet = Transformer(action_mapper).visit(iet) if with_action else iet
+    action_mapper = {with_action: solve_body} if with_action else {}
+    iet = Transformer(action_mapper).visit(iet)
 
     return iet, {'efuncs': [matvec_callback]}
 
