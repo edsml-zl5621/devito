@@ -10,7 +10,7 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpAction
+from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpAction, OpRHS
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, detect_io)
@@ -28,7 +28,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'ActionExpr']
+           'CallableBody', 'Transfer', 'Callback', 'ActionExpr', 'RHSExpr']
 
 # First-class IET nodes
 
@@ -487,6 +487,12 @@ class Increment(AugmentedExpression):
 class ActionExpr(Expression):
 
     def __init__(self, expr, pragmas=None, operation=OpAction):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
+
+
+class RHSExpr(Expression):
+
+    def __init__(self, expr, pragmas=None, operation=OpRHS):
         super().__init__(expr, pragmas=pragmas, operation=operation)
 
 
