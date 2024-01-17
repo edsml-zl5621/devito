@@ -486,8 +486,8 @@ class Increment(AugmentedExpression):
 
 class ActionExpr(Expression):
 
-    def __init__(self, expr, pragmas=None, operation=None):
-        super().__init__(expr, pragmas=pragmas, operation=OpAction)
+    def __init__(self, expr, pragmas=None, operation=OpAction):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
 
 
 class Iteration(Node):

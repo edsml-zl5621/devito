@@ -13,7 +13,7 @@ from devito.logger import debug, info, perf, warning, is_log_enabled_for
 from devito.ir.equations import LoweredEq, lower_exprs
 from devito.ir.clusters import ClusterGroup, clusterize
 from devito.ir.iet import (Callable, CInterface, EntryFunction, FindSymbols, MetaCall,
-                           derive_parameters, iet_build, FindNodes, Expression)
+                           derive_parameters, iet_build)
 from devito.ir.support import AccessMode, SymbolRegistry
 from devito.ir.stree import stree_build
 from devito.operator.profiling import AdvancedProfilerVerbose, create_profile
@@ -28,7 +28,6 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_tuple, flatten
                           filter_sorted, frozendict, is_integer, split, timed_pass,
                           timed_region, contains_val)
 from devito.types import Grid, Evaluable, SubFunction
-from devito.types.petsc import PETScArray
 
 __all__ = ['Operator']
 
@@ -462,10 +461,7 @@ class Operator(Callable):
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
 
-        # TODO: This logic should be moved inside the pass itself.
-        exprs = FindNodes(Expression).visit(graph.root)
-        if any(isinstance(func, PETScArray) for expr in exprs for func in expr.functions):
-            lower_petsc(graph, **kwargs)
+        lower_petsc(graph, **kwargs)
 
         graph = cls._specialize_iet(graph, **kwargs)
         # Instrument the IET for C-level profiling
