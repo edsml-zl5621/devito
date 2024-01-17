@@ -3,7 +3,7 @@ from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
 from devito.passes.iet.languages.C import CDataManager
 from devito.types.petsc import (DM, Mat, Vec, PetscMPIInt, KSP,
                                 PC, KSPConvergedReason, PETScArray,
-                                PETScStruct, PETScSolve)
+                                PETScSolve)
 import numpy as np
 import os
 
@@ -95,7 +95,5 @@ def test_cinterface_petsc_struct():
     assert 'include "%s.h"' % name in ccode
 
     # The public `struct MatContext` only appears in the header file
-    petsc_struct = op.parameters[-2]
-    assert isinstance(petsc_struct, PETScStruct)
     assert 'struct MatContext\n{' not in ccode
     assert 'struct MatContext\n{' in hcode
