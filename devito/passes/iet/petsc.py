@@ -1,11 +1,13 @@
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (List, Callable, Call, Transformer,
                            Callback, Definition, Uxreplace, FindSymbols,
-                           Iteration, MapNodes, ActionExpr)
+                           Iteration, MapNodes, ActionExpr, RHSExpr,
+                           FindNodes, Expression)
 from devito.types.petsc import (Mat, Vec, DM, PetscErrorCode, PETScStruct,
                                 PETScArray, PetscMPIInt)
 from devito.symbolics import FieldFromPointer, Byref
 import cgen as c
+from devito.ir.equations.equation import OpSetUpRHS
 
 
 __all__ = ['lower_petsc']
@@ -19,8 +21,6 @@ def lower_petsc(iet, **kwargs):
 
     # Find the largest Iteration loop containing the Action
     iter_expr_mapper = MapNodes(Iteration, ActionExpr).visit(iet)
-
-    # from IPython import embed; embed()
 
     if bool(iter_expr_mapper):
 
@@ -59,6 +59,19 @@ def lower_petsc(iet, **kwargs):
         action_mapper = {iteration: solve_body}
         iet = Transformer(action_mapper).visit(iet)
 
+        # Replace SetUpRHSExpr dummy with appropriate PETSc calls
+        # If we have an action, we have a corresponding SetUpRHSExpr
+
+        iter_rhs_mapper = MapNodes(Iteration, RHSExpr).visit(iet)
+        # Search the largest iteration loop that contains the rhs
+        # expression for any dummys e.g replace exprs with operation=SetUpRHS
+        # with the appropriate PETSc calls.
+        iteration_rhs = next(iter(iter_rhs_mapper))
+        find_setuprhs = FindNodes(Expression).visit(iteration_rhs)
+        find_setuprhs = [i for i in find_setuprhs if i.operation is OpSetUpRHS]
+        setup_rhs = build_rhs_setup(petsc_objs)
+        iet = Transformer({find_setuprhs[0]: setup_rhs}).visit(iet)
+
         return iet, {'efuncs': [matvec_callback]}
 
     return iet, {}
@@ -71,10 +84,10 @@ def build_petsc_objects(target):
     return {'A_matfree': Mat(name='A_matfree'),
             'xvec': Vec(name='xvec'),
             'local_xvec': Vec(name='local_xvec', liveness='eager'),
-            'local_yvec': Vec(name='local_yvec', liveness='eager'),
             'yvec': Vec(name='yvec'),
             'da': DM(name='da', liveness='eager'),
             'x': Vec(name='x'),
+            'b': Vec(name='b'),
             'err': PetscErrorCode(name='err'),
             'size': PetscMPIInt(name='size'),
             'xvec_tmp': (PETScArray(name='xvec_tmp', dtype=target.dtype,
@@ -239,3 +252,17 @@ def build_solve(matvec_body, petsc_objs, struct):
                       set_context])
 
     return matvec_callback, body
+
+
+def build_rhs_setup(objs):
+
+    dm_create_global_vec_x = Call('PetscCall', [Call('DMCreateGlobalVector',
+                                                     arguments=[objs['da'],
+                                                                Byref(objs['x'])])])
+    dm_create_global_vec_b = Call('PetscCall', [Call('DMCreateGlobalVector',
+                                                     arguments=[objs['da'],
+                                                                Byref(objs['b'])])])
+    body = List(body=[dm_create_global_vec_x,
+                      dm_create_global_vec_b])
+
+    return body

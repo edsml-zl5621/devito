@@ -8,10 +8,10 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
 from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import Eq, Inc, ReduceMax, ReduceMin
-from devito.types.petsc import Action, RHS
+from devito.types.petsc import Action, RHS, SetUpRHS
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
-           'OpAction', 'OpRHS']
+           'OpAction', 'OpRHS', 'OpSetUpRHS']
 
 
 class IREq(sympy.Eq, Pickable):
@@ -101,6 +101,7 @@ class Operation(Tag):
             ReduceMin: OpMin,
             Action: OpAction,
             RHS: OpRHS,
+            SetUpRHS: OpSetUpRHS,
         }
         try:
             return reduction_mapper[type(expr)]
@@ -119,6 +120,7 @@ OpMax = Operation('max')
 OpMin = Operation('min')
 OpAction = Operation('action')
 OpRHS = Operation('rhs')
+OpSetUpRHS = Operation('setup_rhs')
 
 
 class LoweredEq(IREq):

@@ -3,7 +3,7 @@ from collections import OrderedDict
 from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, SyncSpot,
                            Section, HaloSpot, ExpressionBundle, ActionExpr, RHSExpr)
 from devito.tools import timed_pass
-from devito.ir.equations import OpAction
+from devito.ir.equations import OpAction, OpRHS
 
 __all__ = ['iet_build']
 
@@ -27,7 +27,7 @@ def iet_build(stree):
                     exprs.append(Increment(e))
                 elif e.operation is OpAction:
                     exprs.append(ActionExpr(e, operation=e.operation))
-                elif e.operation is RHSExpr:
+                elif e.operation is OpRHS:
                     exprs.append(RHSExpr(e, operation=e.operation))
                 else:
                     exprs.append(Expression(e, operation=e.operation))

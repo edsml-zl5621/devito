@@ -147,30 +147,37 @@ class RHS(Eq):
     pass
 
 
+class SetUpRHS(Eq):
+    """
+    Dummy Eq which will be replaced with the PETSc calls to
+    setup RHS of linear system.
+    """
+    pass
+
+
 def PETScSolve(eq, target, **kwargs):
 
     yvec_tmp = PETScArray(name='yvec_tmp', dtype=target.dtype,
                           dimensions=target.dimensions,
                           shape=target.shape, liveness='eager')
 
-    # b_tmp = PETScArray(name='b_tmp', dtype=target.dtype,
-    #                    dimensions=target.dimensions,
-    #                    shape=target.shape, liveness='eager')
+    b_tmp = PETScArray(name='b_tmp', dtype=target.dtype,
+                       dimensions=target.dimensions,
+                       shape=target.shape, liveness='eager')
 
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
     action = Action(yvec_tmp, eq.lhs.evaluate)
 
-    # rhs = RHS(b_tmp, eq.rhs.evaluate)
+    rhs = RHS(b_tmp, eq.rhs.evaluate)
 
-    # from devito import Function
-    # if any(d.is_Time for d in eq.rhs.dimensions):
-    #     mockeq1 = Eq(target, target.grid.time_dim)
-    #     dummy1 = Function(name='dummy1', dimensions=(target.grid.time_dim,), shape=(1,))
-    #     dummyeq1 = Eq(dummy1, 1)
+    from devito import Function
+    if any(d.is_Time for d in eq.rhs.dimensions):
+        mockeq1 = Eq(target, target.grid.time_dim)
+        dummy1 = Function(name='dummy1', dimensions=(target.grid.time_dim,), shape=(1,))
+        dummyeq1 = SetUpRHS(dummy1, 1)
 
-    # return [action] + [mockeq1] + [rhs]
-    return [action]
+    return [action] + [dummyeq1] + [mockeq1] + [rhs]
 
 
 class PETScStruct(CompositeObject):
