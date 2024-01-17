@@ -44,14 +44,14 @@ def lower_petsc(iet, **kwargs):
     mapper = {target.indexed: petsc_objs['xvec_tmp'].indexed} if target else {}
     matvec_callback = Uxreplace(mapper).visit(matvec_callback)
 
-    # Replace the Section that contains the action inside the Entry Function with
+    # Replace the part of the iet that contains the action with
     # the corresponding PETSc calls.
     # TODO: Eventually, this will be extended to deal with multiple different
     # 'actions' associated with different equations to solve.
     action_mapper = {with_action: solve_body} if with_action else {}
     iet = Transformer(action_mapper).visit(iet)
 
-    return iet, {'efuncs': [matvec_callback]}
+    return iet, {'efuncs': [matvec_callback]} if with_action else {}
 
 
 def build_petsc_objects(target):
