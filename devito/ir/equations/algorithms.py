@@ -179,7 +179,6 @@ def lower_exprs_petsc(expressions, **kwargs):
         # Handle Indexeds (from index notation)
         for i in retrieve_indexed(expr):
             f = i.function
-
             # Introduce shifting to align with the computational domain
             indices = [lower_exprs(a) for a in i.indices]
 
