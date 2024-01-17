@@ -153,9 +153,9 @@ def PETScSolve(eq, target, **kwargs):
                           dimensions=target.dimensions,
                           shape=target.shape, liveness='eager')
 
-    b_tmp = PETScArray(name='b_tmp', dtype=target.dtype,
-                       dimensions=target.dimensions,
-                       shape=target.shape, liveness='eager')
+    # b_tmp = PETScArray(name='b_tmp', dtype=target.dtype,
+    #                    dimensions=target.dimensions,
+    #                    shape=target.shape, liveness='eager')
 
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
