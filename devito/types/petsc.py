@@ -172,7 +172,11 @@ def PETScSolve(eq, target, **kwargs):
     b_tmp = PETScArray(name='b_tmp', dtype=target.dtype,
                        dimensions=target.dimensions,
                        shape=target.shape, liveness='eager')
-
+    
+    # from IPython import embed; embed()
+    # from devito import Derivative
+    # tmp = sum([d.expr/(d.dim.spacing**d.deriv_order) for d in eq.rhs if isinstance(d, Derivative)])
+    # from IPython import embed; embed()
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
     action = Action(yvec_tmp, eq.lhs.evaluate)
@@ -184,11 +188,12 @@ def PETScSolve(eq, target, **kwargs):
     from devito import Function
     if any(d.is_Time for d in eq.rhs.dimensions):
         dummy1 = Function(name='dummy1', dimensions=(target.grid.time_dim,), shape=(1,))
-        dummyeq1 = SetUpRHS(dummy1, 1)
+        dummyeq1 = SetUpRHS(dummy1, 2)
         dummy2 = Function(name='dummy2', dimensions=(target.grid.time_dim,), shape=(1,))
-        dummyeq2 = LinSolve(dummy2, 1)
+        dummyeq2 = LinSolve(dummy2, 2)
 
     return [action] + [dummyeq1] + [rhs] + [dummyeq2]
+    # return [action] + [rhs]
 
 
 class PETScStruct(CompositeObject):

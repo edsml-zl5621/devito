@@ -5,25 +5,68 @@ from devito.types import PETScSolve
 # This is just temporary - just illustrating the current
 # functionality of PETScSolve alongside the lower_petsc pass.
 
-grid = Grid(shape=(11, 11), extent=(1., 1.))
+
+# Physical parameters
+rho = Constant(name='rho')
+nu = Constant(name='nu')
+
+rho.data = 1.
+nu.data = 1./10.
+
+Lx = 1.
+Ly = Lx
+
+# Number of grid points in each direction
+nx = 51
+ny = nx
+
+# mesh spacing
+dx = Lx/(nx-1)
+dy = Ly/(ny-1)
+
+grid = Grid(shape=(nx, ny), extent=(Lx, Ly))
+time = grid.time_dim
+t = grid.stepping_dim
+x, y = grid.dimensions
+
+# time stepping parameters
+dt = 1e-3
+t_end = 1.
+ns = int(t_end/dt)
 
 u = TimeFunction(name='u', grid=grid, space_order=2)
 v = TimeFunction(name='v', grid=grid, space_order=2)
 pn = Function(name='pn', grid=grid, space_order=2)
 
-eq_pn = Eq(pn.laplace, u.dxc+v.dyc)
+eq_pn = Eq(pn.laplace, rho*(((1./dt)*(u.dxc+v.dyc)) - (u.dxc*u.dxc + v.dyc*v.dyc + 2.*u.dyc*v.dxc)))
 
 petsc = PETScSolve(eq_pn, pn)
 
-eq_u = Eq(u.dt + v*u.dyc - pn.dxc)
-eq_v = Eq(v.dt + u*v.dxc - pn.dyc)
+eq_u = Eq(u.dt + u*u.dxc + v*u.dyc - nu*u.laplace, -1./rho*pn.dxc)
+eq_v = Eq(v.dt + u*v.dxc + v*v.dyc - nu*v.laplace, -1./rho*pn.dyc)
 
-update_u = Eq(u.forward, solve(eq_u, u.forward))
-update_v = Eq(v.forward, solve(eq_v, v.forward))
+stencil_u = solve(eq_u, u.forward)
+stencil_v = solve(eq_v, v.forward)
+
+update_u = Eq(u.forward, stencil_u)
+update_v = Eq(v.forward, stencil_v)
+
+u.data[0, :, -1] = 1.
+u.data[1, :, -1] = 1.
+
+# Create Dirichlet BC expressions for velocity
+bc_u = [Eq(u[t+1, x, ny-1], 1.)]  # top
+bc_u += [Eq(u[t+1, 0, y], 0.)]  # left
+bc_u += [Eq(u[t+1, nx-1, y], 0.)]  # right
+bc_u += [Eq(u[t+1, x, 0], 0.)]  # bottom
+bc_v = [Eq(v[t+1, 0, y], 0.)]  # left
+bc_v += [Eq(v[t+1, nx-1, y], 0.)]  # right
+bc_v += [Eq(v[t+1, x, ny-1], 0.)]  # top
+bc_v += [Eq(v[t+1, x, 0], 0.)] # bottom
 
 # # Create the operator
-exprs = petsc + [update_u, update_v]
-
+exprs = petsc + [update_u, update_v] + bc_u + bc_v
 op = Operator(exprs, opt='noop')
-print(op.ccode)
+op.apply(time_m=0, time_M=ns-1, dt=dt)
+# print(op.ccode)
 # See petsc_solve.c for corresponding C code

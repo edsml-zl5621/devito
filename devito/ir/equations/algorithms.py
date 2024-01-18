@@ -117,10 +117,10 @@ def _lower_exprs(expressions, subs):
         # shift it to align with the computational domain since PETSc
         # has its own local<->global mapping.
         if not isinstance(expr, Action):
-            mapper = {f: lower_exprs(f.indexify(subs=dimension_map), **kwargs)
+            mapper = {f: lower_exprs(f.indexify(subs=dimension_map))
                       for f in expr.find(AbstractFunction)}
         else:
-            mapper = {f: lower_exprs_petsc(f.indexify(subs=dimension_map), **kwargs)
+            mapper = {f: lower_exprs_petsc(f.indexify(subs=dimension_map))
                       for f in expr.find(AbstractFunction)}
 
         # Handle Indexeds (from index notation)
@@ -156,14 +156,12 @@ def _lower_exprs(expressions, subs):
         return processed.pop()
 
 
-def lower_exprs_petsc(expressions, **kwargs):
+def lower_exprs_petsc(expressions, subs=None):
     """
     TODO: Probably a neater way of doing this but need to indexify the Action
     expression but NOT shift it to align with the computational domain since PETSc
     has its own local<->global mapping.
     """
-    # Normalize subs
-    subs = {k: sympify(v) for k, v in kwargs.get('subs', {}).items()}
 
     processed = []
     for expr in as_tuple(expressions):
@@ -174,7 +172,7 @@ def lower_exprs_petsc(expressions, **kwargs):
             dimension_map = {}
 
         # Handle Functions (typical case)
-        mapper = {f: lower_exprs_petsc(f.indexify(subs=dimension_map), **kwargs)
+        mapper = {f: lower_exprs_petsc(f.indexify(subs=dimension_map))
                   for f in expr.find(AbstractFunction)}
 
         # Handle Indexeds (from index notation)
