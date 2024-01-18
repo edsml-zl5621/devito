@@ -2,12 +2,12 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (List, Callable, Call, Transformer,
                            Callback, Definition, Uxreplace, FindSymbols,
                            Iteration, MapNodes, ActionExpr, RHSExpr,
-                           FindNodes, Expression)
+                           FindNodes, Expression, DummyExpr)
 from devito.types.petsc import (Mat, Vec, DM, PetscErrorCode, PETScStruct,
-                                PETScArray, PetscMPIInt)
+                                PETScArray, PetscMPIInt, KSP, PC)
 from devito.symbolics import FieldFromPointer, Byref
 import cgen as c
-from devito.ir.equations.equation import OpSetUpRHS
+from devito.ir.equations.equation import OpSetUpRHS, OpLinSolve
 
 
 __all__ = ['lower_petsc']
@@ -67,10 +67,34 @@ def lower_petsc(iet, **kwargs):
         # expression for any dummys e.g replace exprs with operation=SetUpRHS
         # with the appropriate PETSc calls.
         iteration_rhs = next(iter(iter_rhs_mapper))
-        find_setuprhs = FindNodes(Expression).visit(iteration_rhs)
-        find_setuprhs = [i for i in find_setuprhs if i.operation is OpSetUpRHS]
-        setup_rhs = build_rhs_setup(petsc_objs)
-        iet = Transformer({find_setuprhs[0]: setup_rhs}).visit(iet)
+        exprs = FindNodes(Expression).visit(iteration_rhs)
+
+        rhs_expr = [expr for expr in exprs if isinstance(expr, RHSExpr)]
+        b_tmp = [i for i in rhs_expr[0].functions if isinstance(i, PETScArray)][0]
+
+        # Replace the dummyeq1 with PETSc calls to set up RHS
+        find_setuprhs = [i for i in exprs if i.operation is OpSetUpRHS]
+        setup_rhs = build_rhs_setup(petsc_objs, b_tmp)
+        # iet = Transformer({find_setuprhs[0]: setup_rhs}).visit(iet)
+
+        # Replace the dummyeq2 with PETSc calls to execute the linear solve
+        find_linsolve = [i for i in exprs if i.operation is OpLinSolve]
+        x_tmp = PETScArray(name='xvec_tmp', dtype=target.dtype,
+                           dimensions=target.dimensions,
+                           shape=target.shape,
+                           liveness='eager')
+
+        from itertools import islice
+        iteration_spatial_rhs = next(islice(iter_rhs_mapper, 1, 2), None)
+        # THIS IS OBVIOUSLY TEMPORARY: NEED TO THINK. MAYBE I WILL NOT EVEN NEED
+        # THE MAPPING AND X_TMP ARRAY
+        indices = (target.dimensions[0]+2, target.dimensions[1]+2)
+        sol_expr = DummyExpr(target.indexify(indices=indices), x_tmp.indexify())
+        sol_mapping = Transformer({rhs_expr[0]: sol_expr}).visit(iteration_spatial_rhs)
+        linsolve = execute_solve(petsc_objs, b_tmp, sol_mapping, x_tmp)
+
+        iet = Transformer({find_linsolve[0]: linsolve,
+                           find_setuprhs[0]: setup_rhs}).visit(iet)
 
         return iet, {'efuncs': [matvec_callback]}
 
@@ -88,6 +112,8 @@ def build_petsc_objects(target):
             'da': DM(name='da', liveness='eager'),
             'x': Vec(name='x'),
             'b': Vec(name='b'),
+            'ksp': KSP(name='ksp'),
+            'pc': PC(name='pc'),
             'err': PetscErrorCode(name='err'),
             'size': PetscMPIInt(name='size'),
             'xvec_tmp': (PETScArray(name='xvec_tmp', dtype=target.dtype,
@@ -183,7 +209,9 @@ def build_matvec_body(action, objs, struct, expr_target):
     return body
 
 
-def build_solve(matvec_body, petsc_objs, struct):
+def build_solve(matvec_body, objs, struct):
+    # TODO: Many of these args will be set based on user provided args in
+    # PETScSolve
 
     # TODO: Create class type that generates this line
     func_begin_user = c.Line('PetscFunctionBeginUser;')
@@ -195,7 +223,7 @@ def build_solve(matvec_body, petsc_objs, struct):
 
     call_mpi = Call('PetscCallMPI', [Call('MPI_Comm_size',
                                           arguments=['PETSC_COMM_WORLD',
-                                                     Byref(petsc_objs['size'])])])
+                                                     Byref(objs['size'])])])
 
     # TODO: Create DM based on the dimensions of the target field
     dm_create = Call('PetscCall', [Call('DMCreate2d',
@@ -208,37 +236,72 @@ def build_solve(matvec_body, petsc_objs, struct):
                                                    'PETSC_DECIDE',
                                                    1, 1,
                                                    'NULL', 'NULL',
-                                                   petsc_objs['da']])])
+                                                   objs['da']])])
 
     dm_set_from_options = Call('PetscCall', [Call('DMSetFromOptions',
-                                                  arguments=[petsc_objs['da']])])
+                                                  arguments=[objs['da']])])
 
-    dm_setup = Call('PetscCall', [Call('DMSetUp', arguments=[petsc_objs['da']])])
+    dm_setup = Call('PetscCall', [Call('DMSetUp', arguments=[objs['da']])])
 
     dm_set_mattype = Call('PetscCall', [Call('DMSetMatType',
-                                             arguments=[petsc_objs['da'],
+                                             arguments=[objs['da'],
                                                         'MATSHELL'])])
 
     dm_create_mat = Call('PetscCall', [Call('DMCreateMatrix',
-                                            arguments=[petsc_objs['da'],
-                                                       Byref(petsc_objs['A_matfree'])])])
+                                            arguments=[objs['da'],
+                                                       Byref(objs['A_matfree'])])])
 
     matvec_callback = Callable('MyMatShellMult',
                                matvec_body,
-                               retval=petsc_objs['err'],
-                               parameters=(petsc_objs['A_matfree'],
-                                           petsc_objs['xvec'],
-                                           petsc_objs['yvec']))
+                               retval=objs['err'],
+                               parameters=(objs['A_matfree'],
+                                           objs['xvec'],
+                                           objs['yvec']))
 
     matvec_operation = Call('PetscCall', [Call('MatShellSetOperation',
-                                               arguments=[petsc_objs['A_matfree'],
+                                               arguments=[objs['A_matfree'],
                                                           'MATOP_MULT',
                                                           Callback(matvec_callback.name,
                                                                    'void', 'void')])])
 
     set_context = Call('PetscCall', [Call('MatShellSetContext',
-                                          arguments=[petsc_objs['A_matfree'],
+                                          arguments=[objs['A_matfree'],
                                                      struct])])
+
+    ksp_create = Call('PetscCall', [Call('KSPCreate',
+                                         arguments=['PETSC_COMM_SELF',
+                                                    Byref(objs['ksp'])])])
+
+    ksp_set_operators = Call('PetscCall', [Call('KSPSetOperators',
+                                                arguments=[objs['ksp'],
+                                                           objs['A_matfree'],
+                                                           objs['A_matfree']])])
+
+    ksp_set_tol = Call('PetscCall', [Call('KSPSetTolerances',
+                                          arguments=[objs['ksp'],
+                                                     '1.e-7',
+                                                     'PETSC_DEFAULT',
+                                                     'PETSC_DEFAULT',
+                                                     'PETSC_DEFAULT'])])
+
+    ksp_set_type = Call('PetscCall', [Call('KSPSetType',
+                                           arguments=[objs['ksp'],
+                                                      'KSPGMRES'])])
+
+    ksp_get_pc = Call('PetscCall', [Call('KSPGetPC',
+                                         arguments=[objs['ksp'],
+                                                    Byref(objs['pc'])])])
+
+    pc_set_type = Call('PetscCall', [Call('PCSetType',
+                                          arguments=[objs['pc'],
+                                                     'PCJACOBI'])])
+
+    pc_jacobi_set_type = Call('PetscCall', [Call('PCSetType',
+                                                 arguments=[objs['pc'],
+                                                            'PC_JACOBI_DIAGONAL'])])
+
+    ksp_set_from_opts = Call('PetscCall', [Call('KSPSetFromOptions',
+                                                arguments=[objs['ksp']])])
 
     body = List(body=[func_begin_user,
                       initialize,
@@ -249,12 +312,20 @@ def build_solve(matvec_body, petsc_objs, struct):
                       dm_set_mattype,
                       dm_create_mat,
                       matvec_operation,
-                      set_context])
+                      set_context,
+                      ksp_create,
+                      ksp_set_operators,
+                      ksp_set_tol,
+                      ksp_set_type,
+                      ksp_get_pc,
+                      pc_set_type,
+                      pc_jacobi_set_type,
+                      ksp_set_from_opts])
 
     return matvec_callback, body
 
 
-def build_rhs_setup(objs):
+def build_rhs_setup(objs, b_tmp):
 
     dm_create_global_vec_x = Call('PetscCall', [Call('DMCreateGlobalVector',
                                                      arguments=[objs['da'],
@@ -262,7 +333,47 @@ def build_rhs_setup(objs):
     dm_create_global_vec_b = Call('PetscCall', [Call('DMCreateGlobalVector',
                                                      arguments=[objs['da'],
                                                                 Byref(objs['b'])])])
+
+    dm_vec_get_array = Call('PetscCall', [Call('DMDAVecGetArray',
+                                               arguments=[objs['da'],
+                                                          objs['b'],
+                                                          Byref(b_tmp)])])
+
     body = List(body=[dm_create_global_vec_x,
-                      dm_create_global_vec_b])
+                      dm_create_global_vec_b,
+                      dm_vec_get_array])
+
+    return body
+
+
+def execute_solve(objs, b_tmp, sol_mapping, x_tmp):
+
+    dm_vec_restore_array_b = Call('PetscCall', [Call('DMDAVecRestoreArray',
+                                                     arguments=[objs['da'],
+                                                                objs['b'],
+                                                                Byref(b_tmp)])])
+
+    ksp_solve = Call('PetscCall', [Call('KSPSolve',
+                                        arguments=[objs['ksp'],
+                                                   objs['b'],
+                                                   objs['x']])])
+
+    dm_vec_get_array_x = Call('PetscCall', [Call('DMDAVecGetArray',
+                                                 arguments=[objs['da'],
+                                                            objs['x'],
+                                                            Byref(x_tmp)])])
+
+    dm_vec_restore_array_x = Call('PetscCall', [Call('DMDAVecRestoreArray',
+                                                     arguments=[objs['da'],
+                                                                objs['x'],
+                                                                Byref(x_tmp)])])
+
+    # TODO: DESTROY OBJECTS
+
+    body = List(body=[dm_vec_restore_array_b,
+                      ksp_solve,
+                      dm_vec_get_array_x,
+                      sol_mapping,
+                      dm_vec_restore_array_x])
 
     return body

@@ -155,6 +155,14 @@ class SetUpRHS(Eq):
     pass
 
 
+class LinSolve(Eq):
+    """
+    Dummy Eq which will be replaced with the PETSc calls to
+    execute the linear solve.
+    """
+    pass
+
+
 def PETScSolve(eq, target, **kwargs):
 
     yvec_tmp = PETScArray(name='yvec_tmp', dtype=target.dtype,
@@ -171,13 +179,16 @@ def PETScSolve(eq, target, **kwargs):
 
     rhs = RHS(b_tmp, eq.rhs.evaluate)
 
+    # TODO: Figure this out properly. Will become clearer when solving eqns
+    # fully implicitly in time.
     from devito import Function
     if any(d.is_Time for d in eq.rhs.dimensions):
-        mockeq1 = Eq(target, target.grid.time_dim)
         dummy1 = Function(name='dummy1', dimensions=(target.grid.time_dim,), shape=(1,))
         dummyeq1 = SetUpRHS(dummy1, 1)
+        dummy2 = Function(name='dummy2', dimensions=(target.grid.time_dim,), shape=(1,))
+        dummyeq2 = LinSolve(dummy2, 1)
 
-    return [action] + [dummyeq1] + [mockeq1] + [rhs]
+    return [action] + [dummyeq1] + [rhs] + [dummyeq2]
 
 
 class PETScStruct(CompositeObject):
