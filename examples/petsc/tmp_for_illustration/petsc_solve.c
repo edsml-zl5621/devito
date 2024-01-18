@@ -32,19 +32,23 @@ struct profiler
 {
   double section0;
   double section1;
+  double section2;
 } ;
 
 PetscErrorCode MyMatShellMult(Mat A_matfree, Vec xvec, Vec yvec);
 
-int Kernel(struct dataobj *restrict dummy1_vec, struct dataobj *restrict pn_vec, struct dataobj *restrict u_vec, struct dataobj *restrict v_vec, const float dt, const float h_x, const float h_y, const int time_M, const int time_m, const int x_M, const int x_m, const int y_M, const int y_m, struct MatContext * ctx, struct profiler * timers)
+int Kernel(struct dataobj *restrict dummy1_vec, struct dataobj *restrict dummy2_vec, struct dataobj *restrict pn_vec, struct dataobj *restrict u_vec, struct dataobj *restrict v_vec, const float dt, const float h_x, const float h_y, const int time_M, const int time_m, const int x_M, const int x_m, const int y_M, const int y_m, struct MatContext * ctx, struct profiler * timers)
 {
   Mat A_matfree;
   Vec b;
   DM da;
+  KSP ksp;
+  PC pc;
   PetscMPIInt size;
   Vec x;
 
   PetscScalar**restrict b_tmp;
+  PetscScalar**restrict xvec_tmp;
 
   float (*restrict pn)[pn_vec->size[1]] __attribute__ ((aligned (64))) = (float (*)[pn_vec->size[1]]) pn_vec->data;
   float (*restrict u)[u_vec->size[1]][u_vec->size[2]] __attribute__ ((aligned (64))) = (float (*)[u_vec->size[1]][u_vec->size[2]]) u_vec->data;
@@ -61,23 +65,45 @@ int Kernel(struct dataobj *restrict dummy1_vec, struct dataobj *restrict pn_vec,
   PetscCall(DMCreateMatrix(da,&(A_matfree)));
   PetscCall(MatShellSetOperation(A_matfree,MATOP_MULT,(void (*)(void))MyMatShellMult));
   PetscCall(MatShellSetContext(A_matfree,ctx));
+  PetscCall(KSPCreate(PETSC_COMM_SELF,&(ksp)));
+  PetscCall(KSPSetOperators(ksp,A_matfree,A_matfree));
+  PetscCall(KSPSetTolerances(ksp,1.00000000000000e-7F,PETSC_DEFAULT,PETSC_DEFAULT,PETSC_DEFAULT));
+  PetscCall(KSPSetType(ksp,KSPGMRES));
+  PetscCall(KSPGetPC(ksp,&(pc)));
+  PetscCall(PCSetType(pc,PCJACOBI));
+  PetscCall(PCSetType(pc,PC_JACOBI_DIAGONAL));
+  PetscCall(KSPSetFromOptions(ksp));
   STOP(section0,timers)
 
   for (int time = time_m, t0 = (time)%(2), t1 = (time + 1)%(2); time <= time_M; time += 1, t0 = (time)%(2), t1 = (time + 1)%(2))
   {
     PetscCall(DMCreateGlobalVector(da,&(x)));
     PetscCall(DMCreateGlobalVector(da,&(b)));
+    PetscCall(DMDAVecGetArray(da,b,&b_tmp));
 
     START(section1)
     for (int x = x_m; x <= x_M; x += 1)
     {
       for (int y = y_m; y <= y_M; y += 1)
       {
-        pn[x + 2][y + 2] = time;
-
         b_tmp[x][y] = -5.0e-1F*u[t0][x + 1][y + 2]/h_x + 5.0e-1F*u[t0][x + 3][y + 2]/h_x - 5.0e-1F*v[t0][x + 2][y + 1]/h_y + 5.0e-1F*v[t0][x + 2][y + 3]/h_y;
       }
     }
+    STOP(section1,timers)
+
+    PetscCall(DMDAVecRestoreArray(da,b,&b_tmp));
+    PetscCall(KSPSolve(ksp,b,x));
+    PetscCall(DMDAVecGetArray(da,x,&xvec_tmp));
+    for (int x = x_m; x <= x_M; x += 1)
+    {
+      for (int y = y_m; y <= y_M; y += 1)
+      {
+        pn[x + 2][y + 2] = xvec_tmp[x][y];
+      }
+    }
+    PetscCall(DMDAVecRestoreArray(da,x,&xvec_tmp));
+
+    START(section2)
     for (int x = x_m; x <= x_M; x += 1)
     {
       for (int y = y_m; y <= y_M; y += 1)
@@ -87,7 +113,7 @@ int Kernel(struct dataobj *restrict dummy1_vec, struct dataobj *restrict pn_vec,
         v[t1][x + 2][y + 2] = dt*(-(-5.0e-1F*v[t0][x + 1][y + 2]/h_x + 5.0e-1F*v[t0][x + 3][y + 2]/h_x)*u[t0][x + 2][y + 2] - 5.0e-1F*pn[x + 2][y + 1]/h_y + 5.0e-1F*pn[x + 2][y + 3]/h_y + v[t0][x + 2][y + 2]/dt);
       }
     }
-    STOP(section1,timers)
+    STOP(section2,timers)
   }
 
   return 0;
