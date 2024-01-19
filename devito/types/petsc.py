@@ -163,6 +163,13 @@ class LinSolve(Eq):
     pass
 
 
+class PreStencil(Eq):
+    """
+    Eq needed for the preconditioner callback.
+    """
+    pass
+
+
 def PETScSolve(eq, target, **kwargs):
 
     yvec_tmp = PETScArray(name='yvec_tmp', dtype=target.dtype,
@@ -172,16 +179,24 @@ def PETScSolve(eq, target, **kwargs):
     b_tmp = PETScArray(name='b_tmp', dtype=target.dtype,
                        dimensions=target.dimensions,
                        shape=target.shape, liveness='eager')
-    
-    # from IPython import embed; embed()
-    # from devito import Derivative
-    # tmp = sum([d.expr/(d.dim.spacing**d.deriv_order) for d in eq.rhs if isinstance(d, Derivative)])
-    # from IPython import embed; embed()
+
+    # TODO: Extend to different preconditioners but for now just considering
+    # JACOBI diagonal.
+    from devito import Derivative
+    terms = eq.lhs.as_ordered_terms()
+    centre_stencil = sum(
+        [d._eval_deriv_centre for d in terms if isinstance(d, Derivative)])
+
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
     action = Action(yvec_tmp, eq.lhs.evaluate)
 
     rhs = RHS(b_tmp, eq.rhs.evaluate)
+
+    preconditioner = PreStencil(yvec_tmp, centre_stencil)
+
+    # # To force separate the action and preconditioner eqns into distinct/separate loops
+    # dum = Eq(target, yvec_tmp)
 
     # TODO: Figure this out properly. Will become clearer when solving eqns
     # fully implicitly in time.
@@ -192,8 +207,7 @@ def PETScSolve(eq, target, **kwargs):
         dummy2 = Function(name='dummy2', dimensions=(target.grid.time_dim,), shape=(1,))
         dummyeq2 = LinSolve(dummy2, 2)
 
-    return [action] + [dummyeq1] + [rhs] + [dummyeq2]
-    # return [action] + [rhs]
+    return [preconditioner] + [action] + [dummyeq1] + [rhs] + [dummyeq2]
 
 
 class PETScStruct(CompositeObject):

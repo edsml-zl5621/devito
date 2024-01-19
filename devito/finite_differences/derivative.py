@@ -360,6 +360,14 @@ class Derivative(sympy.Derivative, Differentiable):
     def _eval_deriv(self):
         return self._eval_fd(self.expr)
 
+    @property
+    def _eval_deriv_centre(self):
+        # TODO: ADD TESTS
+        whole_deriv_terms = self._eval_fd(self.expr).as_ordered_terms()
+        centre = [term for term in whole_deriv_terms if self.expr in term.args][0]
+        drop_expr = centre.replace(self.expr, 1)
+        return drop_expr
+
     def _eval_fd(self, expr, **kwargs):
         """
         Evaluate the finite-difference approximation of the Derivative.

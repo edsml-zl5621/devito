@@ -18,7 +18,7 @@ def lower_petsc(iet, **kwargs):
     # NOTE: Currently only considering the case when opt='noop'. This
     # does not deal with the Temp Expressions generated when opt is not set
     # to 'noop' etc.
-    # from IPython import embed; embed()
+
     # Find the largest Iteration loop containing the Action
     iter_expr_mapper = MapNodes(Iteration, ActionExpr).visit(iet)
 
@@ -28,22 +28,26 @@ def lower_petsc(iet, **kwargs):
         # TODO: Extend to multiple targets but for now assume
         # we are only solving 1 equation via PETSc.
         action_expr = next(iter(iter_expr_mapper.values()))
-        # from IPython import embed; embed()
+
         target = [i for i in action_expr[0].functions if not isinstance(i, PETScArray)][0]
 
         # Build PETSc objects required for the solve.
         petsc_objs = build_petsc_objects(target)
 
         # Extract the largest iteration loop containing the action expression
-        iteration = next(iter(iter_expr_mapper))
+        matvec_iteration = next(iter(iter_expr_mapper))
 
         # Build the struct that is needed within the matvec callback
-        struct = build_struct(iteration)
+        struct = build_struct(matvec_iteration)
 
         # Build the body of the matvec callback
-        matvec_body = build_matvec_body(iteration, petsc_objs, struct, action_expr)
+        matvec_body = build_matvec_body(matvec_iteration, petsc_objs, struct, action_expr)
 
-        matvec_callback, pre_callback, solve_body = build_solve(matvec_body, petsc_objs, struct)
+        # Build the body of the preconditioner callbacl
+        pre_body = build_pre_body(matvec_iteration, petsc_objs, struct, action_expr)
+
+        matvec_callback, pre_callback, solve_body = build_solve(matvec_body, pre_body,
+                                                                petsc_objs, struct)
 
         # Replace target with a PETScArray inside the matvec callback function.
         # NOTE: This is necessary because in the matrix-free algorithm, you need
@@ -58,7 +62,7 @@ def lower_petsc(iet, **kwargs):
         # the corresponding PETSc calls.
         # TODO: Eventually, this will be extended to deal with multiple different
         # 'actions' associated with different equations to solve.
-        action_mapper = {iteration: solve_body}
+        action_mapper = {matvec_iteration: solve_body}
         iet = Transformer(action_mapper).visit(iet)
 
         # Replace SetUpRHSExpr dummy with appropriate PETSc calls
@@ -98,11 +102,10 @@ def lower_petsc(iet, **kwargs):
         iet = Transformer({find_linsolve[0]: linsolve,
                            find_setuprhs[0]: setup_rhs}).visit(iet)
 
-        # iet = Transformer({find_setuprhs[0]: setup_rhs}).visit(iet)
-        
         # TODO: Obviously it won't be like this.
         kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/include')
-        kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/arch-linux-c-debug/include')
+        path = '/home/zl5621/petsc/arch-linux-c-debug/include'
+        kwargs['compiler'].add_include_dirs(path)
         kwargs['compiler'].add_libraries('petsc')
         libdir = '/home/zl5621/petsc/arch-linux-c-debug/lib'
         kwargs['compiler'].add_library_dirs(libdir)
@@ -128,6 +131,7 @@ def build_petsc_objects(target):
             'ksp': KSP(name='ksp'),
             'pc': PC(name='pc'),
             'err': PetscErrorCode(name='err'),
+            'reason': PetscErrorCode(name='reason'),
             'size': PetscMPIInt(name='size'),
             'xvec_tmp': (PETScArray(name='xvec_tmp', dtype=target.dtype,
                                     dimensions=target.dimensions,
@@ -210,6 +214,7 @@ def build_matvec_body(action, objs, struct, expr_target):
                       dm_vec_get_array_read,
                       dm_vec_get_array,
                       action,
+                      c.Line('yvec_tmp[0][0]= xvec_tmp[0][0];'),
                       dm_vec_restore_array_read,
                       dm_vec_restore_array,
                       dm_restore_local_vec,
@@ -222,7 +227,7 @@ def build_matvec_body(action, objs, struct, expr_target):
     return body
 
 
-def build_solve(matvec_body, objs, struct):
+def build_solve(matvec_body, pre_body, objs, struct):
     # TODO: Many of these args will be set based on user provided args in
     # PETScSolve
 
@@ -270,22 +275,19 @@ def build_solve(matvec_body, objs, struct):
                                parameters=(objs['A_matfree'],
                                            objs['xvec'],
                                            objs['yvec']))
-    
+
     pre_callback = Callable('preconditioner_callback',
-                               List(body=[c.Line('PetscFunctionBegin;')]),
-                               retval=objs['err'],
-                               parameters=(objs['A_matfree'],
-                                           objs['xvec'],
-                                           objs['yvec']))
-    
-    # from IPython import embed; embed()
+                            pre_body,
+                            retval=objs['err'],
+                            parameters=(objs['A_matfree'],
+                                        objs['yvec']))
 
     matvec_operation = Call('PetscCall', [Call('MatShellSetOperation',
                                                arguments=[objs['A_matfree'],
                                                           'MATOP_MULT',
                                                           Callback(matvec_callback.name,
                                                                    'void', 'void')])])
-    
+
     jacobi_operation = Call('PetscCall', [Call('MatShellSetOperation',
                                                arguments=[objs['A_matfree'],
                                                           'MATOP_GET_DIAGONAL',
@@ -295,7 +297,6 @@ def build_solve(matvec_body, objs, struct):
     set_context = Call('PetscCall', [Call('MatShellSetContext',
                                           arguments=[objs['A_matfree'],
                                                      struct])])
-
 
     body = List(body=[func_begin_user,
                       initialize,
@@ -345,6 +346,11 @@ def execute_solve(objs, b_tmp, sol_mapping, x_tmp):
                                                    objs['b'],
                                                    objs['x']])])
 
+    ksp_get_converged_reason = Call('PetscCall',
+                                    [Call('KSPGetConvergedReason',
+                                          arguments=[objs['ksp'],
+                                                     Byref(objs['reason'])])])
+
     dm_vec_get_array_x = Call('PetscCall', [Call('DMDAVecGetArray',
                                                  arguments=[objs['da'],
                                                             objs['x'],
@@ -354,7 +360,6 @@ def execute_solve(objs, b_tmp, sol_mapping, x_tmp):
                                                      arguments=[objs['da'],
                                                                 objs['x'],
                                                                 Byref(x_tmp)])])
-    
 
     ksp_create = Call('PetscCall', [Call('KSPCreate',
                                          arguments=['PETSC_COMM_SELF',
@@ -393,6 +398,9 @@ def execute_solve(objs, b_tmp, sol_mapping, x_tmp):
 
     # TODO: DESTROY OBJECTS
 
+    tmp_line = c.Line('PetscPrintf(PETSC_COMM_WORLD, "Convergence reason: %s", \
+                      KSPConvergedReasons[reason]);'),
+
     body = List(body=[dm_vec_restore_array_b,
                       ksp_create,
                       ksp_set_operators,
@@ -403,8 +411,51 @@ def execute_solve(objs, b_tmp, sol_mapping, x_tmp):
                       pc_jacobi_set_type,
                       ksp_set_from_opts,
                       ksp_solve,
+                      ksp_get_converged_reason,
+                      tmp_line,
                       dm_vec_get_array_x,
                       sol_mapping,
                       dm_vec_restore_array_x])
 
+    return body
+
+
+def build_pre_body(pre_iteration, objs, struct, expr_target):
+
+    get_context = Call('PetscCall', [Call('MatShellGetContext',
+                                          arguments=[objs['A_matfree'],
+                                                     Byref(struct)])])
+
+    mat_get_dm = Call('PetscCall', [Call('MatGetDM',
+                                         arguments=[objs['A_matfree'],
+                                                    Byref(objs['da'])])])
+
+    dm_vec_get_array = Call('PetscCall',
+                            [Call('DMDAVecGetArray',
+                                  arguments=[objs['da'],
+                                             objs['yvec'],
+                                             Byref(expr_target[0].write._C_symbol)])])
+
+    dm_vec_restore_array = Call(
+        'PetscCall',
+        [Call('DMDAVecRestoreArray', arguments=[objs['da'],
+                                                objs['yvec'],
+                                                Byref(expr_target[0].write._C_symbol)])])
+
+    func_return = Call('PetscFunctionReturn', arguments=[0])
+
+    body = List(header=c.Line('PetscFunctionBegin;'),
+                body=[Definition(struct),
+                      get_context,
+                      mat_get_dm,
+                      dm_vec_get_array,
+                      pre_iteration,
+                      c.Line('yvec_tmp[0][0]=1.;'),
+                      dm_vec_restore_array,
+                      func_return])
+
+    # Replace all symbols in the body that appear in the struct
+    # with a pointer to the struct.
+    for i in struct.usr_ctx:
+        body = Uxreplace({i: FieldFromPointer(i, struct)}).visit(body)
     return body

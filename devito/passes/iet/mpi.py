@@ -111,7 +111,6 @@ def _hoist_halospots(iet):
                         hsmapper[hs] = hsmapper[hs].drop(f)
                         imapper[i].append(hs.halo_scheme.project(f))
                         break
-
     # Post-process analysis
     mapper = {i: HaloSpot(i._rebuild(), HaloScheme.union(hss))
               for i, hss in imapper.items()}
