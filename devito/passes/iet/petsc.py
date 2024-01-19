@@ -7,7 +7,7 @@ from devito.types.petsc import (Mat, Vec, DM, PetscErrorCode, PETScStruct,
                                 PETScArray, PetscMPIInt, KSP, PC)
 from devito.symbolics import FieldFromPointer, Byref
 import cgen as c
-from devito.ir.equations.equation import OpSetUpRHS, OpLinSolve
+from devito.ir.equations.equation import OpSetUpRHS, OpLinSolve, OpPreStencil
 from functools import reduce
 
 
@@ -39,10 +39,14 @@ def lower_petsc(iet, **kwargs):
             struct = build_struct(iter[0])
 
             # Build the body of the matvec callback
-            matvec_body = build_matvec_body(iter[0], petsc_objs, struct, ae[0])
+            rebuild_matvec = iter[0]._rebuild(iter[-1]._rebuild(nodes=ae[0]))
+            matvec_body = build_matvec_body(rebuild_matvec, petsc_objs, struct, ae[0])
 
             # Build the body of the preconditioner callback
-            pre_body = build_pre_body(iter[0], petsc_objs, struct, ae[0])
+            tmp = FindNodes(Expression).visit(iter[0])
+            pre_stencil = [i for i in tmp if i.operation is OpPreStencil]
+            rebuild_pre = iter[0]._rebuild(iter[-1]._rebuild(nodes=pre_stencil[0]))
+            pre_body = build_pre_body(rebuild_pre, petsc_objs, struct, ae[0])
 
             matvec_callback, pre_callback, solve_body = build_solve(matvec_body, pre_body,
                                                                     petsc_objs, struct)
