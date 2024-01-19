@@ -38,7 +38,8 @@ u = TimeFunction(name='u', grid=grid, space_order=2)
 v = TimeFunction(name='v', grid=grid, space_order=2)
 pn = Function(name='pn', grid=grid, space_order=2)
 
-eq_pn = Eq(pn.laplace, rho*(((1./dt)*(u.dxc+v.dyc)) - (u.dxc*u.dxc + v.dyc*v.dyc + 2.*u.dyc*v.dxc)))
+rhs = rho*(((1./dt)*(u.dxc+v.dyc)) - (u.dxc*u.dxc + v.dyc*v.dyc + 2.*u.dyc*v.dxc))
+eq_pn = Eq(pn.laplace, rhs)
 
 petsc = PETScSolve(eq_pn, pn)
 
@@ -62,7 +63,7 @@ bc_u += [Eq(u[t+1, x, 0], 0.)]  # bottom
 bc_v = [Eq(v[t+1, 0, y], 0.)]  # left
 bc_v += [Eq(v[t+1, nx-1, y], 0.)]  # right
 bc_v += [Eq(v[t+1, x, ny-1], 0.)]  # top
-bc_v += [Eq(v[t+1, x, 0], 0.)] # bottom
+bc_v += [Eq(v[t+1, x, 0], 0.)]  # bottom
 
 # # Create the operator
 exprs = petsc + [update_u, update_v] + bc_u + bc_v
