@@ -78,19 +78,19 @@ def lower_petsc(iet, **kwargs):
 
                 # Replace the dummyeq2 with PETSc calls to execute the linear solve
                 find_linsolve = [i for i in exprs if i.operation is OpLinSolve]
-                x_tmp = PETScArray(name='xvec_tmp', dtype=target.dtype,
-                                   dimensions=target.dimensions,
-                                   shape=target.shape,
-                                   liveness='eager')
+
                 ##########################################################################
                 # THIS IS TEMPORARY: NEED TO THINK. MAYBE I WILL NOT EVEN NEED
                 # THE MAPPING AND X_TMP ARRAY
-                indices = (target.dimensions[0]+2, target.dimensions[1]+2)
+                x_tmp = PETScArray(name='xvec_tmp', dtype=target.dtype,
+                                   dimensions=target.dimensions,
+                                   shape=target.shape, liveness='eager')
+                indices = tuple(d + target.space_order for d in target.space_dimensions)
                 sol_expr = DummyExpr(target.indexify(indices=indices), x_tmp.indexify())
 
-                mapping_iters = [lambda ex, dim=dim: Iteration
-                                 (ex, dim, (dim.symbolic_min, dim.symbolic_max, 1))
-                                 for dim in target.dimensions]
+                mapping_iters = [lambda ex, d=d: Iteration
+                                 (ex, d, (d.symbolic_min, d.symbolic_max, 1))
+                                 for d in target.dimensions]
 
                 petsc_2_dev = reduce(lambda nested, mapping_iter: mapping_iter(nested),
                                      mapping_iters, sol_expr)
