@@ -68,6 +68,6 @@ bc_v += [Eq(v[t+1, x, 0], 0.)]  # bottom
 # # Create the operator
 exprs = petsc + [update_u, update_v] + bc_u + bc_v
 op = Operator(exprs, opt='noop')
-# op.apply(time_m=0, time_M=ns-1, dt=dt)
+op.apply(time_m=0, time_M=ns-1, dt=dt)
 print(op.ccode)
 # See petsc_solve.c for corresponding C code
