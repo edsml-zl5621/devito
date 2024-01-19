@@ -628,14 +628,12 @@ class Operator(Callable):
         args.update({k: v for k, v in kwargs.items() if k not in args})
 
         # Sanity check
-        # TEMP TURN OFF, OBVIOUSLY MY METHOD OF CREATING A TMP DEVITO FUNCTION TO
-        # BE PLACED INSIDE THE TIME DIMENSIONS BUT NOT THE SPATIAL DIMENSIONS IS BAD.
-        # for p in self.parameters:
-        #     p._arg_check(args, self._dspace[p], am=self._access_modes.get(p),
-        #                  **kwargs)
-        # for d in self.dimensions:
-        #     if d.is_Derived:
-        #         d._arg_check(args, self._dspace[p])
+        for p in self.parameters:
+            p._arg_check(args, self._dspace[p], am=self._access_modes.get(p),
+                         **kwargs)
+        for d in self.dimensions:
+            if d.is_Derived:
+                d._arg_check(args, self._dspace[p])
 
         # Turn arguments into a format suitable for the generated code
         # E.g., instead of NumPy arrays for Functions, the generated code expects

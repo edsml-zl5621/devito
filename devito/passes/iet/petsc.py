@@ -19,10 +19,11 @@ def lower_petsc(iet, **kwargs):
     # does not deal with the Temp Expressions generated when opt is not set
     # to 'noop' etc.
 
-    # Find the largest Iteration loop containing the Action
+    # Find the largest Iteration loop containing the ActionExpr
     iter_expr_mapper = MapNodes(Iteration, ActionExpr).visit(iet)
+    # from IPython import embed; embed()
 
-    if bool(iter_expr_mapper):
+    if iter_expr_mapper:
 
         # Find the original target (i.e the field we are solving for)
         # TODO: Extend to multiple targets but for now assume
