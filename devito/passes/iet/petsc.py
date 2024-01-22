@@ -90,7 +90,7 @@ def lower_petsc(iet, **kwargs):
 
                 mapping_iters = [lambda ex, d=d: Iteration
                                  (ex, d, (d.symbolic_min, d.symbolic_max, 1))
-                                 for d in target.dimensions]
+                                 for d in target.dimensions[::-1]]
 
                 petsc_2_dev = reduce(lambda nested, mapping_iter: mapping_iter(nested),
                                      mapping_iters, sol_expr)
