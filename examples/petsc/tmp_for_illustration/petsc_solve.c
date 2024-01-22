@@ -105,9 +105,9 @@ int Kernel(const float nu, struct dataobj *restrict pn_vec, const float rho, str
     PetscCall(KSPGetConvergedReason(ksp,&(reason)));
     PetscPrintf(PETSC_COMM_WORLD, "Convergence reason: %s",                       KSPConvergedReasons[reason]);
     PetscCall(DMDAVecGetArray(da,x,&xvec_tmp));
-    for (int y = y_m; y <= y_M; y += 1)
+    for (int x = x_m; x <= x_M; x += 1)
     {
-      for (int x = x_m; x <= x_M; x += 1)
+      for (int y = y_m; y <= y_M; y += 1)
       {
         pn[x + 2][y + 2] = xvec_tmp[x][y];
       }
