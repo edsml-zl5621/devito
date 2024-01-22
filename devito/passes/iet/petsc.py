@@ -48,7 +48,8 @@ def lower_petsc(iet, **kwargs):
             pre_body = build_pre_body(rebuild_pre, petsc_objs, struct, ae[0])
 
             matvec_callback, pre_callback, solve_body = build_solve(matvec_body, pre_body,
-                                                                    petsc_objs, struct)
+                                                                    petsc_objs, struct,
+                                                                    target)
 
             # Replace target with a PETScArray inside the matvec callback function.
             # NOTE: This is necessary because in the matrix-free algorithm, you need
@@ -225,7 +226,7 @@ def build_matvec_body(action, objs, struct, expr_target):
     return body
 
 
-def build_solve(matvec_body, pre_body, objs, struct):
+def build_solve(matvec_body, pre_body, objs, struct, target):
     # TODO: Many of these args will be set based on user provided args in
     # PETScSolve
 
@@ -241,13 +242,15 @@ def build_solve(matvec_body, pre_body, objs, struct):
                                           arguments=['PETSC_COMM_WORLD',
                                                      Byref(objs['size'])])])
 
-    # TODO: Create DM based on the dimensions of the target field
+    # TODO: Create DM based on the dimensions of the target field i.e
+    # this determines DMDACreate2d, 3d etc
     dm_create = Call('PetscCall', [Call('DMDACreate2d',
                                         arguments=['PETSC_COMM_SELF',
                                                    'DM_BOUNDARY_MIRROR',
                                                    'DM_BOUNDARY_MIRROR',
                                                    'DMDA_STENCIL_STAR',
-                                                   51, 51,
+                                                   target.shape[0],
+                                                   target.shape[1],
                                                    'PETSC_DECIDE',
                                                    'PETSC_DECIDE',
                                                    1, 1,

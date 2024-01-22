@@ -55,6 +55,9 @@ update_v = Eq(v.forward, stencil_v)
 u.data[0, :, -1] = 1.
 u.data[1, :, -1] = 1.
 
+v.data[0, :, -1] = 1.
+v.data[1, :, -1] = 1.
+
 # Create Dirichlet BC expressions for velocity
 bc_u = [Eq(u[t+1, x, ny-1], 1.)]  # top
 bc_u += [Eq(u[t+1, 0, y], 0.)]  # left
@@ -71,3 +74,8 @@ op = Operator(exprs, opt='noop')
 op.apply(time_m=0, time_M=ns-1, dt=dt)
 print(op.ccode)
 # See petsc_solve.c for corresponding C code
+
+import pandas as pd
+
+pd.DataFrame(u.data[-1,:,:]).to_csv("results/1.csv", header=None, index=None)
+pd.DataFrame(v.data[-1,:,:]).to_csv("results/2.csv", header=None, index=None)
