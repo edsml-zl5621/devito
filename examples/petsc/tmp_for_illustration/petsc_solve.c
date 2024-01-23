@@ -74,15 +74,22 @@ int Kernel(const float nu, struct dataobj *restrict pn_vec, const float rho, str
   PetscCall(MatShellSetOperation(A_matfree,MATOP_MULT,(void (*)(void))MyMatShellMult));
   PetscCall(MatShellSetOperation(A_matfree,MATOP_GET_DIAGONAL,(void (*)(void))preconditioner_callback));
   PetscCall(MatShellSetContext(A_matfree,ctx));
+  PetscCall(DMCreateGlobalVector(da,&(x)));
+  PetscCall(DMCreateGlobalVector(da,&(b)));
+  PetscCall(KSPCreate(PETSC_COMM_SELF,&(ksp)));
+  PetscCall(KSPSetOperators(ksp,A_matfree,A_matfree));
+  PetscCall(KSPSetTolerances(ksp,1.00000000000000e-7F,PETSC_DEFAULT,PETSC_DEFAULT,PETSC_DEFAULT));
+  PetscCall(KSPSetType(ksp,KSPGMRES));
+  PetscCall(KSPGetPC(ksp,&(pc)));
+  PetscCall(PCSetType(pc,PCJACOBI));
+  PetscCall(PCJacobiSetType(pc,PC_JACOBI_DIAGONAL));
+  PetscCall(KSPSetFromOptions(ksp));
   STOP(section0,timers)
 
   for (int time = time_m, t0 = (time)%(2), t1 = (time + 1)%(2); time <= time_M; time += 1, t0 = (time)%(2), t1 = (time + 1)%(2))
   {
-    PetscCall(DMCreateGlobalVector(da,&(x)));
-    PetscCall(DMCreateGlobalVector(da,&(b)));
-    PetscCall(DMDAVecGetArray(da,b,&b_tmp));
-
     START(section1)
+    PetscCall(DMDAVecGetArray(da,b,&b_tmp));
     for (int x = x_m; x <= x_M; x += 1)
     {
       for (int y = y_m; y <= y_M; y += 1)
@@ -93,14 +100,6 @@ int Kernel(const float nu, struct dataobj *restrict pn_vec, const float rho, str
     STOP(section1,timers)
 
     PetscCall(DMDAVecRestoreArray(da,b,&b_tmp));
-    PetscCall(KSPCreate(PETSC_COMM_SELF,&(ksp)));
-    PetscCall(KSPSetOperators(ksp,A_matfree,A_matfree));
-    PetscCall(KSPSetTolerances(ksp,1.00000000000000e-7F,PETSC_DEFAULT,PETSC_DEFAULT,PETSC_DEFAULT));
-    PetscCall(KSPSetType(ksp,KSPGMRES));
-    PetscCall(KSPGetPC(ksp,&(pc)));
-    PetscCall(PCSetType(pc,PCJACOBI));
-    PetscCall(PCJacobiSetType(pc,PC_JACOBI_DIAGONAL));
-    PetscCall(KSPSetFromOptions(ksp));
     PetscCall(KSPSolve(ksp,b,x));
     PetscCall(KSPGetConvergedReason(ksp,&(reason)));
     PetscPrintf(PETSC_COMM_WORLD, "Convergence reason: %s",                       KSPConvergedReasons[reason]);

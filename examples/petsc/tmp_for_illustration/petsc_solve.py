@@ -1,5 +1,6 @@
 from devito import *
 from devito.types import PETScSolve
+import pandas as pd
 from devito import configuration
 configuration['opt'] = 'noop'
 
@@ -74,7 +75,5 @@ op.apply(time_m=0, time_M=ns-1, dt=dt)
 print(op.ccode)
 # See petsc_solve.c for corresponding C code
 
-import pandas as pd
-
-pd.DataFrame(u.data[-1,:,:]).to_csv("results/1.csv", header=None, index=None)
-pd.DataFrame(v.data[-1,:,:]).to_csv("results/2.csv", header=None, index=None)
+pd.DataFrame(u.data[-1, :, :]).to_csv("results/1.csv", header=None, index=None)
+pd.DataFrame(v.data[-1, :, :]).to_csv("results/2.csv", header=None, index=None)

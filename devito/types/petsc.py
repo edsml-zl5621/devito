@@ -147,10 +147,9 @@ class RHS(Eq):
     pass
 
 
-class SetUpRHS(Eq):
+class PreStencil(Eq):
     """
-    Dummy Eq which will be replaced with the PETSc calls to
-    setup RHS of linear system.
+    Eq needed for the preconditioner callback.
     """
     pass
 
@@ -159,13 +158,6 @@ class LinSolve(Eq):
     """
     Dummy Eq which will be replaced with the PETSc calls to
     execute the linear solve.
-    """
-    pass
-
-
-class PreStencil(Eq):
-    """
-    Eq needed for the preconditioner callback.
     """
     pass
 
@@ -203,11 +195,9 @@ def PETScSolve(eq, target, **kwargs):
     from devito.types.array import Array
     if any(d.is_Time for d in eq.rhs.dimensions):
         dummy1 = Array(name='dummy1', dimensions=(target.grid.time_dim,), shape=(1,))
-        dummyeq1 = SetUpRHS(dummy1, 2)
-        dummy2 = Array(name='dummy2', dimensions=(target.grid.time_dim,), shape=(1,))
-        dummyeq2 = LinSolve(dummy2, 2)
+        dummyeq1 = LinSolve(dummy1, 1)
 
-    return [preconditioner] + [action] + [dummyeq1] + [rhs] + [dummyeq2]
+    return [preconditioner] + [action] + [rhs] + [dummyeq1]
 
 
 class PETScStruct(CompositeObject):
