@@ -8,10 +8,10 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
 from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import Eq, Inc, ReduceMax, ReduceMin
-from devito.types.petsc import Action, RHS, PreStencil, LinSolve
+from devito.types.petsc import Action, RHS, PreStencil, PETScDummy
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
-           'OpAction', 'OpRHS', 'OpPreStencil', 'OpLinSolve']
+           'OpAction', 'OpRHS', 'OpPreStencil', 'OpPETScDummy']
 
 
 class IREq(sympy.Eq, Pickable):
@@ -101,7 +101,7 @@ class Operation(Tag):
             ReduceMin: OpMin,
             Action: OpAction,
             RHS: OpRHS,
-            LinSolve: OpLinSolve,
+            PETScDummy: OpPETScDummy,
             PreStencil: OpPreStencil,
         }
         try:
@@ -122,7 +122,7 @@ OpMin = Operation('min')
 OpAction = Operation('action')
 OpRHS = Operation('rhs')
 OpPreStencil = Operation('pre_stencil')
-OpLinSolve = Operation('linsolve')
+OpPETScDummy = Operation('dummy')
 
 
 class LoweredEq(IREq):

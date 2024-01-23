@@ -10,7 +10,7 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpAction, OpRHS
+from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpAction, OpRHS, OpPETScDummy
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, detect_io)
@@ -21,14 +21,14 @@ from devito.types.basic import (AbstractFunction, AbstractSymbol, Basic, Indexed
                                 Symbol)
 from devito.types.object import AbstractObject, LocalObject
 
-__all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
-           'Call', 'ExprStmt', 'Conditional', 'Iteration', 'List', 'Section',
-           'TimedList', 'Prodder', 'MetaCall', 'PointerCast', 'HaloSpot',
-           'Definition', 'ExpressionBundle', 'AugmentedExpression',
-           'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
-           'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
-           'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'ActionExpr', 'RHSExpr']
+__all__ = ['Node', 'Block', 'Expression', 'Callable', 'Call', 'ExprStmt',
+           'Conditional', 'Iteration', 'List', 'Section', 'TimedList', 'Prodder',
+           'MetaCall', 'PointerCast', 'HaloSpot', 'Definition', 'ExpressionBundle',
+           'AugmentedExpression', 'Increment', 'Return', 'While', 'ListMajor',
+           'ParallelIteration', 'ParallelBlock', 'Dereference', 'Lambda',
+           'SyncSpot', 'Pragma', 'DummyExpr', 'BlankLine', 'ParallelTree',
+           'BusyWait', 'CallableBody', 'Transfer', 'Callback', 'ActionExpr',
+           'RHSExpr', 'PETScDumExpr']
 
 # First-class IET nodes
 
@@ -493,6 +493,12 @@ class ActionExpr(Expression):
 class RHSExpr(Expression):
 
     def __init__(self, expr, pragmas=None, operation=OpRHS):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
+
+
+class PETScDumExpr(Expression):
+
+    def __init__(self, expr, pragmas=None, operation=OpPETScDummy):
         super().__init__(expr, pragmas=pragmas, operation=operation)
 
 

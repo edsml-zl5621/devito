@@ -136,7 +136,21 @@ class Action(Eq):
     operator to a vector. This is a key component
     for running matrix-free solvers.
     """
-    pass
+
+    __rkwargs__ = (Eq.__rkwargs__ + ('target',))
+
+    def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
+                target=None, **kwargs):
+        obj = Eq.__new__(cls, lhs, rhs, subdomain=subdomain, coefficients=coefficients,
+                         implicit_dims=implicit_dims, **kwargs)
+        obj._target = target
+
+        return obj
+    
+    @property
+    def target(self):
+        return self._target
+
 
 
 class RHS(Eq):
@@ -154,7 +168,7 @@ class PreStencil(Eq):
     pass
 
 
-class LinSolve(Eq):
+class PETScDummy(Eq):
     """
     Dummy Eq which will be replaced with the PETSc calls to
     execute the linear solve.
@@ -181,9 +195,9 @@ def PETScSolve(eq, target, **kwargs):
 
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
-    action = Action(yvec_tmp, eq.lhs.evaluate)
+    action = Action(yvec_tmp, eq.lhs, target=target)
 
-    rhs = RHS(b_tmp, eq.rhs.evaluate)
+    rhs = RHS(b_tmp, eq.rhs)
 
     preconditioner = PreStencil(yvec_tmp, centre_stencil)
 
@@ -192,12 +206,79 @@ def PETScSolve(eq, target, **kwargs):
 
     # TODO: Figure this out properly. Will become clearer when solving eqns
     # fully implicitly in time.
-    from devito.types.array import Array
-    if any(d.is_Time for d in eq.rhs.dimensions):
-        dummy1 = Array(name='dummy1', dimensions=(target.grid.time_dim,), shape=(1,))
-        dummyeq1 = LinSolve(dummy1, 1)
+    # from devito.types.array import Array
+    # if any(d.is_Time for d in eq.rhs.dimensions):
+    #     dummy1 = Array(name='dummy1', dimensions=(target.grid.time_dim,), shape=(1,))
+    #     dummyeq1 = LinSolve(dummy1, 1)
 
-    return [preconditioner] + [action] + [rhs] + [dummyeq1]
+    # dummyeq1 = Eq()
+    # from IPython import embed; embed()
+
+    # from devito import Constant, Grid, TimeFunction, solve, Function
+
+    # rho = Constant(name='rho')
+    # nu = Constant(name='nu')
+
+    # rho.data = 1.
+    # nu.data = 1./10.
+
+    # Lx = 1.
+    # Ly = Lx
+
+    # # Number of grid points in each direction
+    # nx = 51
+    # ny = nx
+
+    # # mesh spacing
+    # dx = Lx/(nx-1)
+    # dy = Ly/(ny-1)
+
+    # grid = Grid(shape=(nx, ny), extent=(Lx, Ly))
+
+    # # time stepping parameters
+    # dt = 1e-3
+    # t_end = 1.
+    # ns = int(t_end/dt)
+
+    # u = TimeFunction(name='u', grid=grid, space_order=2)
+    # v = TimeFunction(name='v', grid=grid, space_order=2)
+    # pn = Function(name='pn', grid=grid, space_order=2)
+
+    # eq_u = Eq(u.dt + u*u.dxc + v*u.dyc - nu*u.laplace, -1./rho*pn.dxc)
+
+    # stencil_u = solve(eq_u, u.forward)
+
+    # update_u = Eq(u.forward, stencil_u)
+
+    # dummy = Eq(target, b_tmp)
+
+    # from IPython import embed; embed()
+    return [preconditioner] + [action] + [rhs]
+    # return [preconditioner] + [action] + [rhs]
+
+
+def lower_petsc_exprs(expressions, **kwargs):
+
+    petsc_target = [expr.target for expr in expressions if isinstance(expr, Action)]
+
+    # Find RHS equation which we need to potentially separate
+    # if other equations depend on it
+    rhs = [expr for expr in expressions if isinstance(expr, RHS)]
+    
+    # Checks to see if any of the equations depend on petsc_target
+    # and if so it makes sure that the RHS loop is executed before.
+    if any(
+        not isinstance(expr, (Action, PreStencil, RHS)) and
+        str(petsc_target[0].base) in [str(sym) for sym in expr.rhs.atoms()]
+        for expr in expressions):
+
+        index_after_rhs = next((i for i, expr in enumerate(expressions) if isinstance(expr, RHS)), None)
+
+        if index_after_rhs:
+            new_eq_instance = PETScDummy(petsc_target[0], rhs[0].lhs)
+            expressions.insert(index_after_rhs + 1, new_eq_instance)
+
+    return expressions
 
 
 class PETScStruct(CompositeObject):

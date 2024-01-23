@@ -2,12 +2,12 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (List, Callable, Call, Transformer,
                            Callback, Definition, Uxreplace, FindSymbols,
                            Iteration, MapNodes, ActionExpr, RHSExpr,
-                           FindNodes, Expression, DummyExpr)
+                           FindNodes, Expression, DummyExpr, PETScDumExpr)
 from devito.types.petsc import (Mat, Vec, DM, PetscErrorCode, PETScStruct,
                                 PETScArray, PetscMPIInt, KSP, PC)
 from devito.symbolics import FieldFromPointer, Byref
 import cgen as c
-from devito.ir.equations.equation import OpPreStencil, OpLinSolve
+from devito.ir.equations.equation import OpPreStencil
 from functools import reduce
 
 
@@ -22,6 +22,8 @@ def lower_petsc(iet, **kwargs):
 
     # Find Iteration containing the ActionExpr
     iter_ae_mapper = MapNodes(Iteration, ActionExpr, 'groupby').visit(iet)
+
+    # from IPython import embed; embed()
 
     if iter_ae_mapper:
 
@@ -67,16 +69,11 @@ def lower_petsc(iet, **kwargs):
             iet = Transformer(action_mapper).visit(iet)
 
             iter_rhs_mapper = MapNodes(Iteration, RHSExpr, 'groupby').visit(iet)
+   
             for iter_rhs, rhs_expr in iter_rhs_mapper.items():
 
-                # from IPython import embed; embed()
 
                 setup_rhs = build_rhs_setup(petsc_objs, rhs_expr[0].write)
-
-                exprs = FindNodes(Expression).visit(iter_rhs)
-
-                # Replace the dummyeq1 with PETSc calls to execute the linear solve
-                find_linsolve = [i for i in exprs if i.operation is OpLinSolve]
 
                 ##########################################################################
                 # THIS IS TEMPORARY: NEED TO THINK. MAYBE I WILL NOT EVEN NEED
@@ -100,20 +97,28 @@ def lower_petsc(iet, **kwargs):
 
                 # iter_rhs[1] is just the spatial loop. Is there a way of just
                 # obtaining the spatial loop not time?
-                iet = Transformer({iter_rhs[1]: List(body=[setup_rhs, iter_rhs[1]]),
-                                   find_linsolve[0]: List(body=[linsolve])}).visit(iet)
 
-                # TODO: Obviously it won't be like this.
-                kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/include')
-                path = '/home/zl5621/petsc/arch-linux-c-debug/include'
-                kwargs['compiler'].add_include_dirs(path)
-                kwargs['compiler'].add_libraries('petsc')
-                libdir = '/home/zl5621/petsc/arch-linux-c-debug/lib'
-                kwargs['compiler'].add_library_dirs(libdir)
-                kwargs['compiler'].add_ldflags('-Wl,-rpath,%s' % libdir)
+                iet = Transformer({iter_rhs[1]: List(body=[setup_rhs, iter_rhs[1], linsolve])}).visit(iet)
 
-                return iet, {'efuncs': [matvec_callback, pre_callback],
-                             'includes': ['petscksp.h', 'petscdmda.h']}
+
+            # drop any PETScDummys
+            dummy_mapper = MapNodes(Iteration, PETScDumExpr, 'groupby').visit(iet)
+            for iter_dummy, dummy in dummy_mapper.items():
+                # from IPython import embed; embed()
+                iet = Transformer({iter_dummy[0]: None}).visit(iet)
+
+
+            # TODO: Obviously it won't be like this.
+            kwargs['compiler'].add_include_dirs('/home/zl5621/petsc/include')
+            path = '/home/zl5621/petsc/arch-linux-c-debug/include'
+            kwargs['compiler'].add_include_dirs(path)
+            kwargs['compiler'].add_libraries('petsc')
+            libdir = '/home/zl5621/petsc/arch-linux-c-debug/lib'
+            kwargs['compiler'].add_library_dirs(libdir)
+            kwargs['compiler'].add_ldflags('-Wl,-rpath,%s' % libdir)
+
+            return iet, {'efuncs': [matvec_callback, pre_callback],
+                            'includes': ['petscksp.h', 'petscdmda.h']}
 
     return iet, {}
 
