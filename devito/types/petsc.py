@@ -261,22 +261,24 @@ def lower_petsc_exprs(expressions, **kwargs):
 
     petsc_target = [expr.target for expr in expressions if isinstance(expr, Action)]
 
-    # Find RHS equation which we need to potentially separate
-    # if other equations depend on it
-    rhs = [expr for expr in expressions if isinstance(expr, RHS)]
-    
-    # Checks to see if any of the equations depend on petsc_target
-    # and if so it makes sure that the RHS loop is executed before.
-    if any(
-        not isinstance(expr, (Action, PreStencil, RHS)) and
-        str(petsc_target[0].base) in [str(sym) for sym in expr.rhs.atoms()]
-        for expr in expressions):
+    if petsc_target:
 
-        index_after_rhs = next((i for i, expr in enumerate(expressions) if isinstance(expr, RHS)), None)
+        # Find RHS equation which we need to potentially separate
+        # if other equations depend on it
+        rhs = [expr for expr in expressions if isinstance(expr, RHS)]
+        
+        # Checks to see if any of the equations depend on petsc_target
+        # and if so it makes sure that the RHS loop is executed before.
+        if any(
+            not isinstance(expr, (Action, PreStencil, RHS)) and
+            str(petsc_target[0].base) in [str(sym) for sym in expr.rhs.atoms()]
+            for expr in expressions):
 
-        if index_after_rhs:
-            new_eq_instance = PETScDummy(petsc_target[0], rhs[0].lhs)
-            expressions.insert(index_after_rhs + 1, new_eq_instance)
+            index_after_rhs = next((i for i, expr in enumerate(expressions) if isinstance(expr, RHS)), None)
+
+            if index_after_rhs:
+                new_eq_instance = PETScDummy(petsc_target[0], rhs[0].lhs)
+                expressions.insert(index_after_rhs + 1, new_eq_instance)
 
     return expressions
 
