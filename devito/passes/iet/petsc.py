@@ -104,8 +104,8 @@ def lower_petsc(iet, **kwargs):
             # drop any PETScDummys
             dummy_mapper = MapNodes(Iteration, PETScDumExpr, 'groupby').visit(iet)
             for iter_dummy, dummy in dummy_mapper.items():
-                # from IPython import embed; embed()
-                iet = Transformer({iter_dummy[0]: None}).visit(iet)
+                # It is 1 because it is within the time loop. Edit this.
+                iet = Transformer({iter_dummy[1]: None}).visit(iet)
 
 
             # TODO: Obviously it won't be like this.

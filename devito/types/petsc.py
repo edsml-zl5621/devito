@@ -211,48 +211,7 @@ def PETScSolve(eq, target, **kwargs):
     #     dummy1 = Array(name='dummy1', dimensions=(target.grid.time_dim,), shape=(1,))
     #     dummyeq1 = LinSolve(dummy1, 1)
 
-    # dummyeq1 = Eq()
-    # from IPython import embed; embed()
 
-    # from devito import Constant, Grid, TimeFunction, solve, Function
-
-    # rho = Constant(name='rho')
-    # nu = Constant(name='nu')
-
-    # rho.data = 1.
-    # nu.data = 1./10.
-
-    # Lx = 1.
-    # Ly = Lx
-
-    # # Number of grid points in each direction
-    # nx = 51
-    # ny = nx
-
-    # # mesh spacing
-    # dx = Lx/(nx-1)
-    # dy = Ly/(ny-1)
-
-    # grid = Grid(shape=(nx, ny), extent=(Lx, Ly))
-
-    # # time stepping parameters
-    # dt = 1e-3
-    # t_end = 1.
-    # ns = int(t_end/dt)
-
-    # u = TimeFunction(name='u', grid=grid, space_order=2)
-    # v = TimeFunction(name='v', grid=grid, space_order=2)
-    # pn = Function(name='pn', grid=grid, space_order=2)
-
-    # eq_u = Eq(u.dt + u*u.dxc + v*u.dyc - nu*u.laplace, -1./rho*pn.dxc)
-
-    # stencil_u = solve(eq_u, u.forward)
-
-    # update_u = Eq(u.forward, stencil_u)
-
-    # dummy = Eq(target, b_tmp)
-
-    # from IPython import embed; embed()
     return [preconditioner] + [action] + [rhs]
     # return [preconditioner] + [action] + [rhs]
 
@@ -266,7 +225,7 @@ def lower_petsc_exprs(expressions, **kwargs):
         # Find RHS equation which we need to potentially separate
         # if other equations depend on it
         rhs = [expr for expr in expressions if isinstance(expr, RHS)]
-        
+
         # Checks to see if any of the equations depend on petsc_target
         # and if so it makes sure that the RHS loop is executed before.
         if any(
@@ -277,7 +236,7 @@ def lower_petsc_exprs(expressions, **kwargs):
             index_after_rhs = next((i for i, expr in enumerate(expressions) if isinstance(expr, RHS)), None)
 
             if index_after_rhs:
-                new_eq_instance = PETScDummy(petsc_target[0], rhs[0].lhs)
+                new_eq_instance = PETScDummy(petsc_target[0], rhs[0].lhs*rhs[0].rhs.dimensions[0])
                 expressions.insert(index_after_rhs + 1, new_eq_instance)
 
     return expressions
