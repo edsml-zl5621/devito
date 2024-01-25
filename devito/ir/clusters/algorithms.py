@@ -387,8 +387,10 @@ class PETScDep(Queue):
 
             for eq in clus.exprs:
                 if eq.operation is OpRHS:
-                    indices = tuple(d+1 for d in eq.lhs.function.dimensions)
-                    expr = Eq(eq.lhs.function.indexify(indices=indices), eq.rhs)
+
+                    x_idx = eq.lhs.function.dimensions[0] + 1
+                    y_idx = eq.lhs.function.dimensions[1]
+                    expr = Eq(eq.lhs.function.indexify(indices=(x_idx, y_idx)), eq.rhs)
 
                     dummy = clus.rebuild(exprs=expr)
                     
