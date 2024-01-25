@@ -195,11 +195,30 @@ def PETScSolve(eq, target, **kwargs):
 
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
-    action = Action(yvec_tmp, eq.lhs, target=target)
+    # action = Action(yvec_tmp, eq.lhs, target=target)
 
     rhs = RHS(b_tmp, eq.rhs)
 
-    preconditioner = PreStencil(yvec_tmp, centre_stencil)
+    # preconditioner = PreStencil(yvec_tmp, centre_stencil)
+    from devito.types import Symbol
+    s0 = Symbol(name='s0')
+    s1 = Symbol(name='s1')
+    from devito.types import Array, CriticalRegion, Jump, Scalar
+    # from IPython import embed; embed()
+    exprs = [Eq(s0, CriticalRegion(True)),
+                rhs,
+                Eq(s1, CriticalRegion(False))]
+    
+    preconditioner = [Eq(s0, CriticalRegion(True)),
+                PreStencil(yvec_tmp, centre_stencil),
+                Eq(s1, CriticalRegion(True))]
+    
+    action = [Eq(s0, CriticalRegion(True)),
+                Action(yvec_tmp, eq.lhs, target=target),
+                Eq(s1, CriticalRegion(True))]
+    
+    # from IPython import embed; embed()
+    # exprs = [LoweredEq(i) for i in exprs]
 
     # # To force separate the action and preconditioner eqns into distinct/separate loops
     # dum = Eq(target, yvec_tmp)
@@ -212,7 +231,7 @@ def PETScSolve(eq, target, **kwargs):
     #     dummyeq1 = LinSolve(dummy1, 1)
 
 
-    return [preconditioner] + [action] + [rhs]
+    return preconditioner + action + exprs
 
 
 # def lower_petsc_exprs(expressions, **kwargs):
