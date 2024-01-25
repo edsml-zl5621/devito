@@ -23,8 +23,6 @@ def lower_petsc(iet, **kwargs):
     # Find Iteration containing the ActionExpr
     iter_ae_mapper = MapNodes(Iteration, ActionExpr, 'groupby').visit(iet)
 
-    # from IPython import embed; embed()
-
     if iter_ae_mapper:
 
         # TODO: Extend to multiple targets but for now assume
@@ -97,15 +95,13 @@ def lower_petsc(iet, **kwargs):
 
                 # iter_rhs[1] is just the spatial loop. Is there a way of just
                 # obtaining the spatial loop not time?
-
                 iet = Transformer({iter_rhs[1]: List(body=[setup_rhs, iter_rhs[1], linsolve])}).visit(iet)
-
 
             # drop any PETScDummys
             dummy_mapper = MapNodes(Iteration, PETScDumExpr, 'groupby').visit(iet)
             for iter_dummy, dummy in dummy_mapper.items():
                 # It is 1 because it is within the time loop. Edit this.
-                iet = Transformer({iter_dummy[1]: None}).visit(iet)
+                iet = Transformer({dummy[0]: None}).visit(iet)
 
 
             # TODO: Obviously it won't be like this.

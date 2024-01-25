@@ -213,33 +213,26 @@ def PETScSolve(eq, target, **kwargs):
 
 
     return [preconditioner] + [action] + [rhs]
-    # return [preconditioner] + [action] + [rhs]
 
 
-def lower_petsc_exprs(expressions, **kwargs):
+# def lower_petsc_exprs(expressions, **kwargs):
 
-    petsc_target = [expr.target for expr in expressions if isinstance(expr, Action)]
+#     # Always create dummy alongside RHS expression to force separate it from
+#     # other equations.
 
-    if petsc_target:
+#     # rhs_exprs = [expr for expr in expressions if isinstance(expr, RHS)]
 
-        # Find RHS equation which we need to potentially separate
-        # if other equations depend on it
-        rhs = [expr for expr in expressions if isinstance(expr, RHS)]
+#     rhs_mapper = {expr: i for i, expr in enumerate(expressions) if isinstance(expr, RHS)}
+#     from IPython import embed; embed()
+#     # for rhs in rhs_exprs:
 
-        # Checks to see if any of the equations depend on petsc_target
-        # and if so it makes sure that the RHS loop is executed before.
-        if any(
-            not isinstance(expr, (Action, PreStencil, RHS)) and
-            str(petsc_target[0].base) in [str(sym) for sym in expr.rhs.atoms()]
-            for expr in expressions):
+#     #     from IPython import embed; embed()
+#     #     index_after_rhs = next((i for i, expr in enumerate(expressions) if isinstance(expr, RHS)), None)
+#     #     indices = tuple(d + 1 for d in rhs[0].lhs.function.dimensions)
+#     #     new_eq_instance = PETScDummy(rhs[0].lhs.function.indexify(indices=indices), rhs[0].rhs)
+#     #     expressions.insert(index_after_rhs + 1, new_eq_instance)
 
-            index_after_rhs = next((i for i, expr in enumerate(expressions) if isinstance(expr, RHS)), None)
-
-            if index_after_rhs:
-                new_eq_instance = PETScDummy(petsc_target[0], rhs[0].lhs*rhs[0].rhs.dimensions[0])
-                expressions.insert(index_after_rhs + 1, new_eq_instance)
-
-    return expressions
+#     return expressions
 
 
 class PETScStruct(CompositeObject):

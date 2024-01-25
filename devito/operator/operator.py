@@ -28,7 +28,7 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_tuple, flatten
                           filter_sorted, frozendict, is_integer, split, timed_pass,
                           timed_region, contains_val)
 from devito.types import Grid, Evaluable, SubFunction
-from devito.types.petsc import lower_petsc_exprs
+# from devito.types.petsc import lower_petsc_exprs
 
 __all__ = ['Operator']
 
@@ -317,7 +317,6 @@ class Operator(Callable):
         # Specialization is performed on unevaluated expressions
         expressions = cls._specialize_dsl(expressions, **kwargs)
 
-        # expressions = lower_petsc_exprs(expressions, **kwargs)
         # Lower FD derivatives
         # NOTE: we force expansion of derivatives along SteppingDimensions
         # because it drastically simplifies the subsequent lowering into
@@ -335,7 +334,7 @@ class Operator(Callable):
         # "True" lowering (indexification, shifting, ...)
         expressions = lower_exprs(expressions, **kwargs)
 
-        expressions = lower_petsc_exprs(expressions, **kwargs)
+        # expressions = lower_petsc_exprs(expressions, **kwargs)
 
         processed = [LoweredEq(i) for i in expressions]
 
@@ -465,7 +464,7 @@ class Operator(Callable):
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
 
-        lower_petsc(graph, **kwargs)
+        # lower_petsc(graph, **kwargs)
 
         graph = cls._specialize_iet(graph, **kwargs)
         # Instrument the IET for C-level profiling

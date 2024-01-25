@@ -50,6 +50,8 @@ def clusterize(exprs, **kwargs):
     # Derive the necessary communications for distributed-memory parallelism
     clusters = Communications().process(clusters)
 
+    clusters = PETScDep().process(clusters)
+
     return ClusterGroup(clusters)
 
 
@@ -363,6 +365,39 @@ class Stepper(Queue):
             processed.append(c.rebuild(exprs=exprs, ispace=ispace))
 
         return processed
+
+
+class PETScDep(Queue):
+
+    @timed_pass(name='communications')
+    def process(self, clusters):
+        return self._process_fatd(clusters, 1, seen=set())
+
+    def callback(self, clusters, prefix, seen=None):
+        if not prefix:
+            return clusters
+        # Always enforce a separation of the RHS equation.
+
+        from devito.ir.equations.equation import OpRHS
+
+        for i, clus in enumerate(clusters):
+            if clus in seen:
+                continue
+
+            for eq in clus.exprs:
+                if eq.operation is OpRHS:
+                    b_tmp = [a.access for a in clus.scope.accesses if a.is_write][0].function
+                    indices = tuple(d+1 for d in b_tmp.dimensions)
+                    expr = Eq(b_tmp.indexify(indices=indices), eq.rhs)
+
+                    dummy = clus.rebuild(exprs=expr)
+
+                    # processed.append(dummy)
+                    seen.update({dummy, clus})
+
+                    clusters.insert(i+1, dummy)
+
+        return clusters
 
 
 class Communications(Queue):
