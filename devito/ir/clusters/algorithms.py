@@ -381,18 +381,17 @@ class PETScDep(Queue):
         from devito.ir.equations.equation import OpRHS
 
         for i, clus in enumerate(clusters):
+
             if clus in seen:
                 continue
 
             for eq in clus.exprs:
                 if eq.operation is OpRHS:
-                    b_tmp = [a.access for a in clus.scope.accesses if a.is_write][0].function
-                    indices = tuple(d+1 for d in b_tmp.dimensions)
-                    expr = Eq(b_tmp.indexify(indices=indices), eq.rhs)
+                    indices = tuple(d+1 for d in eq.lhs.function.dimensions)
+                    expr = Eq(eq.lhs.function.indexify(indices=indices), eq.rhs)
 
                     dummy = clus.rebuild(exprs=expr)
-
-                    # processed.append(dummy)
+                    
                     seen.update({dummy, clus})
 
                     clusters.insert(i+1, dummy)
