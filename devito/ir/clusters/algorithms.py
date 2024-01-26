@@ -30,8 +30,7 @@ def clusterize(exprs, **kwargs):
     """
     # Initialization
     clusters = [Cluster(e, e.ispace) for e in exprs]
-    # from IPython import embed; embed()
-    # clusters = PETScDep().process(clusters)
+
     # Setup the IterationSpaces based on data dependence analysis
     clusters = impose_total_ordering(clusters)
     clusters = Schedule().process(clusters)
@@ -50,8 +49,6 @@ def clusterize(exprs, **kwargs):
 
     # Derive the necessary communications for distributed-memory parallelism
     clusters = Communications().process(clusters)
-
-    # clusters = PETScDep().process(clusters)
 
     return ClusterGroup(clusters)
 
@@ -364,122 +361,6 @@ class Stepper(Queue):
                                     c.ispace.directions)
 
             processed.append(c.rebuild(exprs=exprs, ispace=ispace))
-
-        return processed
-
-
-# class PETScDep(Queue):
-
-#     @timed_pass(name='communications')
-#     def process(self, clusters):
-#         return self._process_fatd(clusters, 1, seen=set())
-
-#     def callback(self, clusters, prefix, seen=None):
-#         if not prefix:
-#             return clusters
-#         # Always enforce a separation of the RHS equation.
-
-#         from devito.ir.equations.equation import OpRHS
-
-#         for i, clus in enumerate(clusters):
-
-#             if clus in seen:
-#                 continue
-
-#             for eq in clus.exprs:
-#                 if eq.operation is OpRHS:
-
-#                     x_idx = eq.lhs.function.dimensions[0] + 1
-#                     y_idx = eq.lhs.function.dimensions[1]
-#                     from devito.types import Symbol
-#                     tmp = Symbol(name='tmp')
-#                     # from IPython import embed; embed()
-#                     # expr = Eq(tmp, eq.rhs*eq.lhs.function.indexify(indices=(x_idx, y_idx)))
-#                     expr = Eq(tmp, eq.rhs*eq.lhs.function.indexify(indices=(x_idx, y_idx)))
-                    
-#                     dummy = clus.rebuild(exprs=expr)
-                    
-#                     seen.update({dummy, clus})
-
-#                     clusters.insert(i+1, dummy)
-
-#         return clusters
-
-
-class PETScDep(Queue):
-
-    _q_guards_in_key = True
-    _q_properties_in_key = True
-
-    B = Symbol(name='dep_symb')
-
-    @timed_pass(name='communications')
-    def process(self, clusters):
-        return self._process_fatd(clusters, 1, seen=set())
-
-    def callback(self, clusters, prefix, seen=None):
-        if not prefix:
-            return clusters
-
-        # from IPython import embed; embed()
-        d = prefix[-1].dim
-        # from IPython import embed; embed()
-        # Construct a representation of the halo accesses
-        processed = []
-        for c in clusters:
-            if c.properties.is_sequential(d) or \
-               c in seen:
-                continue
-
-            hs = HaloScheme(c.exprs, c.ispace)
-            if hs.is_void or \
-               not d._defines & hs.distributed_aindices:
-                continue
-            # from IPython import embed; embed()
-            points = set()
-            for f in hs.fmapper:
-                for a in c.scope.getreads(f):
-                    points.add(a.access)
-            # from IPython import embed; embed()
-            # We also add all written symbols to ultimately create mock WARs
-            # with `c`, which will prevent the newly created HaloTouch to ever
-            # be rescheduled after `c` upon topological sorting
-            # points.update(a.access for a in c.scope.accesses if a.is_write)
-            # from IPython import embed; embed()
-            tmp = [a.access for a in c.scope.accesses if a.is_write]
-            # # from IPython import embed; embed()
-            # if str(tmp[0]) == 'b_tmp[x, y]':
-            # points.update(tmp[0].function.indexify(indices=(tmp[0].dimensions[0]+1, tmp[0].dimensions[1])))
-            # Sort for determinism
-            # NOTE: not sorting might impact code generation. The order of
-            # the args is important because that's what search functions honor!
-            points = sorted(points, key=str)
-            # from IPython import embed; embed()
-            
-            from devito.ir.equations.equation import OpRHS
-            # if c.exprs[0].operation is OpRHS:
-            
-                # from IPython import embed; embed()
-            # Construct the HaloTouch Cluster
-            # expr = Eq(self.B, HaloTouch(*points, halo_scheme=hs))
-            # expr = Eq(self.B, sum(points))
-            # from IPython import embed; embed()
-            # if str(tmp[0].function) == 'b_tmp(x, y)':
-            expr = Eq(self.B, tmp[0].function.indexify(indices=(tmp[0].dimensions[0]+1, tmp[0].dimensions[1])))
-   
-            # from IPython import embed; embed()
-            key = lambda i: i in prefix[::-1] or i in hs.loc_indices
-            # from IPython import embed; embed()
-            ispace = c.ispace.project(key)
-
-            dummy = c.rebuild(exprs=expr, ispace=ispace)
-
-            processed.append(dummy)
-            seen.update({dummy, c})
-
-            # clusters.insert(i+1, halo_touch)
-
-        processed.extend(clusters)
 
         return processed
 

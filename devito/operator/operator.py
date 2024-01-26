@@ -28,7 +28,6 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_tuple, flatten
                           filter_sorted, frozendict, is_integer, split, timed_pass,
                           timed_region, contains_val)
 from devito.types import Grid, Evaluable, SubFunction
-from devito.types.petsc import inject_dummy
 
 __all__ = ['Operator']
 
@@ -464,7 +463,7 @@ class Operator(Callable):
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
 
-        lower_petsc(graph, **kwargs)
+        # lower_petsc(graph, **kwargs)
 
         graph = cls._specialize_iet(graph, **kwargs)
         # Instrument the IET for C-level profiling
