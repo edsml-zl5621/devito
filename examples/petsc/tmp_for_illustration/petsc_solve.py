@@ -1,5 +1,5 @@
 from devito import *
-from devito.types import PETScSolve
+from devito.types import PETScSolve, Symbol
 import pandas as pd
 from devito import configuration
 configuration['opt'] = 'noop'
@@ -44,7 +44,9 @@ pn = Function(name='pn', grid=grid, space_order=2)
 rhs = rho*(((1./dt)*(u.dxc+v.dyc)) - (u.dxc*u.dxc + v.dyc*v.dyc + 2.*u.dyc*v.dxc))
 eq_pn = Eq(pn.laplace, rhs)
 
-petsc = PETScSolve(eq_pn, pn)
+bc_pn = [Eq(pn[0, 0], 0.)]
+
+petsc = PETScSolve(eq_pn, pn, bcs=bc_pn)
 
 eq_u = Eq(u.dt + u*u.dxc + v*u.dyc - nu*u.laplace, -1./rho*pn.dxc)
 eq_v = Eq(v.dt + u*v.dxc + v*v.dyc - nu*v.laplace, -1./rho*pn.dyc)
@@ -68,7 +70,6 @@ bc_v += [Eq(v[t+1, nx-1, y], 0.)]  # right
 bc_v += [Eq(v[t+1, x, ny-1], 0.)]  # top
 bc_v += [Eq(v[t+1, x, 0], 0.)]  # bottom
 
-# # Create the operator
 
 exprs = petsc + [update_u, update_v] + bc_u + bc_v
 op = Operator(exprs)

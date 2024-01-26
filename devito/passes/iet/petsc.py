@@ -22,7 +22,7 @@ def lower_petsc(iet, **kwargs):
 
     # Find Iteration containing the ActionExpr
     iter_ae_mapper = MapNodes(Iteration, ActionExpr, 'groupby').visit(iet)
-
+    # from IPython import embed; embed()
     if iter_ae_mapper:
 
         # TODO: Extend to multiple targets but for now assume
@@ -36,16 +36,16 @@ def lower_petsc(iet, **kwargs):
             # Build struct from largest iteration loop, required for the
             # callback functions.
             struct = build_struct(iter[0])
-
+            # from IPython import embed; embed()
             # Build the body of the matvec callback
-            rebuild_matvec = iter[0]._rebuild(iter[-1]._rebuild(nodes=ae[0]))
-            matvec_body = build_matvec_body(rebuild_matvec, petsc_objs, struct, ae[0])
+            # rebuild_matvec = iter[0]._rebuild(iter[-1]._rebuild(nodes=ae[0]))
+            matvec_body = build_matvec_body(iter[0], petsc_objs, struct, ae[0])
 
             # Build the body of the preconditioner callback
             tmp = FindNodes(Expression).visit(iter[0])
             pre_stencil = [i for i in tmp if i.operation is OpPreStencil]
-            rebuild_pre = iter[0]._rebuild(iter[-1]._rebuild(nodes=pre_stencil[0]))
-            pre_body = build_pre_body(rebuild_pre, petsc_objs, struct, ae[0])
+            # rebuild_pre = iter[0]._rebuild(iter[-1]._rebuild(nodes=pre_stencil[0]))
+            pre_body = build_pre_body(iter[0], petsc_objs, struct, ae[0])
 
             matvec_callback, pre_callback, solve_body = build_solve(matvec_body, pre_body,
                                                                     petsc_objs, struct,
@@ -119,6 +119,7 @@ def lower_petsc(iet, **kwargs):
     return iet, {}
 
 
+
 def build_petsc_objects(target):
     # TODO: Eventually, the objects built will be based
     # on the number of different PETSc equations present etc.
@@ -140,52 +141,84 @@ def build_petsc_objects(target):
                                     shape=target.shape,
                                     liveness='eager'))}
 
+# def build_core_petsc_objects():
+#     # TODO: Eventually, the objects built will be based
+#     # on the number of different PETSc equations present etc.
 
-def build_struct(action):
-    # Build the struct
-    tmp1 = FindSymbols('basics').visit(action)
-    tmp2 = FindSymbols('dimensions|indexedbases').visit(action)
-    usr_ctx = [symb for symb in tmp1 if symb not in tmp2]
+#     return {'A_matfree': Mat(name='A_matfree'),
+#             'xvec': Vec(name='xvec'),
+#             'local_xvec': Vec(name='local_xvec', liveness='eager'),
+#             'yvec': Vec(name='yvec'),
+#             'da': DM(name='da', liveness='eager'),
+#             'x': Vec(name='x'),
+#             'b': Vec(name='b'),
+#             'ksp': KSP(name='ksp'),
+#             'pc': PC(name='pc'),
+#             'err': PetscErrorCode(name='err'),
+#             'reason': PetscErrorCode(name='reason'),
+#             'size': PetscMPIInt(name='size')}
+
+
+def build_struct(mapper):
+
+    # Place all symbols required by all PETSc solves into the same struct. 
+    usr_ctx = []
+
+    # for iter, _ in mapper.items():
+        # Build the struct
+    tmp1 = FindSymbols('basics').visit(iter)
+    tmp2 = FindSymbols('dimensions|indexedbases').visit(iter)
+    usr_ctx.extend(symb for symb in tmp1 if symb not in tmp2)
+
     return PETScStruct('ctx', usr_ctx)
 
 
 def build_matvec_body(action, objs, struct, expr_target):
 
+    # for iter, (action,)  in mapper.items():
+        # from IPython import embed; embed()
+
+        # target = 
+        # xvec_tmp =  PETScArray(name='xvec_tmp', dtype=target.dtype,
+        #                             dimensions=target.dimensions,
+        #                             shape=target.shape,
+        #                             liveness='eager')
+
     get_context = Call('PetscCall', [Call('MatShellGetContext',
-                                          arguments=[objs['A_matfree'],
-                                                     Byref(struct)])])
+                                        arguments=[objs['A_matfree'],
+                                                    Byref(struct)])])
 
     mat_get_dm = Call('PetscCall', [Call('MatGetDM',
-                                         arguments=[objs['A_matfree'],
+                                        arguments=[objs['A_matfree'],
                                                     Byref(objs['da'])])])
 
     dm_get_local_xvec = Call('PetscCall', [Call('DMGetLocalVector',
                                                 arguments=[objs['da'],
-                                                           Byref(objs['local_xvec'])])])
+                                                        Byref(objs['local_xvec'])])])
 
     dm_global_local_begin = Call('PetscCall', [Call('DMGlobalToLocalBegin',
                                                     arguments=[objs['da'],
-                                                               objs['xvec'],
-                                                               'INSERT_VALUES',
-                                                               objs['local_xvec']])])
+                                                            objs['xvec'],
+                                                            'INSERT_VALUES',
+                                                            objs['local_xvec']])])
 
     dm_global_local_end = Call('PetscCall', [Call('DMGlobalToLocalEnd',
-                                                  arguments=[objs['da'],
-                                                             objs['xvec'],
-                                                             'INSERT_VALUES',
-                                                             objs['local_xvec']])])
+                                                arguments=[objs['da'],
+                                                            objs['xvec'],
+                                                            'INSERT_VALUES',
+                                                            objs['local_xvec']])])
 
     dm_vec_get_array_read = Call('PetscCall',
-                                 [Call('DMDAVecGetArrayRead',
-                                       arguments=[objs['da'],
-                                                  objs['local_xvec'],
-                                                  Byref(objs['xvec_tmp']._C_symbol)])])
+                                [Call('DMDAVecGetArrayRead',
+                                    arguments=[objs['da'],
+                                                objs['local_xvec'],
+                                                Byref(objs['xvec_tmp']._C_symbol)])])
 
     dm_vec_get_array = Call('PetscCall',
                             [Call('DMDAVecGetArray',
-                                  arguments=[objs['da'],
-                                             objs['yvec'],
-                                             Byref(expr_target.write._C_symbol)])])
+                                arguments=[objs['da'],
+                                            objs['yvec'],
+                                            Byref(expr_target.write._C_symbol)])])
 
     dm_vec_restore_array_read = Call(
         'PetscCall',
@@ -202,32 +235,33 @@ def build_matvec_body(action, objs, struct, expr_target):
     dm_restore_local_vec = Call(
         'PetscCall',
         [Call('DMRestoreLocalVector', arguments=[objs['da'],
-                                                 Byref(objs['local_xvec'])])])
+                                                Byref(objs['local_xvec'])])])
 
     func_return = Call('PetscFunctionReturn', arguments=[0])
 
     body = List(header=c.Line('PetscFunctionBegin;'),
                 body=[Definition(struct),
-                      get_context,
-                      mat_get_dm,
-                      dm_get_local_xvec,
-                      dm_global_local_begin,
-                      dm_global_local_end,
-                      dm_vec_get_array_read,
-                      dm_vec_get_array,
-                      action,
-                      # TODO: Track BCs through PETScSolve This line will come
-                      # from the BCs.
-                      c.Line('yvec_tmp[0][0]= xvec_tmp[0][0];'),
-                      dm_vec_restore_array_read,
-                      dm_vec_restore_array,
-                      dm_restore_local_vec,
-                      func_return])
+                    get_context,
+                    mat_get_dm,
+                    dm_get_local_xvec,
+                    dm_global_local_begin,
+                    dm_global_local_end,
+                    dm_vec_get_array_read,
+                    dm_vec_get_array,
+                    action,
+                    # TODO: Track BCs through PETScSolve This line will come
+                    # from the BCs.
+                    c.Line('yvec_tmp[0][0]= xvec_tmp[0][0];'),
+                    dm_vec_restore_array_read,
+                    dm_vec_restore_array,
+                    dm_restore_local_vec,
+                    func_return])
 
     # Replace all symbols in the body that appear in the struct
     # with a pointer to the struct.
     for i in struct.usr_ctx:
         body = Uxreplace({i: FieldFromPointer(i, struct)}).visit(body)
+
     return body
 
 

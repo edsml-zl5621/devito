@@ -176,7 +176,7 @@ class PETScDummy(Eq):
     pass
 
 
-def PETScSolve(eq, target, **kwargs):
+def PETScSolve(eq, target, bcs=None, **kwargs):
 
     yvec_tmp = PETScArray(name='yvec_tmp', dtype=target.dtype,
                           dimensions=target.dimensions,
@@ -195,63 +195,56 @@ def PETScSolve(eq, target, **kwargs):
 
     # For now, assume the application of the linear operator on
     # a vector is eqn.lhs
-    # action = Action(yvec_tmp, eq.lhs, target=target)
 
-    rhs = RHS(b_tmp, eq.rhs)
-
-    # preconditioner = PreStencil(yvec_tmp, centre_stencil)
     from devito.types import Symbol
     s0 = Symbol(name='s0')
     s1 = Symbol(name='s1')
-    from devito.types import Array, CriticalRegion, Jump, Scalar
+    from devito.types import CriticalRegion
+
+    from devito.symbolics import uxreplace
+
     # from IPython import embed; embed()
-    exprs = [Eq(s0, CriticalRegion(True)),
-                rhs,
-                Eq(s1, CriticalRegion(False))]
-    
+    # The equations that are supplied to callback functions will
+    # always have to be in separated loops. 
+
     preconditioner = [Eq(s0, CriticalRegion(True)),
-                PreStencil(yvec_tmp, centre_stencil),
-                Eq(s1, CriticalRegion(True))]
-    
+                      PreStencil(yvec_tmp, centre_stencil),
+                      Eq(s1, CriticalRegion(True))]
+
     action = [Eq(s0, CriticalRegion(True)),
-                Action(yvec_tmp, eq.lhs, target=target),
-                Eq(s1, CriticalRegion(True))]
-    
+              Action(yvec_tmp, eq.lhs, target=target),
+              Eq(s1, CriticalRegion(True))]
+
     # from IPython import embed; embed()
-    # exprs = [LoweredEq(i) for i in exprs]
 
-    # # To force separate the action and preconditioner eqns into distinct/separate loops
-    # dum = Eq(target, yvec_tmp)
+    rhs = RHS(b_tmp, eq.rhs)
 
-    # TODO: Figure this out properly. Will become clearer when solving eqns
-    # fully implicitly in time.
-    # from devito.types.array import Array
-    # if any(d.is_Time for d in eq.rhs.dimensions):
-    #     dummy1 = Array(name='dummy1', dimensions=(target.grid.time_dim,), shape=(1,))
-    #     dummyeq1 = LinSolve(dummy1, 1)
-
-
-    return preconditioner + action + exprs
+    # Create Dummy equation to separate RHS equation from the rest. 
+    tmp = Symbol('tmp')
+    indices = tuple(d + 1 for d in b_tmp.dimensions)
+    if any(d.is_Time for d in eq.rhs.dimensions):
+        dummy = Eq(tmp, b_tmp.indexify(indices=indices)*target.grid.time_dim)
+    else:
+        dummy = Eq(tmp, b_tmp.indexify(indices=indices))
+    
+    return preconditioner + action + [rhs] + [dummy]
 
 
-# def lower_petsc_exprs(expressions, **kwargs):
+def inject_dummy(expressions, **kwargs):
 
-#     # Always create dummy alongside RHS expression to force separate it from
-#     # other equations.
+    # Always create dummy alongside RHS expression to force separate it from
+    # other equations.
 
-#     # rhs_exprs = [expr for expr in expressions if isinstance(expr, RHS)]
+    tmp = Symbol('tmp')
+    modified_exprs = []
+    for expr in expressions:
+        modified_exprs.append(expr)
+        if isinstance(expr, RHS):
+            indices = tuple(d + 1 for d in expr.lhs.function.dimensions)
+            dummy = PETScDummy(tmp, expr.lhs.function.indexify(indices=indices)*expr.rhs)
+            modified_exprs.append(dummy)
 
-#     rhs_mapper = {expr: i for i, expr in enumerate(expressions) if isinstance(expr, RHS)}
-#     from IPython import embed; embed()
-#     # for rhs in rhs_exprs:
-
-#     #     from IPython import embed; embed()
-#     #     index_after_rhs = next((i for i, expr in enumerate(expressions) if isinstance(expr, RHS)), None)
-#     #     indices = tuple(d + 1 for d in rhs[0].lhs.function.dimensions)
-#     #     new_eq_instance = PETScDummy(rhs[0].lhs.function.indexify(indices=indices), rhs[0].rhs)
-#     #     expressions.insert(index_after_rhs + 1, new_eq_instance)
-
-#     return expressions
+    return tuple(modified_exprs)
 
 
 class PETScStruct(CompositeObject):
