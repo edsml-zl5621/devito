@@ -361,7 +361,7 @@ class Operator(Callable):
             * Optimize Clusters for performance
         """
         sregistry = kwargs['sregistry']
-
+        # from IPython import embed; embed()
         # Build a sequence of Clusters from a sequence of Eqs
         clusters = clusterize(expressions, **kwargs)
 

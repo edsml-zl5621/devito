@@ -37,45 +37,71 @@ dt = 1e-3
 t_end = 1.
 ns = int(t_end/dt)
 
-u = TimeFunction(name='u', grid=grid, space_order=2)
-v = TimeFunction(name='v', grid=grid, space_order=2)
-pn = Function(name='pn', grid=grid, space_order=2)
+u1 = TimeFunction(name='u1', grid=grid, space_order=2)
+v1 = TimeFunction(name='v1', grid=grid, space_order=2)
+pn1 = Function(name='pn1', grid=grid, space_order=2)
 
-rhs = rho*(((1./dt)*(u.dxc+v.dyc)) - (u.dxc*u.dxc + v.dyc*v.dyc + 2.*u.dyc*v.dxc))
-eq_pn = Eq(pn.laplace, rhs)
+u2 = TimeFunction(name='u2', grid=grid, space_order=2)
+v2 = TimeFunction(name='v2', grid=grid, space_order=2)
+pn2 = Function(name='pn2', grid=grid, space_order=2)
 
-bc_pn = [Eq(pn[0, 0], 0.)]
+rhs1 = rho*(((1./dt)*(u1.dxc+v1.dyc)) - (u1.dxc*u1.dxc + v1.dyc*v1.dyc + 2.*u1.dyc*v1.dxc))
+eq_pn1 = Eq(pn1.laplace, rhs1)
+bc_pn1 = [Eq(pn1[0, 0], 0.)]
 
-petsc = PETScSolve(eq_pn, pn, bcs=bc_pn)
+petsc1 = PETScSolve(eq_pn1, pn1, bcs=bc_pn1)
 
-eq_u = Eq(u.dt + u*u.dxc + v*u.dyc - nu*u.laplace, -1./rho*pn.dxc)
-eq_v = Eq(v.dt + u*v.dxc + v*v.dyc - nu*v.laplace, -1./rho*pn.dyc)
+rhs2 = rho*(((1./dt)*(u2.dxc+v2.dyc)) - (u2.dxc*u2.dxc + v2.dyc*v2.dyc + 2.*u2.dyc*v2.dxc))
+eq_pn2 = Eq(pn2.laplace, rhs2)
+bc_pn2 = [Eq(pn2[0, 0], 0.)]
 
-stencil_u = solve(eq_u, u.forward)
-stencil_v = solve(eq_v, v.forward)
+petsc2 = PETScSolve(eq_pn2, pn2, bcs=bc_pn2)
 
-update_u = Eq(u.forward, stencil_u)
-update_v = Eq(v.forward, stencil_v)
+eq_u1 = Eq(u1.dt + u1*u1.dxc + v1*u1.dyc - nu*u1.laplace, -1./rho*pn1.dxc)
+eq_v1 = Eq(v1.dt + u1*v1.dxc + v1*v1.dyc - nu*v1.laplace, -1./rho*pn1.dyc)
+stencil_u = solve(eq_u1, u1.forward)
+stencil_v = solve(eq_v1, v1.forward)
+update_u = Eq(u1.forward, stencil_u)
+update_v = Eq(v1.forward, stencil_v)
+u1.data[0, :, -1] = 1.
+u1.data[1, :, -1] = 1.
 
-u.data[0, :, -1] = 1.
-u.data[1, :, -1] = 1.
+
+eq_u2 = Eq(u2.dt + u2*u2.dxc + v2*u2.dyc - nu*u2.laplace, -1./rho*pn2.dxc)
+eq_v2 = Eq(v2.dt + u2*v2.dxc + v2*v2.dyc - nu*v2.laplace, -1./rho*pn2.dyc)
+stencil_u2 = solve(eq_u2, u2.forward)
+stencil_v2 = solve(eq_v2, v2.forward)
+update_u2 = Eq(u2.forward, stencil_u2)
+update_v2 = Eq(v2.forward, stencil_v2)
+u2.data[0, :, -1] = 1.
+u2.data[1, :, -1] = 1.
 
 # Create Dirichlet BC expressions for velocity
-bc_u = [Eq(u[t+1, x, ny-1], 1.)]  # top
-bc_u += [Eq(u[t+1, 0, y], 0.)]  # left
-bc_u += [Eq(u[t+1, nx-1, y], 0.)]  # right
-bc_u += [Eq(u[t+1, x, 0], 0.)]  # bottom
-bc_v = [Eq(v[t+1, 0, y], 0.)]  # left
-bc_v += [Eq(v[t+1, nx-1, y], 0.)]  # right
-bc_v += [Eq(v[t+1, x, ny-1], 0.)]  # top
-bc_v += [Eq(v[t+1, x, 0], 0.)]  # bottom
+bc_u1 = [Eq(u1[t+1, x, ny-1], 1.)]  # top
+bc_u1 += [Eq(u1[t+1, 0, y], 0.)]  # left
+bc_u1 += [Eq(u1[t+1, nx-1, y], 0.)]  # right
+bc_u1 += [Eq(u1[t+1, x, 0], 0.)]  # bottom
+bc_v1 = [Eq(v1[t+1, 0, y], 0.)]  # left
+bc_v1 += [Eq(v1[t+1, nx-1, y], 0.)]  # right
+bc_v1 += [Eq(v1[t+1, x, ny-1], 0.)]  # top
+bc_v1 += [Eq(v1[t+1, x, 0], 0.)]  # bottom
+
+bc_u2 = [Eq(u2[t+1, x, ny-1], 1.)]  # top
+bc_u2 += [Eq(u2[t+1, 0, y], 0.)]  # left
+bc_u2 += [Eq(u2[t+1, nx-1, y], 0.)]  # right
+bc_u2 += [Eq(u2[t+1, x, 0], 0.)]  # bottom
+bc_v2 = [Eq(v2[t+1, 0, y], 0.)]  # left
+bc_v2 += [Eq(v2[t+1, nx-1, y], 0.)]  # right
+bc_v2 += [Eq(v2[t+1, x, ny-1], 0.)]  # top
+bc_v2 += [Eq(v2[t+1, x, 0], 0.)]  # bottom
 
 
-exprs = petsc + [update_u, update_v] + bc_u + bc_v
-op = Operator(exprs)
+exprs1 = petsc1 + [update_u, update_v] + bc_u1 + bc_v1
+exprs2 = petsc2 + [update_u2, update_v2] + bc_u2 + bc_v2
+op = Operator(exprs1 + exprs2)
 # op.apply(time_m=0, time_M=ns-1, dt=dt)
 print(op.ccode)
 # See petsc_solve.c for corresponding C code
 
-pd.DataFrame(u.data[-1, :, :]).to_csv("results/1.csv", header=None, index=None)
-pd.DataFrame(v.data[-1, :, :]).to_csv("results/2.csv", header=None, index=None)
+# pd.DataFrame(u.data[-1, :, :]).to_csv("results/1.csv", header=None, index=None)
+# pd.DataFrame(v.data[-1, :, :]).to_csv("results/2.csv", header=None, index=None)
