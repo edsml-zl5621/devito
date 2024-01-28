@@ -98,7 +98,7 @@ bc_v2 += [Eq(v2[t+1, x, 0], 0.)]  # bottom
 
 exprs1 = petsc1 + [update_u, update_v] + bc_u1 + bc_v1
 exprs2 = petsc2 + [update_u2, update_v2] + bc_u2 + bc_v2
-op = Operator(exprs1 + exprs2)
+op = Operator(exprs1)
 # op.apply(time_m=0, time_M=ns-1, dt=dt)
 print(op.ccode)
 # See petsc_solve.c for corresponding C code

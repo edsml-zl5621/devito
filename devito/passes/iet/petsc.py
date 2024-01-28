@@ -3,7 +3,7 @@ from devito.ir.iet import (List, Callable, Call, Transformer,
                            Callback, Definition, Uxreplace, FindSymbols,
                            Iteration, MapNodes, ActionExpr, RHSExpr,
                            FindNodes, Expression, DummyExpr, PETScDumExpr,
-                           retrieve_iteration_tree)
+                           retrieve_iteration_tree, filter_iterations)
 from devito.types.petsc import (Mat, Vec, DM, PetscErrorCode, PETScStruct,
                                 PETScArray, PetscMPIInt, KSP, PC)
 from devito.symbolics import FieldFromPointer, Byref
@@ -129,32 +129,35 @@ def lower_petsc(iet, **kwargs):
     # Immediately drop all PETScDummyExprs. If a PETScDummyExpr is alongside non
     # PETScDummyExprs (e.g standard expressions) then just drop the PETScDummyExpr, otherwise drop
     # the entire iteration loop containing the PETScDummyExpr.
-    # mapper = {}
-    dummy_mapper = MapNodes(Iteration, PETScDumExpr, 'groupby').visit(iet)
-    # for iter, (dummy,) in dummy_mapper.items():
-    #     all_exprs = FindNodes(Expression).visit(iter)
-    #     if any(not isinstance(i, PETScDumExpr) for i in all_exprs):
-    #         mapper.update({dummy: None})
-    #     else:
-    #         mapper.update({iter[0]: None})
-
-    # iet = Transformer(mapper, nested=True).visit(iet)
+    iet = drop_dummies(iet)
 
 
-
+    
     from IPython import embed; embed()
-
-
-
-    # Find Iteration containing the ActionExpr
-    # iter_ae_mapper = MapNodes(Iteration, ActionExpr, 'groupby').visit(iet)
-
-    # from IPython import embed; embed()
 
 
 
 
     return iet, {}
+
+
+def drop_dummies(iet):
+
+    mapper = {}
+    for tree in retrieve_iteration_tree(iet):
+        root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
+
+        dummy = FindNodes(PETScDumExpr).visit(root)
+        if dummy:
+            if any(not isinstance(i, PETScDumExpr) for i in FindNodes(Expression).visit(root)):
+                mapper.update({dummy[0]: None})
+            else:
+                mapper.update({root: None})
+
+    
+    iet = Transformer(mapper, nested=True).visit(iet)
+
+    return iet
 
 
 
