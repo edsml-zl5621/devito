@@ -201,11 +201,12 @@ def PETScSolve(eq, target, bcs=None, **kwargs):
     s1 = Symbol(name='s1')
     from devito.types import CriticalRegion
 
-    from devito.symbolics import uxreplace
-
-    # from IPython import embed; embed()
     # The equations that are supplied to callback functions will
     # always have to be in separated loops. 
+
+    bc_for_matvec = []
+    for bc in bcs:
+        bc_for_matvec.append(Action(yvec_tmp.indexify(indices=bc.lhs.indices), bc.rhs))
 
     preconditioner = [Eq(s0, CriticalRegion(True)),
                       PreStencil(yvec_tmp, centre_stencil),
@@ -213,6 +214,7 @@ def PETScSolve(eq, target, bcs=None, **kwargs):
 
     action = [Eq(s0, CriticalRegion(True)),
               Action(yvec_tmp, eq.lhs, target=target),
+              bc_for_matvec[0],
               Eq(s1, CriticalRegion(True))]
 
     # from IPython import embed; embed()
@@ -228,23 +230,6 @@ def PETScSolve(eq, target, bcs=None, **kwargs):
         dummy = Eq(tmp, b_tmp.indexify(indices=indices))
     
     return preconditioner + action + [rhs] + [dummy]
-
-
-def inject_dummy(expressions, **kwargs):
-
-    # Always create dummy alongside RHS expression to force separate it from
-    # other equations.
-
-    tmp = Symbol('tmp')
-    modified_exprs = []
-    for expr in expressions:
-        modified_exprs.append(expr)
-        if isinstance(expr, RHS):
-            indices = tuple(d + 1 for d in expr.lhs.function.dimensions)
-            dummy = PETScDummy(tmp, expr.lhs.function.indexify(indices=indices)*expr.rhs)
-            modified_exprs.append(dummy)
-
-    return tuple(modified_exprs)
 
 
 class PETScStruct(CompositeObject):

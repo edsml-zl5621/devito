@@ -22,7 +22,7 @@ def lower_petsc(iet, **kwargs):
 
     # Find Iteration containing the ActionExpr
     iter_ae_mapper = MapNodes(Iteration, ActionExpr, 'groupby').visit(iet)
-    # from IPython import embed; embed()
+    from IPython import embed; embed()
     if iter_ae_mapper:
 
         # TODO: Extend to multiple targets but for now assume
