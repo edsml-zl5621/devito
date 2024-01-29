@@ -250,6 +250,7 @@ def PETScSolve(eq, target, bcs=None, **kwargs):
     s1 = Symbol(name='s1')
     s2 = Symbol(name='s2')
     s3 = Symbol(name='s3')
+    s4 = Symbol(name='s4')
 
     # from devito.types import CriticalRegion, WeakFence
 
@@ -264,6 +265,8 @@ def PETScSolve(eq, target, bcs=None, **kwargs):
     # Create Dummy equations.
     indices = tuple(d + 1 for d in target.dimensions)
     eqn_dims = eq.lhs.dimensions + eq.rhs.dimensions
+
+    # Using implicit dimensions to merge eveything into the time loop if necessary.
 
     if any(d.is_Time for d in eqn_dims):
 

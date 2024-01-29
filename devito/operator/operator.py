@@ -22,7 +22,7 @@ from devito.mpi import MPI
 from devito.parameters import configuration
 from devito.passes import (Graph, lower_index_derivatives, generate_implicit,
                            generate_macros, minimize_symbols, unevaluate,
-                           lower_petsc)
+                           lower_petsc, petsc_setup)
 from devito.symbolics import estimate_cost
 from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_tuple, flatten,
                           filter_sorted, frozendict, is_integer, split, timed_pass,
@@ -361,7 +361,7 @@ class Operator(Callable):
             * Optimize Clusters for performance
         """
         sregistry = kwargs['sregistry']
-        # from IPython import embed; embed()
+ 
         # Build a sequence of Clusters from a sequence of Eqs
         clusters = clusterize(expressions, **kwargs)
 

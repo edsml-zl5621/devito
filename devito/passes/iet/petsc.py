@@ -132,10 +132,12 @@ def lower_petsc(iet, **kwargs):
     iet = drop_dummies(iet)
 
 
-    
-    from IPython import embed; embed()
+    # Count how many petsc targets we have first
+    # Then generate the petsc_setup based on the number of targets.
 
 
+    # body = iet.body._rebuild(body=((petsc_setup,) + iet.body.body))
+    # iet = iet._rebuild(body=body)
 
 
     return iet, {}
