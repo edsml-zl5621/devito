@@ -8,16 +8,16 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
 from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import Eq, Inc, ReduceMax, ReduceMin
-from devito.types.petsc import Action, RHS, PreStencil, PETScDummy
+from devito.types.petsc import Action, RHS, PreStencil, PETScDummy, Solution
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
-           'OpAction', 'OpRHS', 'OpPreStencil', 'OpPETScDummy']
+           'OpAction', 'OpRHS', 'OpPreStencil', 'OpPETScDummy', 'OpSolution']
 
 
 class IREq(sympy.Eq, Pickable):
 
     __rargs__ = ('lhs', 'rhs')
-    __rkwargs__ = ('ispace', 'conditionals', 'implicit_dims', 'operation')
+    __rkwargs__ = ('ispace', 'conditionals', 'implicit_dims', 'operation', 'target')
 
     @property
     def is_Scalar(self):
@@ -56,6 +56,10 @@ class IREq(sympy.Eq, Pickable):
     @property
     def operation(self):
         return self._operation
+    
+    @property
+    def target(self):
+        return self._target
 
     @property
     def is_Reduction(self):
@@ -103,6 +107,7 @@ class Operation(Tag):
             RHS: OpRHS,
             PETScDummy: OpPETScDummy,
             PreStencil: OpPreStencil,
+            Solution: OpSolution,
         }
         try:
             return reduction_mapper[type(expr)]
@@ -123,6 +128,7 @@ OpAction = Operation('action')
 OpRHS = Operation('rhs')
 OpPreStencil = Operation('pre_stencil')
 OpPETScDummy = Operation('dummy')
+OpSolution = Operation('solution')
 
 
 class LoweredEq(IREq):
@@ -216,6 +222,8 @@ class LoweredEq(IREq):
         expr._reads, expr._writes = detect_io(expr)
         expr._implicit_dims = input_expr.implicit_dims
         expr._operation = Operation.detect(input_expr)
+        expr._target = input_expr.target if hasattr(input_expr, 'target') else None
+
 
         return expr
 
@@ -272,6 +280,7 @@ class ClusterizedEq(IREq):
                 expr._conditionals = kwargs.get('conditionals', frozendict())
                 expr._implicit_dims = input_expr.implicit_dims
                 expr._operation = Operation.detect(input_expr)
+                expr._target = input_expr.target if hasattr(input_expr, 'target') else None
         elif len(args) == 2:
             # origin: ClusterizedEq(lhs, rhs, **kwargs)
             expr = sympy.Eq.__new__(cls, *args, evaluate=False)

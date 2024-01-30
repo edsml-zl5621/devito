@@ -1,7 +1,7 @@
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (List, Callable, Call, Transformer,
                            Callback, Definition, Uxreplace, FindSymbols,
-                           Iteration, MapNodes, ActionExpr, RHSExpr,
+                           Iteration, MapNodes, ActionExpr, RHSExpr, SolutionExpr,
                            FindNodes, Expression, DummyExpr, PETScDumExpr,
                            retrieve_iteration_tree, filter_iterations)
 from devito.types.petsc import (Mat, Vec, DM, PetscErrorCode, PETScStruct,
@@ -126,24 +126,37 @@ def lower_petsc(iet, **kwargs):
     # does not deal with the Temp Expressions generated when opt is not set
     # to 'noop' etc.
 
-    # Immediately drop all PETScDummyExprs. If a PETScDummyExpr is alongside non
-    # PETScDummyExprs (e.g standard expressions) then just drop the PETScDummyExpr, otherwise drop
-    # the entire iteration loop containing the PETScDummyExpr.
+    # Immediately drop all PETScDummyExprs.
     iet = drop_dummies(iet)
 
+    # Generate the one off PETSc calls that do not need to be duplicated in the case of
+    # multiple PETScSolves e.g PetscInitialize.
+    setup = petsc_setup()
 
-    # Count how many petsc targets we have first
-    # Then generate the petsc_setup based on the number of targets.
+    # Figure out how many PETScSolves were passed to the Operator.
+    iter_sol_mapper = MapNodes(Iteration, SolutionExpr, 'groupby').visit(iet)
+    
+    for iter, (sol,) in iter_sol_mapper.items():
+
+        # from IPython import embed; embed()
+
+        # For each PETSc solve, build the PETSc objects required.
+        petsc_objs = build_petsc_objects(sol.target)
 
 
-    # body = iet.body._rebuild(body=((petsc_setup,) + iet.body.body))
-    # iet = iet._rebuild(body=body)
+    body = iet.body._rebuild(body=(tuple(setup) + iet.body.body))
+    iet = iet._rebuild(body=body)
+
 
 
     return iet, {}
 
 
 def drop_dummies(iet):
+
+    # If a PETScDummyExpr is alongside non
+    # PETScDummyExprs (e.g standard expressions) then just drop the PETScDummyExpr, otherwise drop
+    # the entire iteration loop containing the PETScDummyExpr
 
     mapper = {}
     for tree in retrieve_iteration_tree(iet):
@@ -162,44 +175,44 @@ def drop_dummies(iet):
     return iet
 
 
+def petsc_setup():
+
+    header = c.Line('PetscFunctionBeginUser;')
+
+    size = PetscMPIInt(name='size')
+
+    # TODO: This will obv change when it is working with MPI.
+    initialize = Call('PetscCall', [Call('PetscInitialize',
+                                         arguments=['NULL', 'NULL',
+                                                    'NULL', 'NULL'])])
+    
+    call_mpi = Call('PetscCallMPI', [Call('MPI_Comm_size',
+                                          arguments=['PETSC_COMM_WORLD',
+                                                     Byref(size)])])
+
+    return [header, initialize, call_mpi]
+
+
 
 def build_petsc_objects(target):
     # TODO: Eventually, the objects built will be based
     # on the number of different PETSc equations present etc.
 
-    return {'A_matfree': Mat(name='A_matfree'),
-            'xvec': Vec(name='xvec'),
-            'local_xvec': Vec(name='local_xvec', liveness='eager'),
-            'yvec': Vec(name='yvec'),
-            'da': DM(name='da', liveness='eager'),
-            'x': Vec(name='x'),
-            'b': Vec(name='b'),
-            'ksp': KSP(name='ksp'),
-            'pc': PC(name='pc'),
-            'err': PetscErrorCode(name='err'),
-            'reason': PetscErrorCode(name='reason'),
-            'size': PetscMPIInt(name='size'),
-            'xvec_tmp': (PETScArray(name='xvec_tmp', dtype=target.dtype,
+    return {'A_matfree': Mat(name='A_matfree'+str(target.name)),
+            'xvec': Vec(name='xvec'+str(target.name)),
+            'local_xvec': Vec(name='local_xvec'+str(target.name), liveness='eager'),
+            'yvec': Vec(name='yvec'+str(target.name)),
+            'da': DM(name='da'+str(target.name), liveness='eager'),
+            'x': Vec(name='x'+str(target.name)),
+            'b': Vec(name='b'+str(target.name)),
+            'ksp': KSP(name='ksp'+str(target.name)),
+            'pc': PC(name='pc'+str(target.name)),
+            'err': PetscErrorCode(name='err'+str(target.name)),
+            'reason': PetscErrorCode(name='reason'+str(target.name)),
+            'xvec_tmp': (PETScArray(name='xvec_tmp'+str(target.name), dtype=target.dtype,
                                     dimensions=target.dimensions,
                                     shape=target.shape,
                                     liveness='eager'))}
-
-# def build_core_petsc_objects():
-#     # TODO: Eventually, the objects built will be based
-#     # on the number of different PETSc equations present etc.
-
-#     return {'A_matfree': Mat(name='A_matfree'),
-#             'xvec': Vec(name='xvec'),
-#             'local_xvec': Vec(name='local_xvec', liveness='eager'),
-#             'yvec': Vec(name='yvec'),
-#             'da': DM(name='da', liveness='eager'),
-#             'x': Vec(name='x'),
-#             'b': Vec(name='b'),
-#             'ksp': KSP(name='ksp'),
-#             'pc': PC(name='pc'),
-#             'err': PetscErrorCode(name='err'),
-#             'reason': PetscErrorCode(name='reason'),
-#             'size': PetscMPIInt(name='size')}
 
 
 def build_struct(mapper):
@@ -314,11 +327,6 @@ def build_solve(matvec_body, pre_body, objs, struct, target):
 
     # TODO: Create class type that generates this line
     func_begin_user = c.Line('PetscFunctionBeginUser;')
-
-    # TODO: This will all change when it is working with MPI
-    initialize = Call('PetscCall', [Call('PetscInitialize',
-                                         arguments=['NULL', 'NULL',
-                                                    'NULL', 'NULL'])])
 
     call_mpi = Call('PetscCallMPI', [Call('MPI_Comm_size',
                                           arguments=['PETSC_COMM_WORLD',

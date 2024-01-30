@@ -130,88 +130,58 @@ def dtype_to_petsctype(dtype):
     }[dtype]
 
 
-class Action(Eq):
+class PETScEq(Eq):
+    """
+    Represents a general equation required by a PETSc solve.
+    """
+
+    __rkwargs__ = (Eq.__rkwargs__ + ('target',))
+
+    def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
+                target=None, **kwargs):
+        obj = Eq.__new__(cls, lhs, rhs, subdomain=subdomain, coefficients=coefficients,
+                         implicit_dims=implicit_dims, **kwargs)
+        obj._target = target
+
+        return obj
+    
+    @property
+    def target(self):
+        return self._target
+
+
+class Action(PETScEq):
     """
     Represents the mathematical expression of applying a linear
     operator to a vector. This is a key component
     for running matrix-free solvers.
     """
-
-    __rkwargs__ = (Eq.__rkwargs__ + ('target',))
-
-    def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
-                target=None, **kwargs):
-        obj = Eq.__new__(cls, lhs, rhs, subdomain=subdomain, coefficients=coefficients,
-                         implicit_dims=implicit_dims, **kwargs)
-        obj._target = target
-
-        return obj
-    
-    @property
-    def target(self):
-        return self._target
+    pass
 
 
-
-class RHS(Eq):
+class RHS(PETScEq):
     """
     Represents the mathematical expression of building the
     rhs of a linear system.
     """
-    __rkwargs__ = (Eq.__rkwargs__ + ('target',))
-
-    def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
-                target=None, **kwargs):
-        obj = Eq.__new__(cls, lhs, rhs, subdomain=subdomain, coefficients=coefficients,
-                         implicit_dims=implicit_dims, **kwargs)
-        obj._target = target
-
-        return obj
-    
-    @property
-    def target(self):
-        return self._target
+    pass
 
 
-class PreStencil(Eq):
+class PreStencil(PETScEq):
     """
     Eq needed for the preconditioner callback.
     """
-    __rkwargs__ = (Eq.__rkwargs__ + ('target',))
-
-    def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
-                target=None, **kwargs):
-        obj = Eq.__new__(cls, lhs, rhs, subdomain=subdomain, coefficients=coefficients,
-                         implicit_dims=implicit_dims, **kwargs)
-        obj._target = target
-
-        return obj
-    
-    @property
-    def target(self):
-        return self._target
+    pass
     
 
-class Solution(Eq):
+class Solution(PETScEq):
     """
     Eq needed to pass solution Vec x back to Devito.
     """
-    __rkwargs__ = (Eq.__rkwargs__ + ('target',))
-
-    def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
-                target=None, **kwargs):
-        obj = Eq.__new__(cls, lhs, rhs, subdomain=subdomain, coefficients=coefficients,
-                         implicit_dims=implicit_dims, **kwargs)
-        obj._target = target
-
-        return obj
-    
-    @property
-    def target(self):
-        return self._target
+    pass
 
 
-class PETScDummy(Eq):
+class PETScDummy(PETScEq):
     """
     """
     pass
@@ -261,7 +231,7 @@ def PETScSolve(eq, target, bcs=None, **kwargs):
     # for bc in bcs:
     #     bc_for_matvec.append(Action(y_matvec.indexify(indices=bc.lhs.indices), bc.rhs))
 
-
+    # from IPython import embed; embed()
     # Create Dummy equations.
     indices = tuple(d + 1 for d in target.dimensions)
     eqn_dims = eq.lhs.dimensions + eq.rhs.dimensions
