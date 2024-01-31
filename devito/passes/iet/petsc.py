@@ -3,7 +3,7 @@ from devito.ir.iet import (List, Callable, Call, Transformer,
                            Callback, Definition, Uxreplace, FindSymbols,
                            Iteration, MapNodes, ActionExpr, RHSExpr, SolutionExpr,
                            FindNodes, Expression, DummyExpr, PETScDumExpr,
-                           retrieve_iteration_tree, filter_iterations)
+                           retrieve_iteration_tree, filter_iterations, PreExpr)
 from devito.types.petsc import (Mat, Vec, DM, PetscErrorCode, PETScStruct,
                                 PETScArray, PetscMPIInt, KSP, PC)
 from devito.symbolics import FieldFromPointer, Byref
@@ -133,21 +133,90 @@ def lower_petsc(iet, **kwargs):
     # multiple PETScSolves e.g PetscInitialize.
     setup = petsc_setup()
 
+    # Build PETSc struct. Probably just want 1 struct for all PETScSolves. This may
+    # be adjusted.
+    struct = build_struct(iet)
+
     # Figure out how many PETScSolves were passed to the Operator.
     iter_sol_mapper = MapNodes(Iteration, SolutionExpr, 'groupby').visit(iet)
-    
-    for iter, (sol,) in iter_sol_mapper.items():
 
-        # from IPython import embed; embed()
+    setup = []
 
-        # For each PETSc solve, build the PETSc objects required.
+    # Generate the code required for each PETScSolve.
+    for _, (sol,) in iter_sol_mapper.items():
+
+        # For each PETSc solve, build the corresponding PETSc objects.
         petsc_objs = build_petsc_objects(sol.target)
 
+        # # Find the corresponding ActionExpr loop for this particular PETScSolve.
+        # iter_ae_mapper = MapNodes(Iteration, ActionExpr, 'groupby').visit(iet)
+        
+        # for iter, (ae,) in iter_ae_mapper.items():
+            
+        #     from IPython import embed; embed()
+        
+        mapper_main = {}
+        for tree in retrieve_iteration_tree(iet):
+            root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
+            
+            action_expr = FindNodes(ActionExpr).visit(root)
+            preconditioner_expr = FindNodes(PreExpr).visit(root)
 
+
+            if action_expr and action_expr[0].target.function == sol.target.function:
+
+                # Build the body of the matvec callback for this PETScSolve.
+                matvec_body = build_matvec_body(root, petsc_objs, struct, action_expr[0])
+                mapper = {sol.target.function.indexed: petsc_objs['xvec_tmp'].indexed}
+                matvec_body = Uxreplace(mapper).visit(matvec_body)
+
+                # Create Callable for the matvec callback.
+                matvec_callback = Callable('MyMatShellMult_'+str(sol.target.name), matvec_body,
+                                           retval=petsc_objs['err'],
+                                           parameters=(petsc_objs['A_matfree'],
+                                                       petsc_objs['xvec'],
+                                                       petsc_objs['yvec']))
+                
+                matvec_operation = Call('PetscCall', [Call('MatShellSetOperation',
+                                                           arguments=[petsc_objs['A_matfree'],
+                                                                      'MATOP_MULT',
+                                                                      Callback(matvec_callback.name,
+                                                                               'void', 'void')])])
+                
+                setup.append(matvec_operation)
+                mapper_main.update({root: None})
+
+
+            elif preconditioner_expr and preconditioner_expr[0].target.function == sol.target.function:
+
+                # Build the body of the preconditioner callback for this PETScSolve.
+                pre_body = build_pre_body(root, petsc_objs, struct, preconditioner_expr[0])
+
+                # Create Callable for the preconditioner callback.
+                pre_callback = Callable('preconditioner_callback'+str(sol.target.name),
+                                        pre_body,
+                                        retval=petsc_objs['err'],
+                                        parameters=(petsc_objs['A_matfree'],
+                                                    petsc_objs['yvec']))
+                
+                preconditioner_operation = Call('PetscCall', [Call('MatShellSetOperation',
+                                                                   arguments=[petsc_objs['A_matfree'],
+                                                                              'MATOP_GET_DIAGONAL',
+                                                                              Callback(pre_callback.name,
+                                                                                       'void', 'void')])])
+
+                setup.append(preconditioner_operation)
+                # from IPython import embed; embed()
+                mapper_main.update({root: None})
+
+        # from IPython import embed; embed()
+        iet = Transformer(mapper_main, nested=True).visit(iet)
+
+        
     body = iet.body._rebuild(body=(tuple(setup) + iet.body.body))
     iet = iet._rebuild(body=body)
 
-
+    # from IPython import embed; embed()
 
     return iet, {}
 
@@ -198,47 +267,39 @@ def build_petsc_objects(target):
     # TODO: Eventually, the objects built will be based
     # on the number of different PETSc equations present etc.
 
-    return {'A_matfree': Mat(name='A_matfree'+str(target.name)),
-            'xvec': Vec(name='xvec'+str(target.name)),
-            'local_xvec': Vec(name='local_xvec'+str(target.name), liveness='eager'),
-            'yvec': Vec(name='yvec'+str(target.name)),
-            'da': DM(name='da'+str(target.name), liveness='eager'),
-            'x': Vec(name='x'+str(target.name)),
-            'b': Vec(name='b'+str(target.name)),
-            'ksp': KSP(name='ksp'+str(target.name)),
-            'pc': PC(name='pc'+str(target.name)),
-            'err': PetscErrorCode(name='err'+str(target.name)),
-            'reason': PetscErrorCode(name='reason'+str(target.name)),
-            'xvec_tmp': (PETScArray(name='xvec_tmp'+str(target.name), dtype=target.dtype,
+    return {'A_matfree': Mat(name='A_matfree_'+str(target.name)),
+            'xvec': Vec(name='xvec_'+str(target.name)),
+            'local_xvec': Vec(name='local_xvec_'+str(target.name), liveness='eager'),
+            'yvec': Vec(name='yvec_'+str(target.name)),
+            'da': DM(name='da_'+str(target.name), liveness='eager'),
+            'x': Vec(name='x_'+str(target.name)),
+            'b': Vec(name='b_'+str(target.name)),
+            'ksp': KSP(name='ksp_'+str(target.name)),
+            'pc': PC(name='pc_'+str(target.name)),
+            'err': PetscErrorCode(name='err_'+str(target.name)),
+            'reason': PetscErrorCode(name='reason_'+str(target.name)),
+            'xvec_tmp': (PETScArray(name='xvec_tmp_'+str(target.name), dtype=target.dtype,
                                     dimensions=target.dimensions,
                                     shape=target.shape,
                                     liveness='eager'))}
 
 
-def build_struct(mapper):
+def build_struct(iet):
 
     # Place all symbols required by all PETSc solves into the same struct. 
     usr_ctx = []
 
     # for iter, _ in mapper.items():
         # Build the struct
-    tmp1 = FindSymbols('basics').visit(iter)
-    tmp2 = FindSymbols('dimensions|indexedbases').visit(iter)
+    tmp1 = FindSymbols('basics').visit(iet)
+    tmp2 = FindSymbols('dimensions|indexedbases').visit(iet)
     usr_ctx.extend(symb for symb in tmp1 if symb not in tmp2)
 
     return PETScStruct('ctx', usr_ctx)
 
 
-def build_matvec_body(action, objs, struct, expr_target):
+def build_matvec_body(action, objs, struct, action_expr):
 
-    # for iter, (action,)  in mapper.items():
-        # from IPython import embed; embed()
-
-        # target = 
-        # xvec_tmp =  PETScArray(name='xvec_tmp', dtype=target.dtype,
-        #                             dimensions=target.dimensions,
-        #                             shape=target.shape,
-        #                             liveness='eager')
 
     get_context = Call('PetscCall', [Call('MatShellGetContext',
                                         arguments=[objs['A_matfree'],
@@ -274,7 +335,7 @@ def build_matvec_body(action, objs, struct, expr_target):
                             [Call('DMDAVecGetArray',
                                 arguments=[objs['da'],
                                             objs['yvec'],
-                                            Byref(expr_target.write._C_symbol)])])
+                                            Byref(action_expr.write._C_symbol)])])
 
     dm_vec_restore_array_read = Call(
         'PetscCall',
@@ -286,7 +347,7 @@ def build_matvec_body(action, objs, struct, expr_target):
         'PetscCall',
         [Call('DMDAVecRestoreArray', arguments=[objs['da'],
                                                 objs['yvec'],
-                                                Byref(expr_target.write._C_symbol)])])
+                                                Byref(action_expr.write._C_symbol)])])
 
     dm_restore_local_vec = Call(
         'PetscCall',

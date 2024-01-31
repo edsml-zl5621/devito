@@ -11,7 +11,7 @@ from sympy import IndexedBase, sympify
 
 from devito.data import FULL
 from devito.ir.equations import (DummyEq, OpInc, OpMin, OpMax, OpAction,
-                                 OpRHS, OpPETScDummy, OpSolution)
+                                 OpRHS, OpPETScDummy, OpSolution, OpPreStencil)
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, detect_io)
@@ -29,7 +29,7 @@ __all__ = ['Node', 'Block', 'Expression', 'Callable', 'Call', 'ExprStmt',
            'ParallelIteration', 'ParallelBlock', 'Dereference', 'Lambda',
            'SyncSpot', 'Pragma', 'DummyExpr', 'BlankLine', 'ParallelTree',
            'BusyWait', 'CallableBody', 'Transfer', 'Callback', 'ActionExpr',
-           'RHSExpr', 'PETScDumExpr', 'SolutionExpr']
+           'RHSExpr', 'PETScDumExpr', 'SolutionExpr', 'PreExpr']
 
 # First-class IET nodes
 
@@ -501,13 +501,21 @@ class RHSExpr(Expression):
 
 class PETScDumExpr(Expression):
 
-    def __init__(self, expr, pragmas=None, operation=OpPETScDummy):
+    def __init__(self, expr, pragmas=None, operation=OpPETScDummy, target=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
+        self.target = target
 
 
 class SolutionExpr(Expression):
 
     def __init__(self, expr, pragmas=None, operation=OpSolution, target=None):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
+        self.target = target
+
+
+class PreExpr(Expression):
+
+    def __init__(self, expr, pragmas=None, operation=OpPreStencil, target=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
         self.target = target
 
