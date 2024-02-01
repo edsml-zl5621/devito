@@ -25,6 +25,7 @@ from devito.tools import (GenericVisitor, as_tuple, ctypes_to_cstr, filter_order
 from devito.types.basic import AbstractFunction, Basic
 from devito.types import (ArrayObject, CompositeObject, Dimension, Pointer,
                           IndexedData, DeviceMap)
+from devito.types.petsc import PETScArray
 
 
 __all__ = ['FindApplications', 'FindNodes', 'FindSections', 'FindSymbols',
@@ -248,9 +249,11 @@ class CGen(Visitor):
         else:
             strtype = ctypes_to_cstr(obj._C_ctype)
             strshape = ''
-            if isinstance(obj, (AbstractFunction, IndexedData)) and mode >= 1:
-                if not obj._mem_stack:
-                    strtype = '%s%s' % (strtype, self._restrict_keyword)
+        if isinstance(obj, (AbstractFunction, IndexedData)) and \
+                mode >= 1 and not isinstance(obj, PETScArray):
+            if not obj._mem_stack:
+                strtype = '%s%s' % (strtype, self._restrict_keyword)
+
         strtype = ' '.join(qualifiers + [strtype])
 
         if obj.is_LocalObject and obj._C_modifier is not None and mode == 2:

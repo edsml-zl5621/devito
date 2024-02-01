@@ -1,5 +1,5 @@
 from devito import *
-from devito.types import PETScSolve, Symbol
+from devito.types import PETScSolve
 import pandas as pd
 from devito import configuration
 configuration['opt'] = 'noop'
@@ -45,13 +45,20 @@ u2 = TimeFunction(name='u2', grid=grid, space_order=2)
 v2 = TimeFunction(name='v2', grid=grid, space_order=2)
 pn2 = Function(name='pn2', grid=grid, space_order=2)
 
-rhs1 = rho*(((1./dt)*(u1.dxc+v1.dyc)) - (u1.dxc*u1.dxc + v1.dyc*v1.dyc + 2.*u1.dyc*v1.dxc))
+
+rhs1 = rho * \
+    (((1./dt)*(u1.dxc+v1.dyc)) - (u1.dxc*u1.dxc + v1.dyc*v1.dyc + 2.*u1.dyc*v1.dxc))
 eq_pn1 = Eq(pn1.laplace, rhs1)
 bc_pn1 = [Eq(pn1[0, 0], 0.)]
 
-petsc1 = PETScSolve(eq_pn1, pn1, bcs=bc_pn1)
+# ksp type, pc type and relative tolerance.
+petsc1 = PETScSolve(eq_pn1, pn1, bcs=bc_pn1, solver_parameters={'ksp_type': 'gmres',
+                                                                'pc_type': 'jacobi',
+                                                                'ksp_rtol': 1e-7,
+                                                                'ksp_max_it': 2})
 
-rhs2 = rho*(((1./dt)*(u2.dxc+v2.dyc)) - (u2.dxc*u2.dxc + v2.dyc*v2.dyc + 2.*u2.dyc*v2.dxc))
+rhs2 = rho * \
+    (((1./dt)*(u2.dxc+v2.dyc)) - (u2.dxc*u2.dxc + v2.dyc*v2.dyc + 2.*u2.dyc*v2.dxc))
 eq_pn2 = Eq(pn2.laplace, rhs2)
 bc_pn2 = [Eq(pn2[0, 0], 0.)]
 
@@ -98,10 +105,10 @@ bc_v2 += [Eq(v2[t+1, x, 0], 0.)]  # bottom
 
 exprs1 = petsc1 + [update_u, update_v] + bc_u1 + bc_v1
 exprs2 = petsc2 + [update_u2, update_v2] + bc_u2 + bc_v2
-op = Operator(exprs1 + exprs2)
-# op.apply(time_m=0, time_M=ns-1, dt=dt)
+op = Operator(exprs1)
+op.apply(time_m=0, time_M=ns-1, dt=dt)
 print(op.ccode)
 # See petsc_solve.c for corresponding C code
 
-# pd.DataFrame(u.data[-1, :, :]).to_csv("results/1.csv", header=None, index=None)
-# pd.DataFrame(v.data[-1, :, :]).to_csv("results/2.csv", header=None, index=None)
+pd.DataFrame(u1.data[-1, :, :]).to_csv("results/1.csv", header=None, index=None)
+pd.DataFrame(v1.data[-1, :, :]).to_csv("results/2.csv", header=None, index=None)

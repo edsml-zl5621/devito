@@ -135,19 +135,24 @@ class PETScEq(Eq):
     Represents a general equation required by a PETSc solve.
     """
 
-    __rkwargs__ = (Eq.__rkwargs__ + ('target',))
+    __rkwargs__ = (Eq.__rkwargs__ + ('target', 'solver_parameters',))
 
     def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
-                target=None, **kwargs):
+                target=None, solver_parameters=None, **kwargs):
         obj = Eq.__new__(cls, lhs, rhs, subdomain=subdomain, coefficients=coefficients,
                          implicit_dims=implicit_dims, **kwargs)
         obj._target = target
+        obj._solver_parameters = solver_parameters
 
         return obj
-    
+
     @property
     def target(self):
         return self._target
+
+    @property
+    def solver_parameters(self):
+        return self._solver_parameters
 
 
 class Action(PETScEq):
@@ -172,7 +177,7 @@ class PreStencil(PETScEq):
     Eq needed for the preconditioner callback.
     """
     pass
-    
+
 
 class Solution(PETScEq):
     """
@@ -187,23 +192,25 @@ class PETScDummy(PETScEq):
     pass
 
 
-def PETScSolve(eq, target, bcs=None, **kwargs):
+def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
+
+    # from IPython import embed; embed()
 
     y_matvec = PETScArray(name='y_matvec_'+str(target.name), dtype=target.dtype,
                           dimensions=target.dimensions,
                           shape=target.shape, liveness='eager')
-    
-    y_pre = PETScArray(name='y_pre_'+str(target.name), dtype=target.dtype,
-                          dimensions=target.dimensions,
-                          shape=target.shape, liveness='eager')
 
-    b = PETScArray(name='b_'+str(target.name), dtype=target.dtype,
+    y_pre = PETScArray(name='y_pre_'+str(target.name), dtype=target.dtype,
                        dimensions=target.dimensions,
                        shape=target.shape, liveness='eager')
-    
-    x = PETScArray(name='x_'+str(target.name), dtype=target.dtype,
-                          dimensions=target.dimensions,
-                          shape=target.shape, liveness='eager')
+
+    b_tmp = PETScArray(name='b_tmp_'+str(target.name), dtype=target.dtype,
+                       dimensions=target.dimensions,
+                       shape=target.shape, liveness='eager')
+
+    sol_tmp = PETScArray(name='sol_tmp_'+str(target.name), dtype=target.dtype,
+                         dimensions=target.dimensions,
+                         shape=target.shape, liveness='eager')
 
     # TODO: Extend to different preconditioners but for now just considering
     # JACOBI diagonal.
@@ -220,12 +227,11 @@ def PETScSolve(eq, target, bcs=None, **kwargs):
     s1 = Symbol(name='s1')
     s2 = Symbol(name='s2')
     s3 = Symbol(name='s3')
-    s4 = Symbol(name='s4')
 
     # from devito.types import CriticalRegion, WeakFence
 
     # The equations that are supplied to callback functions will
-    # always have to be in separated loops. 
+    # always have to be in separated loops.
 
     # bc_for_matvec = []
     # for bc in bcs:
@@ -240,30 +246,41 @@ def PETScSolve(eq, target, bcs=None, **kwargs):
 
     if any(d.is_Time for d in eqn_dims):
 
-        preconditioner = PreStencil(y_pre, centre_stencil, implicit_dims=(target.grid.time_dim,), target=target)
-        action = Action(y_matvec, eq.lhs, implicit_dims=(target.grid.time_dim,), target=target)
-        rhs = RHS(b, eq.rhs, implicit_dims=(target.grid.time_dim,), target=target)
-        solution = Solution(target, x, implicit_dims=(target.grid.time_dim,), target=target)
+        preconditioner = PreStencil(y_pre, centre_stencil,
+                                    implicit_dims=(target.grid.time_dim,), target=target)
+        action = Action(y_matvec, eq.lhs,
+                        implicit_dims=(target.grid.time_dim,), target=target)
+        rhs = RHS(b_tmp, eq.rhs,
+                  implicit_dims=(target.grid.time_dim,), target=target)
+        solution = Solution(target, sol_tmp,
+                            implicit_dims=(target.grid.time_dim,),
+                            target=target, solver_parameters=solver_parameters)
 
-        dummy_pre = PETScDummy(s0, y_pre.indexify(indices=indices), implicit_dims=(target.grid.time_dim,))
-        dummy_action = PETScDummy(s1, y_matvec.indexify(indices=indices), implicit_dims=(target.grid.time_dim,))
-        dummy_rhs = PETScDummy(s2, b.indexify(indices=indices), implicit_dims=(target.grid.time_dim,))
-        dummy_sol = PETScDummy(s3, target.indexify(indices=indices), implicit_dims=(target.grid.time_dim,))
+        dummy_pre = PETScDummy(s0, y_pre.indexify(indices=indices),
+                               implicit_dims=(target.grid.time_dim,))
+        dummy_action = PETScDummy(s1, y_matvec.indexify(indices=indices),
+                                  implicit_dims=(target.grid.time_dim,))
+        dummy_rhs = PETScDummy(s2, b_tmp.indexify(indices=indices),
+                               implicit_dims=(target.grid.time_dim,))
+        dummy_sol = PETScDummy(s3, target.indexify(indices=indices),
+                               implicit_dims=(target.grid.time_dim,))
 
     else:
-    
+
         preconditioner = PreStencil(y_pre, centre_stencil, target=target)
         action = Action(y_matvec, eq.lhs, target=target)
-        rhs = RHS(b, eq.rhs, target=target)
-        solution = Solution(target, x, target=target)
+        rhs = RHS(b_tmp, eq.rhs, target=target)
+        solution = Solution(target, sol_tmp, target=target,
+                            solver_parameters=solver_parameters)
 
         dummy_pre = PETScDummy(s0, y_pre.indexify(indices=indices))
         dummy_action = PETScDummy(s1, y_matvec.indexify(indices=indices))
-        dummy_rhs = PETScDummy(s2, b.indexify(indices=indices))
+        dummy_rhs = PETScDummy(s2, b_tmp.indexify(indices=indices))
         dummy_sol = PETScDummy(s3, target.indexify(indices=indices))
+    # from IPython import embed; embed()
 
-
-    return [preconditioner, dummy_pre] + [action, dummy_action] + [solution, dummy_sol] + [rhs, dummy_rhs]
+    return [preconditioner, dummy_pre] + [action, dummy_action] + \
+        [solution, dummy_sol] + [rhs, dummy_rhs]
 
 
 class PETScStruct(CompositeObject):

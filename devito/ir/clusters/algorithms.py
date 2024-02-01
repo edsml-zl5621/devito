@@ -416,7 +416,7 @@ class Communications(Queue):
 
             # Construct the HaloTouch Cluster
             expr = Eq(self.B, HaloTouch(*points, halo_scheme=hs))
-        
+
             key = lambda i: i in prefix[:-1] or i in hs.loc_indices
             ispace = c.ispace.project(key)
 

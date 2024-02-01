@@ -1,8 +1,8 @@
 from collections import OrderedDict
 
 from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, SyncSpot,
-                           Section, HaloSpot, ExpressionBundle, ActionExpr, RHSExpr, PETScDumExpr,
-                           SolutionExpr, PreExpr)
+                           Section, HaloSpot, ExpressionBundle, ActionExpr, RHSExpr,
+                           PETScDumExpr, SolutionExpr, PreExpr)
 from devito.tools import timed_pass
 from devito.ir.equations import OpAction, OpRHS, OpPETScDummy, OpSolution, OpPreStencil
 
@@ -31,7 +31,8 @@ def iet_build(stree):
                 elif e.operation is OpRHS:
                     exprs.append(RHSExpr(e, operation=e.operation, target=e.target))
                 elif e.operation is OpSolution:
-                    exprs.append(SolutionExpr(e, operation=e.operation, target=e.target))
+                    exprs.append(SolutionExpr(e, operation=e.operation, target=e.target,
+                                              solver_parameters=e.solver_parameters))
                 elif e.operation is OpPETScDummy:
                     exprs.append(PETScDumExpr(e, operation=e.operation, target=e.target))
                 elif e.operation is OpPreStencil:

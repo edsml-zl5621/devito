@@ -487,37 +487,47 @@ class Increment(AugmentedExpression):
 
 class ActionExpr(Expression):
 
-    def __init__(self, expr, pragmas=None, operation=OpAction, target=None):
+    def __init__(self, expr, pragmas=None, operation=OpAction,
+                 target=None, solver_parameters=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
         self.target = target
+        self.solver_parameters = solver_parameters
 
 
 class RHSExpr(Expression):
 
-    def __init__(self, expr, pragmas=None, operation=OpRHS, target=None):
+    def __init__(self, expr, pragmas=None, operation=OpRHS,
+                 target=None, solver_parameters=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
         self.target = target
+        self.solver_parameters = solver_parameters
 
 
 class PETScDumExpr(Expression):
 
-    def __init__(self, expr, pragmas=None, operation=OpPETScDummy, target=None):
+    def __init__(self, expr, pragmas=None, operation=OpPETScDummy,
+                 target=None, solver_parameters=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
         self.target = target
+        self.solver_parameters = solver_parameters
 
 
 class SolutionExpr(Expression):
 
-    def __init__(self, expr, pragmas=None, operation=OpSolution, target=None):
+    def __init__(self, expr, pragmas=None, operation=OpSolution,
+                 target=None, solver_parameters=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
         self.target = target
+        self.solver_parameters = solver_parameters
 
 
 class PreExpr(Expression):
 
-    def __init__(self, expr, pragmas=None, operation=OpPreStencil, target=None):
+    def __init__(self, expr, pragmas=None, operation=OpPreStencil,
+                 target=None, solver_parameters=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
         self.target = target
+        self.solver_parameters = solver_parameters
 
 
 class Iteration(Node):

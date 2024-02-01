@@ -126,7 +126,7 @@ def stree_build(clusters, profiler=None, **kwargs):
                     candidate = i
         else:
             attach_section(candidate, section)
-            
+
     return stree
 
 
