@@ -60,11 +60,11 @@ def test_petsc_functions():
 
     expr = DummyExpr(ptr0.indexed[x, y], ptr1.indexed[x, y] + 1)
 
-    assert str(defn0) == 'PetscScalar**restrict ptr0;'
-    assert str(defn1) == 'const PetscScalar**restrict ptr1;'
-    assert str(defn2) == 'const PetscScalar**restrict ptr2;'
-    assert str(defn3) == 'PetscInt**restrict ptr3;'
-    assert str(defn4) == 'const PetscInt**restrict ptr4;'
+    assert str(defn0) == 'PetscScalar** ptr0;'
+    assert str(defn1) == 'const PetscScalar** ptr1;'
+    assert str(defn2) == 'const PetscScalar** ptr2;'
+    assert str(defn3) == 'PetscInt** ptr3;'
+    assert str(defn4) == 'const PetscInt** ptr4;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
 
 
