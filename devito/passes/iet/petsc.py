@@ -148,7 +148,7 @@ def drop_dummies(iet):
     for tree in retrieve_iteration_tree(iet):
         root = filter_iterations(tree, key=lambda i: i.dim.is_Space)
 
-        dummy = FindNodes(PETScDumExpr).visit(root[0])
+        dummy = FindNodes(PETScDumExpr).visit(root)
         if dummy:
             all_exprs = FindNodes(Expression).visit(root[0])
             if any(not isinstance(i, PETScDumExpr) for i in all_exprs):
