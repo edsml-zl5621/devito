@@ -137,8 +137,24 @@ class PETScEq(Eq):
 
     __rkwargs__ = (Eq.__rkwargs__ + ('target', 'solver_parameters',))
 
+    defaults = {
+        'ksp_type': 'gmres',
+        'pc_type': 'jacobi',
+        'ksp_rtol': 'PETSC_DEFAULT',
+        'ksp_atol': 'PETSC_DEFAULT',
+        'ksp_divtol': 'PETSC_DEFAULT',
+        'ksp_max_it': 'PETSC_DEFAULT'
+    }
+
     def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
                 target=None, solver_parameters=None, **kwargs):
+
+        if solver_parameters is None:
+            solver_parameters = cls.defaults
+        else:
+            for key, val in cls.defaults.items():
+                solver_parameters[key] = solver_parameters.get(key, val)
+
         obj = Eq.__new__(cls, lhs, rhs, subdomain=subdomain, coefficients=coefficients,
                          implicit_dims=implicit_dims, **kwargs)
         obj._target = target
@@ -277,7 +293,6 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         dummy_action = PETScDummy(s1, y_matvec.indexify(indices=indices))
         dummy_rhs = PETScDummy(s2, b_tmp.indexify(indices=indices))
         dummy_sol = PETScDummy(s3, target.indexify(indices=indices))
-    # from IPython import embed; embed()
 
     return [preconditioner, dummy_pre] + [action, dummy_action] + \
         [solution, dummy_sol] + [rhs, dummy_rhs]

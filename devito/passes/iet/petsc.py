@@ -295,12 +295,10 @@ def build_matvec_body(action, objs, struct, action_expr):
     return body
 
 
-ksp_mapper = {
+solver_mapper = {
     'gmres': 'KSPGMRES',
-}
-
-pc_mapper = {
     'jacobi': 'PCJACOBI',
+    'PETSC_DEFAULT': 'PETSC_DEFAULT',
 }
 
 
@@ -355,10 +353,10 @@ def build_solver_setup(objs, sol, struct):
                                                            objs['A_matfree'],
                                                            objs['A_matfree']])])
 
-    rtol = sol.solver_parameters.get('ksp_rtol', 'PETSC_DEFAULT')
-    abstol = sol.solver_parameters.get('ksp_atol', 'PETSC_DEFAULT')
-    divtol = sol.solver_parameters.get('ksp_divtol', 'PETSC_DEFAULT')
-    max_its = sol.solver_parameters.get('ksp_max_it', 'PETSC_DEFAULT')
+    rtol = sol.solver_parameters.get('ksp_rtol')
+    abstol = sol.solver_parameters.get('ksp_atol')
+    divtol = sol.solver_parameters.get('ksp_divtol')
+    max_its = sol.solver_parameters.get('ksp_max_it')
 
     ksp_set_tol = Call('PetscCall', [Call('KSPSetTolerances',
                                           arguments=[objs['ksp'],
@@ -368,7 +366,7 @@ def build_solver_setup(objs, sol, struct):
                                                      max_its])])
 
     # Set default KSP type to GMRES
-    ksp_type = ksp_mapper[sol.solver_parameters.get('ksp_type', 'gmres')]
+    ksp_type = solver_mapper[sol.solver_parameters.get('ksp_type')]
     ksp_set_type = Call('PetscCall', [Call('KSPSetType',
                                            arguments=[objs['ksp'],
                                                       ksp_type])])
@@ -377,16 +375,19 @@ def build_solver_setup(objs, sol, struct):
                                          arguments=[objs['ksp'],
                                                     Byref(objs['pc'])])])
 
-    # NOTE: Obvs temporary, but I'm setting the default preconditioner to
-    # JACOBI diagonal for now.
-    pc_type = pc_mapper[sol.solver_parameters.get('pc_type', 'jacobi')]
+    # NOTE: Obvs temporary, but the default preconditioner is
+    # JACOBI diagonal.
+    pc_type = solver_mapper[sol.solver_parameters.get('pc_type')]
     pc_set_type = Call('PetscCall', [Call('PCSetType',
                                           arguments=[objs['pc'],
                                                      pc_type])])
+
     if pc_type == 'PCJACOBI':
         pc_jacobi_set_type = Call('PetscCall', [Call('PCJacobiSetType',
                                                      arguments=[objs['pc'],
                                                                 'PC_JACOBI_DIAGONAL'])])
+    else:
+        pc_jacobi_set_type = None
 
     ksp_set_from_opts = Call('PetscCall', [Call('KSPSetFromOptions',
                                                 arguments=[objs['ksp']])])
