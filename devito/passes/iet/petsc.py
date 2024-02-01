@@ -47,7 +47,7 @@ def lower_petsc(iet, **kwargs):
 
         # This is the loop to pass the PETSc solution Vec x back to Devito.
         # TODO: Perhaps there is a cleaner way? But I'm not sure what yet.
-        sol_iter = filter_iterations(iter, key=lambda i: i.dim.is_Space)[0]
+        sol_iter = filter_iterations(iter, key=lambda i: i.dim.is_Space)
 
         mapper_main = {}
         for tree in retrieve_iteration_tree(iet):
@@ -112,10 +112,10 @@ def lower_petsc(iet, **kwargs):
             elif rhs_expr and rhs_expr[0].target.function == sol.target.function:
 
                 solver_body = execute_solve(root[0], petsc_objs,
-                                            rhs_expr[0], sol_iter, sol)
+                                            rhs_expr[0], sol_iter[0], sol)
                 mapper_main.update({root[0]: solver_body})
 
-        mapper_main.update({sol_iter: None})
+        mapper_main.update({sol_iter[0]: None})
         iet = Transformer(mapper_main).visit(iet)
 
     includes = []
