@@ -313,8 +313,6 @@ class Operator(Callable):
         """
         expand = kwargs['options'].get('expand', True)
 
-        # expressions = inject_dummy(expressions, **kwargs)
-
         # Specialization is performed on unevaluated expressions
         expressions = cls._specialize_dsl(expressions, **kwargs)
 

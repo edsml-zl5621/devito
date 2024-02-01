@@ -18,7 +18,6 @@ def stree_build(clusters, profiler=None, **kwargs):
     """
     Create a ScheduleTree from a ClusterGroup.
     """
-    # from IPython import embed; embed()
     clusters = preprocess(clusters, **kwargs)
 
     stree = ScheduleTree()

@@ -403,7 +403,7 @@ class Communications(Queue):
             for f in hs.fmapper:
                 for a in c.scope.getreads(f):
                     points.add(a.access)
-            # from IPython import embed; embed()
+
             # We also add all written symbols to ultimately create mock WARs
             # with `c`, which will prevent the newly created HaloTouch to ever
             # be rescheduled after `c` upon topological sorting
