@@ -146,15 +146,15 @@ def drop_dummies(iet):
 
     mapper = {}
     for tree in retrieve_iteration_tree(iet):
-        root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
+        root = filter_iterations(tree, key=lambda i: i.dim.is_Space)
 
-        dummy = FindNodes(PETScDumExpr).visit(root)
+        dummy = FindNodes(PETScDumExpr).visit(root[0])
         if dummy:
-            all_exprs = FindNodes(Expression).visit(root)
+            all_exprs = FindNodes(Expression).visit(root[0])
             if any(not isinstance(i, PETScDumExpr) for i in all_exprs):
                 mapper.update({dummy[0]: None})
             else:
-                mapper.update({root: None})
+                mapper.update({root[0]: None})
 
     iet = Transformer(mapper, nested=True).visit(iet)
 
