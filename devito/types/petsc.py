@@ -262,13 +262,13 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     if any(d.is_Time for d in eqn_dims):
 
-        preconditioner = PreStencil(y_pre, centre_stencil,
+        preconditioner = PreStencil(y_pre, centre_stencil, subdomain=eq.subdomain,
                                     implicit_dims=(target.grid.time_dim,), target=target)
-        action = Action(y_matvec, eq.lhs,
+        action = Action(y_matvec, eq.lhs, subdomain=eq.subdomain,
                         implicit_dims=(target.grid.time_dim,), target=target)
-        rhs = RHS(b_tmp, eq.rhs,
+        rhs = RHS(b_tmp, eq.rhs, subdomain=eq.subdomain,
                   implicit_dims=(target.grid.time_dim,), target=target)
-        solution = Solution(target, sol_tmp,
+        solution = Solution(target, sol_tmp, subdomain=eq.subdomain,
                             implicit_dims=(target.grid.time_dim,),
                             target=target, solver_parameters=solver_parameters)
 
@@ -283,10 +283,10 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     else:
 
-        preconditioner = PreStencil(y_pre, centre_stencil, target=target)
-        action = Action(y_matvec, eq.lhs, target=target)
-        rhs = RHS(b_tmp, eq.rhs, target=target)
-        solution = Solution(target, sol_tmp, target=target,
+        preconditioner = PreStencil(y_pre, centre_stencil, subdomain=eq.subdomain, target=target)
+        action = Action(y_matvec, eq.lhs, subdomain=eq.subdomain, target=target)
+        rhs = RHS(b_tmp, eq.rhs, subdomain=eq.subdomain, target=target)
+        solution = Solution(target, sol_tmp, subdomain=eq.subdomain, target=target,
                             solver_parameters=solver_parameters)
 
         dummy_pre = PETScDummy(s0, y_pre.indexify(indices=indices))

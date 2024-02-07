@@ -307,6 +307,7 @@ def build_solver_setup(objs, sol, struct):
 
     # TODO: Create DM based on the dimensions of the target field i.e
     # this determines DMDACreate2d, 3d etc
+    stencil_width = int(sol.target.function.space_order / 2)
     dm_create = Call('PetscCall', [Call('DMDACreate2d',
                                         arguments=['PETSC_COMM_SELF',
                                                    'DM_BOUNDARY_MIRROR',
@@ -316,7 +317,7 @@ def build_solver_setup(objs, sol, struct):
                                                    sol.target.shape[1],
                                                    'PETSC_DECIDE',
                                                    'PETSC_DECIDE',
-                                                   1, 1,
+                                                   1, stencil_width,
                                                    'NULL', 'NULL',
                                                    Byref(objs['da'])])])
 
