@@ -180,6 +180,12 @@ class Action(PETScEq):
     pass
 
 
+class BC(PETScEq):
+    """
+    """
+    pass
+
+
 class RHS(PETScEq):
     """
     Represents the mathematical expression of building the
@@ -249,10 +255,6 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # The equations that are supplied to callback functions will
     # always have to be in separated loops.
 
-    # bc_for_matvec = []
-    # for bc in bcs:
-    #     bc_for_matvec.append(Action(y_matvec.indexify(indices=bc.lhs.indices), bc.rhs))
-
     # from IPython import embed; embed()
     # Create Dummy equations.
     indices = tuple(d + 1 for d in target.dimensions)
@@ -266,9 +268,8 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                                     implicit_dims=(target.grid.time_dim,), target=target)
         action = Action(y_matvec, eq.lhs, subdomain=eq.subdomain,
                         implicit_dims=(target.grid.time_dim,), target=target)
-        rhs = RHS(b_tmp, eq.rhs, subdomain=eq.subdomain,
-                  implicit_dims=(target.grid.time_dim,), target=target)
-        solution = Solution(target, sol_tmp, subdomain=eq.subdomain,
+        rhs = RHS(b_tmp, eq.rhs, implicit_dims=(target.grid.time_dim,), target=target)
+        solution = Solution(target, sol_tmp,
                             implicit_dims=(target.grid.time_dim,),
                             target=target, solver_parameters=solver_parameters)
 
@@ -280,13 +281,20 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                                implicit_dims=(target.grid.time_dim,))
         dummy_sol = PETScDummy(s3, target.indexify(indices=indices),
                                implicit_dims=(target.grid.time_dim,))
+        
+        bc_for_matvec = []
+        for bc in bcs:
+            bc_for_matvec.append(BC(y_matvec,
+                                    target,
+                                    implicit_dims=(target.grid.time_dim,),
+                                    subdomain=bc.subdomain, target=target))
 
     else:
 
         preconditioner = PreStencil(y_pre, centre_stencil, subdomain=eq.subdomain, target=target)
         action = Action(y_matvec, eq.lhs, subdomain=eq.subdomain, target=target)
-        rhs = RHS(b_tmp, eq.rhs, subdomain=eq.subdomain, target=target)
-        solution = Solution(target, sol_tmp, subdomain=eq.subdomain, target=target,
+        rhs = RHS(b_tmp, eq.rhs,target=target)
+        solution = Solution(target, sol_tmp, target=target,
                             solver_parameters=solver_parameters)
 
         dummy_pre = PETScDummy(s0, y_pre.indexify(indices=indices))
@@ -294,8 +302,16 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         dummy_rhs = PETScDummy(s2, b_tmp.indexify(indices=indices))
         dummy_sol = PETScDummy(s3, target.indexify(indices=indices))
 
-    return [preconditioner, dummy_pre] + [action, dummy_action] + \
+        bc_for_matvec = []
+        for bc in bcs:
+            bc_for_matvec.append(BC(y_matvec,
+                                    target,
+                                    subdomain=bc.subdomain, target=target))
+
+    return bc_for_matvec + [preconditioner, dummy_pre] + [action, dummy_action] + \
         [solution, dummy_sol] + [rhs, dummy_rhs]
+
+    # return [bc_for_matvec[0]]
 
 
 class PETScStruct(CompositeObject):

@@ -10,7 +10,7 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import (DummyEq, OpInc, OpMin, OpMax, OpAction,
+from devito.ir.equations import (DummyEq, OpInc, OpMin, OpMax, OpAction, OpBC,
                                  OpRHS, OpPETScDummy, OpSolution, OpPreStencil)
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
@@ -29,7 +29,7 @@ __all__ = ['Node', 'Block', 'Expression', 'Callable', 'Call', 'ExprStmt',
            'ParallelIteration', 'ParallelBlock', 'Dereference', 'Lambda',
            'SyncSpot', 'Pragma', 'DummyExpr', 'BlankLine', 'ParallelTree',
            'BusyWait', 'CallableBody', 'Transfer', 'Callback', 'ActionExpr',
-           'RHSExpr', 'PETScDumExpr', 'SolutionExpr', 'PreExpr']
+           'RHSExpr', 'PETScDumExpr', 'SolutionExpr', 'PreExpr', 'BCExpr']
 
 # First-class IET nodes
 
@@ -488,6 +488,15 @@ class Increment(AugmentedExpression):
 class ActionExpr(Expression):
 
     def __init__(self, expr, pragmas=None, operation=OpAction,
+                 target=None, solver_parameters=None):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
+        self.target = target
+        self.solver_parameters = solver_parameters
+
+
+class BCExpr(Expression):
+
+    def __init__(self, expr, pragmas=None, operation=OpBC,
                  target=None, solver_parameters=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
         self.target = target

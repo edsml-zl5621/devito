@@ -1,7 +1,7 @@
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (List, Callable, Call, Transformer,
                            Callback, Definition, Uxreplace, FindSymbols,
-                           Iteration, MapNodes, ActionExpr, RHSExpr,
+                           Iteration, MapNodes, ActionExpr, RHSExpr, BCExpr,
                            SolutionExpr, FindNodes, Expression, PETScDumExpr,
                            retrieve_iteration_tree, filter_iterations, PreExpr)
 from devito.types.petsc import (Mat, Vec, DM, PetscErrorCode, PETScStruct,
@@ -15,6 +15,7 @@ __all__ = ['lower_petsc']
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
+    # from IPython import embed; embed()
     # NOTE: Currently only considering the case when opt='noop'. This
     # does not deal with the Temp Expressions generated when opt is not set
     # to 'noop' etc.
@@ -32,6 +33,9 @@ def lower_petsc(iet, **kwargs):
 
     # Figure out how many PETScSolves were passed to the Operator.
     iter_sol_mapper = MapNodes(Iteration, SolutionExpr, 'groupby').visit(iet)
+
+
+    bc_mapper = MapNodes(Iteration, BCExpr, 'groupby').visit(iet)
 
     setup = []
     efuncs = []
@@ -59,12 +63,25 @@ def lower_petsc(iet, **kwargs):
             preconditioner_expr = FindNodes(PreExpr).visit(root)
             rhs_expr = FindNodes(RHSExpr).visit(root)
 
+            # # For each PETScSolve, there could be more than 1 BC expression
+            # bc_exprs = FindNodes(BCExpr).visit(root)
+
             if action_expr and action_expr[0].target.function == sol.target.function:
 
+
+                iter_bcs_for_matvec = []
+                bc_rhs_funcs = []
+                for iter, (bc,) in bc_mapper.items():
+                    iter_bcs_for_matvec.append(iter[0])
+                    # from IPython import embed; embed()
+                    # bc_rhs_funcs.append(bc.rhs.function)
+
+                # from IPython import embed; embed()
                 # Build the body of the matvec callback for this PETScSolve.
                 matvec_body = build_matvec_body(root[0], petsc_objs,
-                                                struct, action_expr[0])
-                mapper = {sol.target.function.indexed: petsc_objs['xvec_tmp'].indexed}
+                                                struct, action_expr[0], iter_bcs_for_matvec)
+                mapper = {sol.target.function.indexed: petsc_objs['xvec_tmp'].indexed
+                          }
                 matvec_body = Uxreplace(mapper).visit(matvec_body)
 
                 # Create Callable for the matvec callback.
@@ -83,6 +100,10 @@ def lower_petsc(iet, **kwargs):
 
                 setup.append(matvec_operation)
                 mapper_main.update({root[0]: None})
+                mapper_main.update({iter_bcs_for_matvec[0]: None})
+                mapper_main.update({iter_bcs_for_matvec[1]: None})
+                mapper_main.update({iter_bcs_for_matvec[2]: None})
+                mapper_main.update({iter_bcs_for_matvec[3]: None})
                 efuncs.append(matvec_callback)
 
             elif preconditioner_expr and \
@@ -115,12 +136,22 @@ def lower_petsc(iet, **kwargs):
                                             rhs_expr[0], sol_iter[0], sol)
                 mapper_main.update({root[0]: solver_body})
 
+
+            # elif bc_exprs and bc_exprs[0].target.function == sol.target.function:
+
+            
+            #     mapper_main.update({root[0]: None})
+
+
+
         mapper_main.update({sol_iter[0]: None})
         iet = Transformer(mapper_main).visit(iet)
 
+        destroy = destroy_objects(petsc_objs)
+
     includes = []
     if iter_sol_mapper:
-        body = iet.body._rebuild(body=(tuple(init_setup) + tuple(setup) + iet.body.body))
+        body = iet.body._rebuild(body=(tuple(init_setup) + tuple(setup) + iet.body.body + tuple(destroy)))
         iet = iet._rebuild(body=body)
 
         # TODO: Obviously it won't be like this.
@@ -179,6 +210,31 @@ def petsc_setup():
     return [header, initialize, call_mpi, c.Line()]
 
 
+def destroy_objects(objs):
+
+
+    vec_x = Call('PetscCall', [Call('VecDestroy',
+                                         arguments=[Byref(objs['x'])])])
+    
+    vec_b = Call('PetscCall', [Call('VecDestroy',
+                                         arguments=[Byref(objs['b'])])])
+
+    mat = Call('PetscCall', [Call('MatDestroy',
+                                          arguments=[Byref(objs['A_matfree'])])])
+    
+    ksp = Call('PetscCall', [Call('KSPDestroy',
+                                          arguments=[Byref(objs['ksp'])])])
+    
+    pc = Call('PetscCall', [Call('PCDestroy',
+                                          arguments=[Byref(objs['pc'])])])
+    
+    dm = Call('PetscCall', [Call('DMDestroy',
+                                          arguments=[Byref(objs['da'])])])
+
+
+    return [vec_x, vec_b, mat, ksp, dm]
+
+
 def build_petsc_objects(target):
     # TODO: Eventually, the objects built will be based
     # on the number of different PETSc equations present etc.
@@ -212,7 +268,7 @@ def build_struct(iet):
     return PETScStruct('ctx', usr_ctx)
 
 
-def build_matvec_body(action, objs, struct, action_expr):
+def build_matvec_body(action, objs, struct, action_expr, iter_bcs_for_matvec):
 
     get_context = Call('PetscCall', [Call('MatShellGetContext',
                                           arguments=[objs['A_matfree'],
@@ -281,7 +337,10 @@ def build_matvec_body(action, objs, struct, action_expr):
                       action,
                       # TODO: Track BCs through PETScSolve This line will come
                       # from the BCs.
-                      c.Line('y_matvec_pn1[0][0]= xvec_tmp_pn1[0][0];'),
+                    #   c.Line('y_matvec_pn1[0][0]= xvec_tmp_pn1[0][0];'),
+                      iter_bcs_for_matvec[0],
+                      iter_bcs_for_matvec[2],
+                      iter_bcs_for_matvec[3],
                       dm_vec_restore_array_read,
                       dm_vec_restore_array,
                       dm_restore_local_vec,
@@ -310,8 +369,8 @@ def build_solver_setup(objs, sol, struct):
     stencil_width = int(sol.target.function.space_order / 2)
     dm_create = Call('PetscCall', [Call('DMDACreate2d',
                                         arguments=['PETSC_COMM_SELF',
-                                                   'DM_BOUNDARY_MIRROR',
-                                                   'DM_BOUNDARY_MIRROR',
+                                                   'DM_BOUNDARY_NONE',
+                                                   'DM_BOUNDARY_NONE',
                                                    'DMDA_STENCIL_STAR',
                                                    sol.target.shape[0],
                                                    sol.target.shape[1],
@@ -473,7 +532,7 @@ def build_pre_body(pre_iteration, objs, struct, expr_target):
                       pre_iteration,
                       # TODO: Track BCs through PETScSolve This line
                       # will come from the BCs.
-                      c.Line('y_pre_pn1[0][0]=1.;'),
+                    #   c.Line('y_pre_pn1[0][0]=1.;'),
                       dm_vec_restore_array,
                       func_return])
 

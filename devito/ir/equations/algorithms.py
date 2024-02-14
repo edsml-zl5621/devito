@@ -4,7 +4,7 @@ from devito.symbolics import retrieve_indexed, uxreplace, retrieve_dimensions
 from devito.tools import Ordering, as_tuple, flatten, filter_sorted, filter_ordered
 from devito.types import Dimension, IgnoreDimSort
 from devito.types.basic import AbstractFunction
-from devito.types.petsc import Action
+from devito.types.petsc import Action, BC
 
 __all__ = ['dimension_sort', 'lower_exprs']
 
@@ -106,6 +106,7 @@ def lower_exprs(expressions, subs=None, **kwargs):
 def _lower_exprs(expressions, subs):
     processed = []
     for expr in as_tuple(expressions):
+        # from IPython import embed; embed()
         try:
             dimension_map = expr.subdomain.dimension_map
         except AttributeError:
@@ -116,7 +117,7 @@ def _lower_exprs(expressions, subs):
         # TODO: cleaner way? Need to indexify the Action expression but NOT
         # shift it to align with the computational domain since PETSc
         # has its own local<->global mapping.
-        if not isinstance(expr, Action):
+        if not isinstance(expr, (Action, BC)):
             mapper = {f: lower_exprs(f.indexify(subs=dimension_map))
                       for f in expr.find(AbstractFunction)}
         else:
