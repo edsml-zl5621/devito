@@ -5,6 +5,7 @@ from devito.types.array import ArrayBasic
 import numpy as np
 from cached_property import cached_property
 from devito.types.equation import Eq
+import petsc4py
 
 __all__ = ['PETScSolve']
 
@@ -307,11 +308,11 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
             bc_for_matvec.append(BC(y_matvec,
                                     target,
                                     subdomain=bc.subdomain, target=target))
+    # from IPython import embed; embed()
 
-    return bc_for_matvec + [preconditioner, dummy_pre] + [action, dummy_action] + \
+    return [preconditioner, dummy_pre] + [action, dummy_action] + \
         [solution, dummy_sol] + [rhs, dummy_rhs]
 
-    # return [bc_for_matvec[0]]
 
 
 class PETScStruct(CompositeObject):

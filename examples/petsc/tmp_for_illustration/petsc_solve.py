@@ -109,10 +109,11 @@ bc_v2 += [Eq(v2[t+1, x, 0], 0.)]  # bottom
 exprs1 = petsc1 + [update_u, update_v] + bc_u1 + bc_v1
 exprs2 = petsc2 + [update_u2, update_v2] + bc_u2 + bc_v2
 op = Operator(exprs1)
-op.apply(time_m=0, time_M=ns-1, dt=dt)
+# op.apply(time_m=0, time_M=ns-1, dt=dt)
 print(op.ccode)
 # print(op.arguments(time_m=0, time_M=0, dt=dt))
 # See petsc_solve.c for corresponding C code
 
-pd.DataFrame(u1.data[-1, :, :]).to_csv("results/1.csv", header=None, index=None)
-pd.DataFrame(v1.data[-1, :, :]).to_csv("results/2.csv", header=None, index=None)
+# pd.DataFrame(u1.data[-1, :, :]).to_csv("results/1.csv", header=None, index=None)
+# pd.DataFrame(v1.data[-1, :, :]).to_csv("results/2.csv", header=None, index=None)
+# pd.DataFrame(pn1.data[:, :]).to_csv("results/3.csv", header=None, index=None)

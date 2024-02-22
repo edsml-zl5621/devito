@@ -100,10 +100,10 @@ def lower_petsc(iet, **kwargs):
 
                 setup.append(matvec_operation)
                 mapper_main.update({root[0]: None})
-                mapper_main.update({iter_bcs_for_matvec[0]: None})
-                mapper_main.update({iter_bcs_for_matvec[1]: None})
-                mapper_main.update({iter_bcs_for_matvec[2]: None})
-                mapper_main.update({iter_bcs_for_matvec[3]: None})
+                # mapper_main.update({iter_bcs_for_matvec[0]: None})
+                # mapper_main.update({iter_bcs_for_matvec[1]: None})
+                # mapper_main.update({iter_bcs_for_matvec[2]: None})
+                # mapper_main.update({iter_bcs_for_matvec[3]: None})
                 efuncs.append(matvec_callback)
 
             elif preconditioner_expr and \
@@ -127,6 +127,7 @@ def lower_petsc(iet, **kwargs):
                         Callback(pre_callback.name, 'void', 'void')])])
 
                 setup.append(preconditioner_operation)
+                # from IPython import embed; embed()
                 mapper_main.update({root[0]: None})
                 efuncs.append(pre_callback)
 
@@ -148,7 +149,7 @@ def lower_petsc(iet, **kwargs):
         iet = Transformer(mapper_main).visit(iet)
 
         destroy = destroy_objects(petsc_objs)
-
+    # from IPython import embed; embed()
     includes = []
     if iter_sol_mapper:
         body = iet.body._rebuild(body=(tuple(init_setup) + tuple(setup) + iet.body.body + tuple(destroy)))
@@ -188,7 +189,7 @@ def drop_dummies(iet):
                 mapper.update({root[0]: None})
 
     iet = Transformer(mapper, nested=True).visit(iet)
-
+    # from IPython import embed; embed()
     return iet
 
 
@@ -337,10 +338,10 @@ def build_matvec_body(action, objs, struct, action_expr, iter_bcs_for_matvec):
                       action,
                       # TODO: Track BCs through PETScSolve This line will come
                       # from the BCs.
-                    #   c.Line('y_matvec_pn1[0][0]= xvec_tmp_pn1[0][0];'),
-                      iter_bcs_for_matvec[0],
-                      iter_bcs_for_matvec[2],
-                      iter_bcs_for_matvec[3],
+                      c.Line('y_matvec_pn1[0][0]= xvec_tmp_pn1[0][0];'),
+                    #   iter_bcs_for_matvec[0],
+                    #   iter_bcs_for_matvec[2],
+                    #   iter_bcs_for_matvec[3],
                       dm_vec_restore_array_read,
                       dm_vec_restore_array,
                       dm_restore_local_vec,
@@ -369,8 +370,8 @@ def build_solver_setup(objs, sol, struct):
     stencil_width = int(sol.target.function.space_order / 2)
     dm_create = Call('PetscCall', [Call('DMDACreate2d',
                                         arguments=['PETSC_COMM_SELF',
-                                                   'DM_BOUNDARY_NONE',
-                                                   'DM_BOUNDARY_NONE',
+                                                   'DM_BOUNDARY_MIRROR',
+                                                   'DM_BOUNDARY_MIRROR',
                                                    'DMDA_STENCIL_STAR',
                                                    sol.target.shape[0],
                                                    sol.target.shape[1],
@@ -532,7 +533,7 @@ def build_pre_body(pre_iteration, objs, struct, expr_target):
                       pre_iteration,
                       # TODO: Track BCs through PETScSolve This line
                       # will come from the BCs.
-                    #   c.Line('y_pre_pn1[0][0]=1.;'),
+                      c.Line('y_pre_pn1[0][0]=1.;'),
                       dm_vec_restore_array,
                       func_return])
 
