@@ -5,7 +5,6 @@ from devito.types.array import ArrayBasic
 import numpy as np
 from cached_property import cached_property
 from devito.types.equation import Eq
-import petsc4py
 
 __all__ = ['PETScSolve']
 
