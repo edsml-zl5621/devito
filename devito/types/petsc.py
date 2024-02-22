@@ -282,12 +282,13 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         dummy_sol = PETScDummy(s3, target.indexify(indices=indices),
                                implicit_dims=(target.grid.time_dim,))
         
-        bc_for_matvec = []
-        for bc in bcs:
-            bc_for_matvec.append(BC(y_matvec,
-                                    target,
-                                    implicit_dims=(target.grid.time_dim,),
-                                    subdomain=bc.subdomain, target=target))
+        if bcs is not None:
+            bc_for_matvec = []
+            for bc in bcs:
+                bc_for_matvec.append(BC(y_matvec,
+                                        target,
+                                        implicit_dims=(target.grid.time_dim,),
+                                        subdomain=bc.subdomain, target=target))
 
     else:
 
@@ -302,11 +303,12 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         dummy_rhs = PETScDummy(s2, b_tmp.indexify(indices=indices))
         dummy_sol = PETScDummy(s3, target.indexify(indices=indices))
 
-        bc_for_matvec = []
-        for bc in bcs:
-            bc_for_matvec.append(BC(y_matvec,
-                                    target,
-                                    subdomain=bc.subdomain, target=target))
+        if bcs is not None:
+            bc_for_matvec = []
+            for bc in bcs:
+                bc_for_matvec.append(BC(y_matvec,
+                                        target,
+                                        subdomain=bc.subdomain, target=target))
     # from IPython import embed; embed()
 
     return [preconditioner, dummy_pre] + [action, dummy_action] + \
