@@ -157,7 +157,7 @@ def _lower_exprs(expressions, subs):
         return processed.pop()
 
 
-def lower_exprs_petsc(expressions, subs=None):
+def lower_exprs_petsc(expressions):
     """
     TODO: Probably a neater way of doing this but need to indexify the Action
     expression but NOT shift it to align with the computational domain since PETSc
@@ -196,8 +196,6 @@ def lower_exprs_petsc(expressions, subs=None):
         # Add dimensions map to the mapper in case dimensions are used
         # as an expression, i.e. Eq(u, x, subdomain=xleft)
         mapper.update(dimension_map)
-        # Add the user-supplied substitutions
-        mapper.update(subs)
         # Apply mapper to expression
         processed.append(uxreplace(expr, mapper))
 
