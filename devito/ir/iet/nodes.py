@@ -32,6 +32,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
 
 # First-class IET nodes
 
+
 class Node(Signer):
 
     __metaclass__ = abc.ABCMeta
