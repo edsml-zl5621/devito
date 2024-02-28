@@ -1,8 +1,9 @@
-from devito import Grid
-from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
+from devito import Grid, Function, Eq, Operator
+from devito.ir.iet import (Call, ElementalFunction, Definition,
+                           DummyExpr, FindNodes, Expression)
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
-                          PC, KSPConvergedReason, PETScArray)
+                          PC, KSPConvergedReason, PETScArray, Action)
 import numpy as np
 
 
@@ -63,3 +64,22 @@ def test_petsc_functions():
     assert str(defn3) == 'PetscInt**restrict ptr3;'
     assert str(defn4) == 'const PetscInt**restrict ptr4;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
+
+
+def test_no_shifting():
+
+    grid = Grid((2, 2))
+
+    arr = PETScArray(name='arr', dimensions=grid.dimensions)
+
+    f1 = Function(name='f1', grid=grid, space_order=2)
+
+    action = Action(arr, f1.laplace)
+
+    op = Operator([action], opt='noop')
+
+    expr = FindNodes(Expression).visit(op)
+
+    assert str(expr[-1]) == 'arr[x][y] = -2.0F*f1[x][y]/pow(h_x, 2) + f1[x - 1][y]/pow(h_x, 2) + f1[x + 1][y]/pow(h_x, 2) - 2.0F*f1[x][y]/pow(h_y, 2) + f1[x][y - 1]/pow(h_y, 2) + f1[x][y + 1]/pow(h_y, 2);'
+
+    assert op.arguments().get('x_m') == 0
