@@ -1,4 +1,4 @@
-from devito import Grid, Function, Eq, Operator
+from devito import Grid, Function, Operator
 from devito.ir.iet import (Call, ElementalFunction, Definition,
                            DummyExpr, FindNodes, Expression)
 from devito.passes.iet.languages.C import CDataManager
@@ -80,6 +80,9 @@ def test_no_shifting():
 
     expr = FindNodes(Expression).visit(op)
 
-    assert str(expr[-1]) == 'arr[x][y] = -2.0F*f1[x][y]/pow(h_x, 2) + f1[x - 1][y]/pow(h_x, 2) + f1[x + 1][y]/pow(h_x, 2) - 2.0F*f1[x][y]/pow(h_y, 2) + f1[x][y - 1]/pow(h_y, 2) + f1[x][y + 1]/pow(h_y, 2);'
+    assert str(expr[-1]) == 'arr[x][y] = -2.0F*f1[x][y]/pow(h_x, 2) + ' \
+                            'f1[x - 1][y]/pow(h_x, 2) + f1[x + 1][y]/pow(h_x, 2) - ' \
+                            '2.0F*f1[x][y]/pow(h_y, 2) + f1[x][y - 1]/pow(h_y, 2) + ' \
+                            'f1[x][y + 1]/pow(h_y, 2);'
 
     assert op.arguments().get('x_m') == 0
