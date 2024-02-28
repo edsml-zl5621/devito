@@ -113,10 +113,8 @@ def _lower_exprs(expressions, subs):
             dimension_map = {}
 
         # Handle Functions (typical case)
-        # mapper = {f: _lower_exprs(f.indexify(subs=dimension_map), subs)
-        #           for f in expr.find(AbstractFunction)}
         if not isinstance(expr, (Action)):
-            mapper = {f: lower_exprs(f.indexify(subs=dimension_map))
+            mapper = {f: _lower_exprs(f.indexify(subs=dimension_map), subs)
                       for f in expr.find(AbstractFunction)}
         else:
             mapper = {f: lower_exprs_petsc(f.indexify(subs=dimension_map))
@@ -157,9 +155,9 @@ def _lower_exprs(expressions, subs):
 
 def lower_exprs_petsc(expressions):
     """
-    TODO: Probably a neater way of doing this but need to indexify the Action
+    TODO: Looking for a neater way of doing this but need to indexify the Action
     expression but NOT shift it to align with the computational domain since PETSc
-    has its own local<->global mapping.
+    understands negative indexing when accessing the outer halo.
     """
 
     processed = []
