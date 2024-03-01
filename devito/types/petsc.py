@@ -70,10 +70,10 @@ class PETScArray(ArrayBasic):
                    ('liveness',))
 
     def __init_finalize__(self, *args, **kwargs):
-        super().__init_finalize__(*args, **kwargs)
-
-        self._liveness = kwargs.get('liveness', 'lazy')
+        self._liveness = kwargs.pop('liveness', 'lazy')
         assert self._liveness in ['eager', 'lazy']
+
+        super().__init_finalize__(*args, **kwargs)
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
