@@ -6,13 +6,13 @@ from .array import *  # noqa
 from .object import *  # noqa
 from .lazy import *  # noqa
 from .misc import *  # noqa
-from .petsc import *  # noqa
 
 # Needed both within and outside Devito
 from .dimension import *  # noqa
 from .caching import _SymbolCache, CacheManager  # noqa
 from .equation import *  # noqa
 from .constant import *  # noqa
+from .petsc import *  # noqa
 
 # Some more internal types which depend on some of the types above
 from .parallel import *  # noqa
