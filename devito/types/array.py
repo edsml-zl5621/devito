@@ -57,7 +57,7 @@ class ArrayBasic(AbstractFunction):
     @property
     def is_const(self):
         return self._is_const
-    
+
     @property
     def liveness(self):
         return self._liveness
