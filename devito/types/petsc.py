@@ -66,14 +66,7 @@ class PETScArray(ArrayBasic):
 
     _data_alignment = False
 
-    __rkwargs__ = (ArrayBasic.__rkwargs__ +
-                   ('liveness',))
-
-    def __init_finalize__(self, *args, **kwargs):
-        self._liveness = kwargs.pop('liveness', 'lazy')
-        assert self._liveness in ['eager', 'lazy']
-
-        super().__init_finalize__(*args, **kwargs)
+    __rkwargs__ = ArrayBasic.__rkwargs__
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
@@ -88,18 +81,6 @@ class PETScArray(ArrayBasic):
     @property
     def _C_name(self):
         return self.name
-
-    @property
-    def liveness(self):
-        return self._liveness
-
-    @property
-    def _mem_internal_eager(self):
-        return self._liveness == 'eager'
-
-    @property
-    def _mem_internal_lazy(self):
-        return self._liveness == 'lazy'
 
 
 def dtype_to_petsctype(dtype):
