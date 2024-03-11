@@ -164,7 +164,6 @@ class Array(ArrayBasic):
             raise TypeError("`padding` must be int or %d-tuple of ints" % self.ndim)
         return DimensionTuple(*padding, getters=self.dimensions)
 
-
     @property
     def scope(self):
         return self._scope
