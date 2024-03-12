@@ -1,4 +1,4 @@
-from devito import Grid
+from devito import Grid, Function, Eq
 from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
@@ -63,3 +63,24 @@ def test_petsc_functions():
     assert str(defn3) == 'PetscInt**restrict ptr3;'
     assert str(defn4) == 'const PetscInt**restrict ptr4;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
+
+
+def test_petsc_subs():
+    """
+    Test support for PETScArrays in substitutions.
+    """
+    grid = Grid((2, 2))
+
+    f1 = Function(name='f1', grid=grid, space_order=2)
+    f2 = Function(name='f2', grid=grid, space_order=2)
+
+    arr = PETScArray(name='arr', dimensions=f2.dimensions, dtype=f2.dtype)
+
+    eqn = Eq(f1, f2.laplace)
+    eqn_subs = eqn.subs(f2, arr)
+
+    assert str(eqn) == 'Eq(f1(x, y), Derivative(f2(x, y), (x, 2))' +  \
+        ' + Derivative(f2(x, y), (y, 2)))'
+
+    assert str(eqn_subs) == 'Eq(f1(x, y), Derivative(arr(x, y), (x, 2))' +  \
+        ' + Derivative(arr(x, y), (y, 2)))'
