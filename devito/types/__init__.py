@@ -12,10 +12,10 @@ from .dimension import *  # noqa
 from .caching import _SymbolCache, CacheManager  # noqa
 from .equation import *  # noqa
 from .constant import *  # noqa
-from .petsc import *  # noqa
 
 # Some more internal types which depend on some of the types above
 from .parallel import *  # noqa
+from .petsc import *  # noqa
 
 # Needed only outside Devito
 from .grid import *  # noqa
