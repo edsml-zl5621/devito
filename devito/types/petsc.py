@@ -5,6 +5,7 @@ import numpy as np
 from cached_property import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
+from devito.finite_differences.tools import fd_weights_registry
 
 
 class DM(LocalObject):
@@ -72,12 +73,30 @@ class PETScArray(ArrayBasic, Differentiable):
 
     _data_alignment = False
 
+    # Default method for the finite difference approximation weights computation.
+    _default_fd = 'taylor'
+
     __rkwargs__ = (AbstractFunction.__rkwargs__ +
-                   ('dimensions', 'liveness'))
+                   ('dimensions', 'liveness', 'coefficients'))
+
+    def __init_finalize__(self, *args, **kwargs):
+
+        super().__init_finalize__(*args, **kwargs)
+
+        # Symbolic (finite difference) coefficients
+        self._coefficients = kwargs.get('coefficients', self._default_fd)
+        if self._coefficients not in fd_weights_registry:
+            raise ValueError("coefficients must be one of %s"
+                             " not %s" % (str(fd_weights_registry), self._coefficients))
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
         return kwargs.get('dtype', np.float32)
+
+    @property
+    def coefficients(self):
+        """Form of the coefficients of the function."""
+        return self._coefficients
 
     @cached_property
     def _C_ctype(self):
