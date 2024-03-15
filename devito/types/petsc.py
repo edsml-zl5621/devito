@@ -6,6 +6,7 @@ from cached_property import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
+from devito import Eq
 
 
 class DM(LocalObject):
@@ -118,3 +119,66 @@ def dtype_to_petsctype(dtype):
         np.int64: 'PetscInt',
         np.float64: 'PetscScalar'
     }[dtype]
+
+
+class PETScEq(Eq):
+    """
+    Represents a general equation required by a PETSc solve.
+    """
+
+    __rkwargs__ = (Eq.__rkwargs__ + ('target', 'solver_parameters',))
+
+    defaults = {
+        'ksp_type': 'gmres',
+        'pc_type': 'jacobi',
+        'ksp_rtol': 'PETSC_DEFAULT',
+        'ksp_atol': 'PETSC_DEFAULT',
+        'ksp_divtol': 'PETSC_DEFAULT',
+        'ksp_max_it': 'PETSC_DEFAULT'
+    }
+
+    def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
+                target=None, solver_parameters=None, **kwargs):
+
+        if solver_parameters is None:
+            solver_parameters = cls.defaults
+        else:
+            for key, val in cls.defaults.items():
+                solver_parameters[key] = solver_parameters.get(key, val)
+
+        obj = Eq.__new__(cls, lhs, rhs, subdomain=subdomain, coefficients=coefficients,
+                         implicit_dims=implicit_dims, **kwargs)
+        obj._target = target
+        obj._solver_parameters = solver_parameters
+
+        return obj
+
+    @property
+    def target(self):
+        return self._target
+
+    @property
+    def solver_parameters(self):
+        return self._solver_parameters
+    
+
+class Action(PETScEq):
+    """
+    Represents the mathematical expression of applying a linear
+    operator to a vector. This is a key component
+    for running matrix-free solvers.
+    """
+    pass
+
+
+def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
+
+    y_matvec = PETScArray(name='y_matvec_'+str(target.name), dtype=target.dtype,
+                          dimensions=target.dimensions,
+                          shape=target.shape, liveness='eager')
+    
+    action = Action(y_matvec, eq.lhs, subdomain=eq.subdomain,
+                    implicit_dims=(target.grid.time_dim,), target=target,
+                    solver_parameters=solver_parameters)
+    
+    return [action]
