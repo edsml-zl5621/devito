@@ -88,3 +88,16 @@ def test_petsc_subs():
     assert str(eqn_subs.rhs.evaluate) == '-2.0*arr(x, y)/h_x**2' + \
         ' + arr(x - h_x, y)/h_x**2 + arr(x + h_x, y)/h_x**2 - 2.0*arr(x, y)/h_y**2' + \
         ' + arr(x, y - h_y)/h_y**2 + arr(x, y + h_y)/h_y**2'
+    
+
+# def test_petsc_solve():
+
+#     grid = Grid((2, 2))
+
+#     f1 = Function(name='f1', grid=grid, space_order=2)
+#     f2 = Function(name='f2', grid=grid, space_order=2)
+
+#     arr = PETScArray(name='arr', dimensions=f2.dimensions, dtype=f2.dtype)
+
+#     eqn = Eq(f1, f2.laplace)
+#     eqn_subs = eqn.subs(f2, arr)
