@@ -17,9 +17,11 @@ class ArrayBasic(AbstractFunction):
 
     is_ArrayBasic = True
 
-    __rkwargs__ = AbstractFunction.__rkwargs__ + ('is_const',)
+    __rkwargs__ = AbstractFunction.__rkwargs__ + ('is_const', 'liveness')
 
     def __init_finalize__(self, *args, **kwargs):
+
+        self._liveness = kwargs.setdefault('liveness', 'lazy')
         super().__init_finalize__(*args, **kwargs)
         self._is_const = kwargs.get('is_const', False)
 
@@ -55,6 +57,18 @@ class ArrayBasic(AbstractFunction):
     @property
     def is_const(self):
         return self._is_const
+
+    @property
+    def liveness(self):
+        return self._liveness
+
+    @property
+    def _mem_internal_eager(self):
+        return self._liveness == 'eager'
+
+    @property
+    def _mem_internal_lazy(self):
+        return self._liveness == 'lazy'
 
 
 class Array(ArrayBasic):
@@ -126,9 +140,6 @@ class Array(ArrayBasic):
     def __init_finalize__(self, *args, **kwargs):
         super().__init_finalize__(*args, **kwargs)
 
-        self._liveness = kwargs.get('liveness', 'lazy')
-        assert self._liveness in ['eager', 'lazy']
-
         self._scope = kwargs.get('scope', 'heap')
         assert self._scope in ['heap', 'stack', 'static', 'constant', 'shared']
 
@@ -154,24 +165,12 @@ class Array(ArrayBasic):
         return DimensionTuple(*padding, getters=self.dimensions)
 
     @property
-    def liveness(self):
-        return self._liveness
-
-    @property
     def scope(self):
         return self._scope
 
     @property
     def _C_ctype(self):
         return POINTER(dtype_to_ctype(self.dtype))
-
-    @property
-    def _mem_internal_eager(self):
-        return self._liveness == 'eager'
-
-    @property
-    def _mem_internal_lazy(self):
-        return self._liveness == 'lazy'
 
     @property
     def _mem_stack(self):
