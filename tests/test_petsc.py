@@ -84,3 +84,7 @@ def test_petsc_subs():
 
     assert str(eqn_subs) == 'Eq(f1(x, y), Derivative(arr(x, y), (x, 2))' +  \
         ' + Derivative(arr(x, y), (y, 2)))'
+
+    assert str(eqn_subs.rhs.evaluate) == '-2.0*arr(x, y)/h_x**2' + \
+        ' + arr(x - h_x, y)/h_x**2 + arr(x + h_x, y)/h_x**2 - 2.0*arr(x, y)/h_y**2' + \
+        ' + arr(x, y - h_y)/h_y**2 + arr(x, y + h_y)/h_y**2'
