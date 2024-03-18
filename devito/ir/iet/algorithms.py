@@ -1,8 +1,9 @@
 from collections import OrderedDict
 
 from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, SyncSpot,
-                           Section, HaloSpot, ExpressionBundle)
+                           Section, HaloSpot, ExpressionBundle, ActionExpr, RHSExpr)
 from devito.tools import timed_pass
+from devito.ir.equations import OpAction, OpRHS
 
 __all__ = ['iet_build']
 
@@ -24,6 +25,12 @@ def iet_build(stree):
             for e in i.exprs:
                 if e.is_Increment:
                     exprs.append(Increment(e))
+                elif e.operation is OpAction:
+                    exprs.append(ActionExpr(e, operation=e.operation, target=e.target,
+                                            solver_parameters=e.solver_parameters))
+                elif e.operation is OpRHS:
+                    exprs.append(RHSExpr(e, operation=e.operation, target=e.target,
+                                         solver_parameters=e.solver_parameters))
                 else:
                     exprs.append(Expression(e, operation=e.operation))
             body = ExpressionBundle(i.ispace, i.ops, i.traffic, body=exprs)
