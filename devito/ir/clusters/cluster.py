@@ -375,6 +375,9 @@ class Cluster:
                 else:
                     d = i.dim
                 try:
+                    # TODO: This is the one check that needs to be turned off
+                    # for PETScArrays otherwise the iteration bounds are incorrect.
+                    # Need to discuss this.
                     if not isinstance(f, PETScArray):
                         if i.lower < 0 or \
                            i.upper > f._size_nodomain[d].left + f._size_halo[d].right:
