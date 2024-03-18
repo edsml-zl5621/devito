@@ -10,7 +10,7 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax
+from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpAction, OpRHS
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, WithLock, PrefetchUpdate, detect_io)
@@ -28,7 +28,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback']
+           'CallableBody', 'Transfer', 'Callback', 'ActionExpr', 'RHSExpr']
 
 # First-class IET nodes
 
@@ -482,6 +482,24 @@ class Increment(AugmentedExpression):
 
     def __init__(self, expr, pragmas=None):
         super().__init__(expr, pragmas=pragmas, operation=OpInc)
+
+
+class ActionExpr(Expression):
+
+    def __init__(self, expr, pragmas=None, operation=OpAction,
+                 target=None, solver_parameters=None):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
+        self.target = target
+        self.solver_parameters = solver_parameters
+
+
+class RHSExpr(Expression):
+
+    def __init__(self, expr, pragmas=None, operation=OpRHS,
+                 target=None, solver_parameters=None):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
+        self.target = target
+        self.solver_parameters = solver_parameters
 
 
 class Iteration(Node):
