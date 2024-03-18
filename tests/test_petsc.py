@@ -1,8 +1,9 @@
-from devito import Grid, Function, Eq
-from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
+from devito import Grid, Function, Eq, Operator
+from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
+                           ActionExpr, FindNodes, RHSExpr)
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
-                          PC, KSPConvergedReason, PETScArray)
+                          PC, KSPConvergedReason, PETScArray, PETScSolve)
 import numpy as np
 
 
@@ -90,14 +91,32 @@ def test_petsc_subs():
         ' + arr(x, y - h_y)/h_y**2 + arr(x, y + h_y)/h_y**2'
     
 
-# def test_petsc_solve():
+def test_petsc_solve():
 
-#     grid = Grid((2, 2))
+    grid = Grid((2, 2))
 
-#     f1 = Function(name='f1', grid=grid, space_order=2)
-#     f2 = Function(name='f2', grid=grid, space_order=2)
+    f = Function(name='f', grid=grid, space_order=2)
+    g = Function(name='g', grid=grid, space_order=2)
 
-#     arr = PETScArray(name='arr', dimensions=f2.dimensions, dtype=f2.dtype)
+    eqn = Eq(f.laplace, g)
 
-#     eqn = Eq(f1, f2.laplace)
-#     eqn_subs = eqn.subs(f2, arr)
+    petsc = PETScSolve(eqn, f)
+
+    op = Operator(petsc, opt='noop')
+
+    action_expr = FindNodes(ActionExpr).visit(op)
+
+    rhs_expr = FindNodes(RHSExpr).visit(op)
+
+    assert str(action_expr[-1]) == 'y_matvec_f[x][y] = -2.0F*x_matvec_f[x][y]/pow(h_x, 2)' + \
+        ' + x_matvec_f[x - 1][y]/pow(h_x, 2) + x_matvec_f[x + 1][y]/pow(h_x, 2)' + \
+        ' - 2.0F*x_matvec_f[x][y]/pow(h_y, 2) + x_matvec_f[x][y - 1]/pow(h_y, 2)' + \
+        ' + x_matvec_f[x][y + 1]/pow(h_y, 2);'
+    
+    assert str(rhs_expr[-1]) == 'b_tmp_f[x][y] = g[x + 2][y + 2];'
+
+    # Check the iteration bounds
+    assert op.arguments().get('x_m') == 0
+    assert op.arguments().get('y_m') == 0
+    assert op.arguments().get('y_M') == 1
+    assert op.arguments().get('x_M') == 1
