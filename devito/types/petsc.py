@@ -1,13 +1,11 @@
 from devito.tools import CustomDtype
-from devito.types import LocalObject
+from devito.types import LocalObject, Eq
 from devito.types.array import ArrayBasic
 import numpy as np
 from cached_property import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
-from devito import Eq
-
 
 class DM(LocalObject):
     """
@@ -123,11 +121,12 @@ def dtype_to_petsctype(dtype):
 
 class PETScEq(Eq):
     """
-    Represents a general equation required by a PETSc solve.
+    Represents a general equation required by PETScSolve.
     """
 
     __rkwargs__ = (Eq.__rkwargs__ + ('target', 'solver_parameters',))
 
+    # TODO: Add more solver parameters
     defaults = {
         'ksp_type': 'gmres',
         'pc_type': 'jacobi',
@@ -171,14 +170,40 @@ class Action(PETScEq):
     pass
 
 
+class RHS(PETScEq):
+    """
+    Represents the mathematical expression of building the
+    rhs of a linear system.
+    """
+    pass
+
+
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
+
+    # TODO: This is a placeholder for the actual implementation. To start,
+    # track a single PETScEq i.e an 'Action' through the Operator.
 
     y_matvec = PETScArray(name='y_matvec_'+str(target.name), dtype=target.dtype,
                           dimensions=target.dimensions,
                           shape=target.shape, liveness='eager')
     
-    action = Action(y_matvec, eq.lhs, subdomain=eq.subdomain,
-                    implicit_dims=(target.grid.time_dim,), target=target,
-                    solver_parameters=solver_parameters)
+    x_matvec = PETScArray(name='x_matvec_'+str(target.name), dtype=target.dtype,
+                          dimensions=target.dimensions,
+                          shape=target.shape, liveness='eager')
     
-    return [action]
+    b_tmp = PETScArray(name='b_tmp_'+str(target.name), dtype=target.dtype,
+                       dimensions=target.dimensions,
+                       shape=target.shape, liveness='eager')
+    
+    # TODO: Extend to rearrange equation for implicit time stepping. 
+    action_tmp = Action(y_matvec, eq.lhs, subdomain=eq.subdomain, target=target,
+                        solver_parameters=solver_parameters)
+    
+    rhs = RHS(b_tmp, eq.rhs, subdomain=eq.subdomain, target=target,
+              solver_parameters=solver_parameters)
+
+    # Only need symbolic representation of equation in mat-vec action callback.
+    action = action_tmp.subs(target, x_matvec)
+
+    
+    return [action] + [rhs]

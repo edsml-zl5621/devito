@@ -13,7 +13,7 @@ from devito.ir.support import (PARALLEL, PARALLEL_IF_PVT, BaseGuardBoundNext,
 from devito.mpi.halo_scheme import HaloScheme, HaloTouch
 from devito.symbolics import estimate_cost
 from devito.tools import as_tuple, flatten, frozendict, infer_dtype
-from devito.types import WeakFence, CriticalRegion
+from devito.types import WeakFence, CriticalRegion, PETScArray
 
 __all__ = ["Cluster", "ClusterGroup"]
 
@@ -344,11 +344,12 @@ class Cluster(object):
                 else:
                     d = i.dim
                 try:
-                    if i.lower < 0 or \
-                       i.upper > f._size_nodomain[d].left + f._size_halo[d].right:
-                        # It'd mean trying to access a point before the
-                        # left halo (test0) or after the right halo (test1)
-                        oobs.update(d._defines)
+                    if not isinstance(f, PETScArray):
+                        if i.lower < 0 or \
+                        i.upper > f._size_nodomain[d].left + f._size_halo[d].right:
+                            # It'd mean trying to access a point before the
+                            # left halo (test0) or after the right halo (test1)
+                            oobs.update(d._defines)
                 except (KeyError, TypeError):
                     # Unable to detect presence of OOB accesses (e.g., `d` not in
                     # `f._size_halo`, that is typical of indirect accesses `A[B[i]]`)
