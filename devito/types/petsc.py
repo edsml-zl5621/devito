@@ -7,6 +7,7 @@ from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
 
+
 class DM(LocalObject):
     """
     PETSc Data Management object (DM).
@@ -159,7 +160,7 @@ class PETScEq(Eq):
     @property
     def solver_parameters(self):
         return self._solver_parameters
-    
+
 
 class Action(PETScEq):
     """
@@ -186,24 +187,23 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     y_matvec = PETScArray(name='y_matvec_'+str(target.name), dtype=target.dtype,
                           dimensions=target.dimensions,
                           shape=target.shape, liveness='eager')
-    
+
     x_matvec = PETScArray(name='x_matvec_'+str(target.name), dtype=target.dtype,
                           dimensions=target.dimensions,
                           shape=target.shape, liveness='eager')
-    
+
     b_tmp = PETScArray(name='b_tmp_'+str(target.name), dtype=target.dtype,
                        dimensions=target.dimensions,
                        shape=target.shape, liveness='eager')
-    
-    # TODO: Extend to rearrange equation for implicit time stepping. 
+
+    # TODO: Extend to rearrange equation for implicit time stepping.
     action_tmp = Action(y_matvec, eq.lhs, subdomain=eq.subdomain, target=target,
                         solver_parameters=solver_parameters)
-    
+
     rhs = RHS(b_tmp, eq.rhs, subdomain=eq.subdomain, target=target,
               solver_parameters=solver_parameters)
 
     # Only need symbolic representation of equation in mat-vec action callback.
     action = action_tmp.subs(target, x_matvec)
 
-    
     return [action] + [rhs]
