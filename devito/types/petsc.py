@@ -127,14 +127,10 @@ class PETScEq(Eq):
 
     __rkwargs__ = (Eq.__rkwargs__ + ('target', 'solver_parameters',))
 
-    # TODO: Add more solver parameters
+    # TODO: Add more default solver parameters.
     defaults = {
         'ksp_type': 'gmres',
-        'pc_type': 'jacobi',
-        'ksp_rtol': 'PETSC_DEFAULT',
-        'ksp_atol': 'PETSC_DEFAULT',
-        'ksp_divtol': 'PETSC_DEFAULT',
-        'ksp_max_it': 'PETSC_DEFAULT'
+        'pc_type': 'jacobi'
     }
 
     def __new__(cls, lhs, rhs=0, subdomain=None, coefficients=None, implicit_dims=None,
