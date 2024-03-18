@@ -89,7 +89,7 @@ def test_petsc_subs():
     assert str(eqn_subs.rhs.evaluate) == '-2.0*arr(x, y)/h_x**2' + \
         ' + arr(x - h_x, y)/h_x**2 + arr(x + h_x, y)/h_x**2 - 2.0*arr(x, y)/h_y**2' + \
         ' + arr(x, y - h_y)/h_y**2 + arr(x, y + h_y)/h_y**2'
-    
+
 
 def test_petsc_solve():
 
@@ -108,11 +108,11 @@ def test_petsc_solve():
 
     rhs_expr = FindNodes(RHSExpr).visit(op)
 
-    assert str(action_expr[-1]) == 'y_matvec_f[x][y] = -2.0F*x_matvec_f[x][y]/pow(h_x, 2)' + \
-        ' + x_matvec_f[x - 1][y]/pow(h_x, 2) + x_matvec_f[x + 1][y]/pow(h_x, 2)' + \
-        ' - 2.0F*x_matvec_f[x][y]/pow(h_y, 2) + x_matvec_f[x][y - 1]/pow(h_y, 2)' + \
-        ' + x_matvec_f[x][y + 1]/pow(h_y, 2);'
-    
+    assert str(action_expr[-1]) == 'y_matvec_f[x][y] =' + \
+        ' -2.0F*x_matvec_f[x][y]/pow(h_x, 2) + x_matvec_f[x - 1][y]/pow(h_x, 2)' + \
+        ' + x_matvec_f[x + 1][y]/pow(h_x, 2) - 2.0F*x_matvec_f[x][y]/pow(h_y, 2)' + \
+        ' + x_matvec_f[x][y - 1]/pow(h_y, 2) + x_matvec_f[x][y + 1]/pow(h_y, 2);'
+
     assert str(rhs_expr[-1]) == 'b_tmp_f[x][y] = g[x + 2][y + 2];'
 
     # Check the iteration bounds
