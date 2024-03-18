@@ -10,7 +10,8 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpAction, OpRHS
+from devito.ir.equations import (DummyEq, OpInc, OpMin, OpMax, OpMatVec, OpRHS,
+                                 OpMock)
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, WithLock, PrefetchUpdate, detect_io)
@@ -28,7 +29,8 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'ActionExpr', 'RHSExpr']
+           'CallableBody', 'Transfer', 'Callback', 'MatVecAction', 'RHSLinearSystem',
+           'LinSolveMock']
 
 # First-class IET nodes
 
@@ -484,22 +486,46 @@ class Increment(AugmentedExpression):
         super().__init__(expr, pragmas=pragmas, operation=OpInc)
 
 
-class ActionExpr(Expression):
+class LinearSolverExpression(Expression):
 
-    def __init__(self, expr, pragmas=None, operation=OpAction,
-                 target=None, solver_parameters=None):
+    """
+    Base class for general expressions required by a
+    matrix-free linear solve of the form Ax=b.
+    """
+    pass
+
+
+class MatVecAction(LinearSolverExpression):
+
+    """
+    Expression representing matrix-vector multiplication.
+    """
+
+    def __init__(self, expr, pragmas=None, operation=OpMatVec):
         super().__init__(expr, pragmas=pragmas, operation=operation)
-        self.target = target
-        self.solver_parameters = solver_parameters
 
 
-class RHSExpr(Expression):
+class RHSLinearSystem(LinearSolverExpression):
 
-    def __init__(self, expr, pragmas=None, operation=OpRHS,
-                 target=None, solver_parameters=None):
+    """
+    Expression to build the RHS of a linear system.
+    """
+
+    def __init__(self, expr, pragmas=None, operation=OpRHS):
         super().__init__(expr, pragmas=pragmas, operation=operation)
-        self.target = target
-        self.solver_parameters = solver_parameters
+
+
+class LinSolveMock(LinearSolverExpression):
+
+    """
+    Placeholder expression to wrap MockEqs, which are dropped
+    at the IET level.
+    """
+    # NOTE: The requirement for init=False otherwise there are issues
+    # inside specialize_iet.
+
+    def __init__(self, expr, init=False, pragmas=None, operation=OpMock):
+        super().__init__(expr, init=init, pragmas=pragmas, operation=operation)
 
 
 class Iteration(Node):

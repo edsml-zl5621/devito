@@ -1,9 +1,11 @@
-from devito import Grid, Function, Eq
-from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
+import numpy as np
+from devito import Grid, Function, Eq, Operator
+from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
+                           MatVecAction, FindNodes, RHSLinearSystem,
+                           PointerCast)
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
-                          PC, KSPConvergedReason, PETScArray)
-import numpy as np
+                          PC, KSPConvergedReason, PETScArray, PETScSolve)
 
 
 def test_petsc_local_object():
@@ -57,11 +59,11 @@ def test_petsc_functions():
 
     expr = DummyExpr(ptr0.indexed[x, y], ptr1.indexed[x, y] + 1)
 
-    assert str(defn0) == 'PetscScalar**restrict ptr0;'
-    assert str(defn1) == 'const PetscScalar**restrict ptr1;'
-    assert str(defn2) == 'const PetscScalar**restrict ptr2;'
-    assert str(defn3) == 'PetscInt**restrict ptr3;'
-    assert str(defn4) == 'const PetscInt**restrict ptr4;'
+    assert str(defn0) == 'PetscScalar*restrict ptr0_vec;'
+    assert str(defn1) == 'const PetscScalar*restrict ptr1_vec;'
+    assert str(defn2) == 'const PetscScalar*restrict ptr2_vec;'
+    assert str(defn3) == 'PetscInt*restrict ptr3_vec;'
+    assert str(defn4) == 'const PetscInt*restrict ptr4_vec;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
 
 
@@ -88,16 +90,92 @@ def test_petsc_subs():
     assert str(eqn_subs.rhs.evaluate) == '-2.0*arr(x, y)/h_x**2' + \
         ' + arr(x - h_x, y)/h_x**2 + arr(x + h_x, y)/h_x**2 - 2.0*arr(x, y)/h_y**2' + \
         ' + arr(x, y - h_y)/h_y**2 + arr(x, y + h_y)/h_y**2'
-    
 
-# def test_petsc_solve():
 
-#     grid = Grid((2, 2))
+def test_petsc_solve():
+    """
+    Test PETScSolve.
+    """
+    grid = Grid((2, 2))
 
-#     f1 = Function(name='f1', grid=grid, space_order=2)
-#     f2 = Function(name='f2', grid=grid, space_order=2)
+    f = Function(name='f', grid=grid, space_order=2)
+    g = Function(name='g', grid=grid, space_order=2)
 
-#     arr = PETScArray(name='arr', dimensions=f2.dimensions, dtype=f2.dtype)
+    eqn = Eq(f.laplace, g)
 
-#     eqn = Eq(f1, f2.laplace)
-#     eqn_subs = eqn.subs(f2, arr)
+    petsc = PETScSolve(eqn, f)
+
+    op = Operator(petsc, opt='noop')
+
+    action_expr = FindNodes(MatVecAction).visit(op)
+
+    rhs_expr = FindNodes(RHSLinearSystem).visit(op)
+
+    assert str(action_expr[-1].expr.rhs.args[0]) == \
+        'x_matvec_f[x + 1, y + 2]/h_x**2 - 2.0*x_matvec_f[x + 2, y + 2]/h_x**2' + \
+        ' + x_matvec_f[x + 3, y + 2]/h_x**2 + x_matvec_f[x + 2, y + 1]/h_y**2' + \
+        ' - 2.0*x_matvec_f[x + 2, y + 2]/h_y**2 + x_matvec_f[x + 2, y + 3]/h_y**2'
+
+    assert str(rhs_expr[-1].expr.rhs.args[0]) == 'g[x + 2, y + 2]'
+
+    # Check the iteration bounds are correct.
+    assert op.arguments().get('x_m') == 0
+    assert op.arguments().get('y_m') == 0
+    assert op.arguments().get('y_M') == 1
+    assert op.arguments().get('x_M') == 1
+
+    # Check the target
+    assert rhs_expr[-1].expr.rhs.target == f
+    assert action_expr[-1].expr.rhs.target == f
+
+    # Check the solver parameters
+    assert rhs_expr[-1].expr.rhs.solver_parameters == \
+        {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
+    assert action_expr[-1].expr.rhs.solver_parameters == \
+        {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
+
+
+def test_petsc_cast():
+    """
+    Test casting of PETScArray.
+    """
+    g0 = Grid((2))
+    g1 = Grid((2, 2))
+    g2 = Grid((2, 2, 2))
+
+    arr0 = PETScArray(name='arr0', dimensions=g0.dimensions, shape=g0.shape)
+    arr1 = PETScArray(name='arr1', dimensions=g1.dimensions, shape=g1.shape)
+    arr2 = PETScArray(name='arr2', dimensions=g2.dimensions, shape=g2.shape)
+
+    # Casts will be explictly generated and placed at specific locations in the C code,
+    # specifically after various other PETSc calls have been executed.
+    cast0 = PointerCast(arr0)
+    cast1 = PointerCast(arr1)
+    cast2 = PointerCast(arr2)
+
+    assert str(cast0) == \
+        'PetscScalar (*restrict arr0) = (PetscScalar (*)) arr0_vec;'
+    assert str(cast1) == \
+        'PetscScalar (*restrict arr1)[info.gxm] = (PetscScalar (*)[info.gxm]) arr1_vec;'
+    assert str(cast2) == \
+        'PetscScalar (*restrict arr2)[info.gym][info.gxm] = ' + \
+        '(PetscScalar (*)[info.gym][info.gxm]) arr2_vec;'
+
+
+def test_no_automatic_cast():
+    """
+    Verify that the compiler does not automatically generate casts for PETScArrays.
+    They will be generated at specific points within the C code, particularly after
+    other PETSc calls, rather than necessarily at the top of the Kernel.
+    """
+    grid = Grid((2, 2))
+
+    f = Function(name='f', grid=grid, space_order=2)
+
+    arr = PETScArray(name='arr', dimensions=f.dimensions, shape=f.shape)
+
+    eqn = Eq(arr, f.laplace)
+
+    op = Operator(eqn, opt='noop')
+
+    assert len(op.body.casts) == 1
