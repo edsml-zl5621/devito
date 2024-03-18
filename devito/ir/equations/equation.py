@@ -9,7 +9,8 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
 from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import (Eq, Inc, ReduceMax, ReduceMin,
-                          relational_min, MatVecEq, RHSEq)
+                          relational_min)
+from devito.types.petsc import Action, RHS
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
            'OpMatVec', 'OpRHS']
@@ -18,7 +19,8 @@ __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
 class IREq(sympy.Eq, Pickable):
 
     __rargs__ = ('lhs', 'rhs')
-    __rkwargs__ = ('ispace', 'conditionals', 'implicit_dims', 'operation')
+    __rkwargs__ = ('ispace', 'conditionals', 'implicit_dims', 'operation',
+                   'target', 'solver_parameters')
 
     @property
     def is_Scalar(self):
@@ -57,6 +59,14 @@ class IREq(sympy.Eq, Pickable):
     @property
     def operation(self):
         return self._operation
+
+    @property
+    def target(self):
+        return self._target
+
+    @property
+    def solver_parameters(self):
+        return self._solver_parameters
 
     @property
     def is_Reduction(self):
@@ -224,7 +234,10 @@ class LoweredEq(IREq):
         expr._reads, expr._writes = detect_io(expr)
         expr._implicit_dims = input_expr.implicit_dims
         expr._operation = Operation.detect(input_expr)
-
+        expr._target = input_expr.target if hasattr(input_expr, 'target') else None
+        expr._solver_parameters = input_expr.solver_parameters \
+            if hasattr(input_expr, 'solver_parameters') else None
+        
         return expr
 
     @property
@@ -280,6 +293,10 @@ class ClusterizedEq(IREq):
                 expr._conditionals = kwargs.get('conditionals', frozendict())
                 expr._implicit_dims = input_expr.implicit_dims
                 expr._operation = Operation.detect(input_expr)
+                expr._target = input_expr.target \
+                    if hasattr(input_expr, 'target') else None
+                expr._solver_parameters = input_expr.solver_parameters \
+                    if hasattr(input_expr, 'solver_parameters') else None
         elif len(args) == 2:
             # origin: ClusterizedEq(lhs, rhs, **kwargs)
             expr = sympy.Eq.__new__(cls, *args, evaluate=False)
