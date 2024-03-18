@@ -182,7 +182,7 @@ class RHS(PETScEq):
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     # TODO: This is a placeholder for the actual implementation. To start,
-    # track a single PETScEq i.e an 'Action' through the Operator.
+    # track different PETScEq's (Action, RHS) through the Operator.
 
     y_matvec = PETScArray(name='y_matvec_'+str(target.name), dtype=target.dtype,
                           dimensions=target.dimensions,
