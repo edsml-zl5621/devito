@@ -232,7 +232,7 @@ class LoweredEq(IREq):
         expr._target = input_expr.target if hasattr(input_expr, 'target') else None
         expr._solver_parameters = input_expr.solver_parameters \
             if hasattr(input_expr, 'solver_parameters') else None
-        
+
         return expr
 
     @property
