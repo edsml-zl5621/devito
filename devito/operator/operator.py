@@ -482,6 +482,8 @@ class Operator(Callable):
 
         graph = cls._specialize_iet(graph, **kwargs)
 
+        lower_petsc(graph, **kwargs)
+
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced

@@ -1,7 +1,7 @@
 from collections import OrderedDict
 
 from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, SyncSpot,
-                           Section, HaloSpot, ExpressionBundle)
+                           Section, HaloSpot, ExpressionBundle, ActionExpr, RHSExpr)
 from devito.tools import timed_pass
 from devito.petsc.types import LinearSolveExpr
 from devito.petsc.utils import petsc_iet_mapper
