@@ -1,6 +1,6 @@
 from devito import Grid, Function, Eq, Operator
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
-                           ActionExpr, FindNodes, RHSExpr)
+                           MatVecAction, FindNodes, RHSLinearSystem)
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
                           PC, KSPConvergedReason, PETScArray, PETScSolve)
@@ -104,9 +104,9 @@ def test_petsc_solve():
 
     op = Operator(petsc, opt='noop')
 
-    action_expr = FindNodes(ActionExpr).visit(op)
+    action_expr = FindNodes(MatVecAction).visit(op)
 
-    rhs_expr = FindNodes(RHSExpr).visit(op)
+    rhs_expr = FindNodes(RHSLinearSystem).visit(op)
 
     assert str(action_expr[-1]) == 'y_matvec_f[x][y] =' + \
         ' -2.0F*x_matvec_f[x][y]/pow(h_x, 2) + x_matvec_f[x - 1][y]/pow(h_x, 2)' + \
