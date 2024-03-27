@@ -367,7 +367,7 @@ class Cluster:
         # OOB accesses
         oobs = set()
         for f, v in parts.items():
-            if not isinstance(f, PETScArray):
+            if not isinstance(f, ArrayBasic):
                 for i in v:
                     if i.dim.is_Sub:
                         d = i.dim.parent
