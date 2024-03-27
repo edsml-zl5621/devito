@@ -237,10 +237,7 @@ class LoweredEq(IREq):
         expr._reads, expr._writes = detect_io(expr)
         expr._implicit_dims = input_expr.implicit_dims
         expr._operation = Operation.detect(input_expr)
-        expr._target = input_expr.target if hasattr(input_expr, 'target') else None
-        expr._solver_parameters = input_expr.solver_parameters \
-            if hasattr(input_expr, 'solver_parameters') else None
-        
+ 
         return expr
 
     @property
@@ -296,10 +293,6 @@ class ClusterizedEq(IREq):
                 expr._conditionals = kwargs.get('conditionals', frozendict())
                 expr._implicit_dims = input_expr.implicit_dims
                 expr._operation = Operation.detect(input_expr)
-                expr._target = input_expr.target \
-                    if hasattr(input_expr, 'target') else None
-                expr._solver_parameters = input_expr.solver_parameters \
-                    if hasattr(input_expr, 'solver_parameters') else None
         elif len(args) == 2:
             # origin: ClusterizedEq(lhs, rhs, **kwargs)
             expr = sympy.Eq.__new__(cls, *args, evaluate=False)
