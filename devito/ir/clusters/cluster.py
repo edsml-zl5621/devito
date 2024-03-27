@@ -363,25 +363,22 @@ class Cluster:
         # OOB accesses
         oobs = set()
         for f, v in parts.items():
-            for i in v:
-                if i.dim.is_Sub:
-                    d = i.dim.parent
-                else:
-                    d = i.dim
-                try:
-                    # TODO: This is the one check that needs to be turned off
-                    # for PETScArrays otherwise the iteration bounds are incorrect.
-                    # Need to discuss this.
-                    if not isinstance(f, PETScArray):
+            if not isinstance(f, PETScArray):
+                for i in v:
+                    if i.dim.is_Sub:
+                        d = i.dim.parent
+                    else:
+                        d = i.dim
+                    try:
                         if i.lower < 0 or \
                            i.upper > f._size_nodomain[d].left + f._size_halo[d].right:
                             # It'd mean trying to access a point before the
                             # left halo (test0) or after the right halo (test1)
                             oobs.update(d._defines)
-                except (KeyError, TypeError):
-                    # Unable to detect presence of OOB accesses (e.g., `d` not in
-                    # `f._size_halo`, that is typical of indirect accesses `A[B[i]]`)
-                    pass
+                    except (KeyError, TypeError):
+                        # Unable to detect presence of OOB accesses (e.g., `d` not in
+                        # `f._size_halo`, that is typical of indirect accesses `A[B[i]]`)
+                        pass
 
         # Construct the `intervals` of the DataSpace, that is a global,
         # Dimension-centric view of the data space
