@@ -8,10 +8,10 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
 from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import Eq, Inc, ReduceMax, ReduceMin
-from devito.types.petsc import Action, RHS
+from devito.types import MatVecEq, RHSEq, LinearSolveEq
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
-           'OpAction', 'OpRHS']
+           'OpMatVec', 'OpRHS']
 
 
 class IREq(sympy.Eq, Pickable):
@@ -108,8 +108,8 @@ class Operation(Tag):
             Inc: OpInc,
             ReduceMax: OpMax,
             ReduceMin: OpMin,
-            Action: OpAction,
-            RHS: OpRHS,
+            MatVecEq: OpMatVec,
+            RHSEq: OpRHS,
         }
         try:
             return reduction_mapper[type(expr)]
@@ -126,7 +126,11 @@ class Operation(Tag):
 OpInc = Operation('+')
 OpMax = Operation('max')
 OpMin = Operation('min')
-OpAction = Operation('action')
+
+# Operations required by a Linear Solve of the form Ax=b:
+# Application of linear operator on a vector -> op for matrix-vector multiplication.
+OpMatVec = Operation('matvec')
+# Building the right-hand side of linear system.
 OpRHS = Operation('rhs')
 
 
@@ -221,9 +225,10 @@ class LoweredEq(IREq):
         expr._reads, expr._writes = detect_io(expr)
         expr._implicit_dims = input_expr.implicit_dims
         expr._operation = Operation.detect(input_expr)
-        expr._target = input_expr.target if hasattr(input_expr, 'target') else None
+        expr._target = input_expr.target \
+            if isinstance(input_expr, LinearSolveEq) else None
         expr._solver_parameters = input_expr.solver_parameters \
-            if hasattr(input_expr, 'solver_parameters') else None
+            if isinstance(input_expr, LinearSolveEq) else None
 
         return expr
 
@@ -281,9 +286,9 @@ class ClusterizedEq(IREq):
                 expr._implicit_dims = input_expr.implicit_dims
                 expr._operation = Operation.detect(input_expr)
                 expr._target = input_expr.target \
-                    if hasattr(input_expr, 'target') else None
+                    if isinstance(input_expr, LinearSolveEq) else None
                 expr._solver_parameters = input_expr.solver_parameters \
-                    if hasattr(input_expr, 'solver_parameters') else None
+                    if isinstance(input_expr, LinearSolveEq) else None
         elif len(args) == 2:
             # origin: ClusterizedEq(lhs, rhs, **kwargs)
             expr = sympy.Eq.__new__(cls, *args, evaluate=False)

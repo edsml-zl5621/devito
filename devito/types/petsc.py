@@ -120,7 +120,7 @@ def dtype_to_petsctype(dtype):
     }[dtype]
 
 
-class PETScEq(Eq):
+class LinearSolveEq(Eq):
     """
     Represents a general equation required by PETScSolve.
     """
@@ -158,7 +158,7 @@ class PETScEq(Eq):
         return self._solver_parameters
 
 
-class Action(PETScEq):
+class MatVecEq(LinearSolveEq):
     """
     Represents the mathematical expression of applying a linear
     operator to a vector. This is a key component
@@ -167,7 +167,7 @@ class Action(PETScEq):
     pass
 
 
-class RHS(PETScEq):
+class RHSEq(LinearSolveEq):
     """
     Represents the mathematical expression of building the
     rhs of a linear system.
@@ -178,7 +178,7 @@ class RHS(PETScEq):
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     # TODO: This is a placeholder for the actual implementation. To start,
-    # track different PETScEq's (Action, RHS) through the Operator.
+    # track different PETScEq's (MatVecAction, RHS) through the Operator.
 
     y_matvec = PETScArray(name='y_matvec_'+str(target.name), dtype=target.dtype,
                           dimensions=target.dimensions,
@@ -193,13 +193,11 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                        shape=target.shape, liveness='eager')
 
     # TODO: Extend to rearrange equation for implicit time stepping.
-    action_tmp = Action(y_matvec, eq.lhs, subdomain=eq.subdomain, target=target,
-                        solver_parameters=solver_parameters)
+    matvecaction = MatVecEq(y_matvec, eq.lhs.subs(target, x_matvec),
+                            subdomain=eq.subdomain, target=target,
+                            solver_parameters=solver_parameters)
 
-    rhs = RHS(b_tmp, eq.rhs, subdomain=eq.subdomain, target=target,
-              solver_parameters=solver_parameters)
+    rhs = RHSEq(b_tmp, eq.rhs, subdomain=eq.subdomain, target=target,
+                solver_parameters=solver_parameters)
 
-    # Only need symbolic representation of equation in mat-vec action callback.
-    action = action_tmp.subs(target, x_matvec)
-
-    return [action] + [rhs]
+    return [matvecaction] + [rhs]
