@@ -131,7 +131,11 @@ class Operation(Tag):
 OpInc = Operation('+')
 OpMax = Operation('max')
 OpMin = Operation('min')
-OpAction = Operation('action')
+
+# Operations required by a Linear Solve of the form Ax=b:
+# Application of linear operator on a vector -> op for matrix-vector multiplication.
+OpMatVec = Operation('matvec')
+# Building the right-hand side of linear system.
 OpRHS = Operation('rhs')
 
 # Operations required by a Linear Solve of the form Ax=b:
@@ -239,10 +243,7 @@ class LoweredEq(IREq):
         expr._reads, expr._writes = detect_io(expr)
         expr._implicit_dims = input_expr.implicit_dims
         expr._operation = Operation.detect(input_expr)
-        expr._target = input_expr.target if hasattr(input_expr, 'target') else None
-        expr._solver_parameters = input_expr.solver_parameters \
-            if hasattr(input_expr, 'solver_parameters') else None
-        
+
         return expr
 
     @property
@@ -299,9 +300,9 @@ class ClusterizedEq(IREq):
                 expr._implicit_dims = input_expr.implicit_dims
                 expr._operation = Operation.detect(input_expr)
                 expr._target = input_expr.target \
-                    if hasattr(input_expr, 'target') else None
+                    if isinstance(input_expr, LinearSolveEq) else None
                 expr._solver_parameters = input_expr.solver_parameters \
-                    if hasattr(input_expr, 'solver_parameters') else None
+                    if isinstance(input_expr, LinearSolveEq) else None
         elif len(args) == 2:
             # origin: ClusterizedEq(lhs, rhs, **kwargs)
             expr = sympy.Eq.__new__(cls, *args, evaluate=False)

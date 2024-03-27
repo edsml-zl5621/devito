@@ -119,7 +119,7 @@ def dtype_to_petsctype(dtype):
     }[dtype]
 
 
-class PETScEq(Eq):
+class LinearSolveEq(Eq):
     """
     Represents a general equation required by PETScSolve.
     """
@@ -161,7 +161,7 @@ class PETScEq(Eq):
         return self._solver_parameters
     
 
-class Action(PETScEq):
+class MatVecEq(LinearSolveEq):
     """
     Represents the mathematical expression of applying a linear
     operator to a vector. This is a key component
@@ -170,7 +170,7 @@ class Action(PETScEq):
     pass
 
 
-class RHS(PETScEq):
+class RHSEq(LinearSolveEq):
     """
     Represents the mathematical expression of building the
     rhs of a linear system.
