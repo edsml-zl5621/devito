@@ -185,7 +185,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
             for key, val in cls.defaults.items():
                 solver_parameters[key] = solver_parameters.get(key, val)
 
-        obj = sympy.Function.__new__(cls, expr)
+        obj = super().__new__(cls, expr)
         obj._expr = expr
         obj._target = target
         obj._solver_parameters = solver_parameters
