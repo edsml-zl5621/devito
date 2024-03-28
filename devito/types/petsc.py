@@ -199,8 +199,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     def _sympystr(self, printer):
         return str(self)
 
-    def _hashable_content(self):
-        return super()._hashable_content() + (self.expr, self.target)
+    def __hash__(self):
+        return hash(self.target)
 
     @property
     def expr(self):
