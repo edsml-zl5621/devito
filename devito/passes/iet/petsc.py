@@ -1,6 +1,5 @@
 from devito.passes.iet.engine import iet_pass
 
-
 __all__ = ['lower_petsc']
 
 
