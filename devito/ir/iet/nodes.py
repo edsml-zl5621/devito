@@ -488,27 +488,20 @@ class LinearSolverExpression(Expression):
     """General expression required by a matrix-free linear solve of the
     form Ax=b."""
 
-    def __init__(self, expr, pragmas=None, operation=None,
-                 target=None, solver_parameters=None):
+    def __init__(self, expr, pragmas=None, operation=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
-        self.target = target
-        self.solver_parameters = solver_parameters
 
 
 class MatVecAction(LinearSolverExpression):
 
-    def __init__(self, expr, pragmas=None, operation=OpMatVec,
-                 target=None, solver_parameters=None):
-        super().__init__(expr, pragmas=pragmas, operation=operation,
-                         target=target, solver_parameters=solver_parameters)
+    def __init__(self, expr, pragmas=None, operation=OpMatVec):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
 
 
 class RHSLinearSystem(LinearSolverExpression):
 
-    def __init__(self, expr, pragmas=None, operation=OpRHS,
-                 target=None, solver_parameters=None):
-        super().__init__(expr, pragmas=pragmas, operation=operation,
-                         target=target, solver_parameters=solver_parameters)
+    def __init__(self, expr, pragmas=None, operation=OpRHS):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
 
 
 class Iteration(Node):
