@@ -6,6 +6,8 @@ from cached_property import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
+import sympy
+from devito.tools import Reconstructable
 
 class DM(LocalObject):
     """
@@ -170,7 +172,7 @@ class MatVecEq(LinearSolveEq):
     pass
 
 
-class RHSEq(LinearSolveEq):
+class RHSEq(Eq):
     """
     Represents the mathematical expression of building the
     rhs of a linear system.
