@@ -19,8 +19,7 @@ __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
 class IREq(sympy.Eq, Pickable):
 
     __rargs__ = ('lhs', 'rhs')
-    __rkwargs__ = ('ispace', 'conditionals', 'implicit_dims', 'operation',
-                   'target', 'solver_parameters')
+    __rkwargs__ = ('ispace', 'conditionals', 'implicit_dims', 'operation')
 
     @property
     def is_Scalar(self):
@@ -59,14 +58,6 @@ class IREq(sympy.Eq, Pickable):
     @property
     def operation(self):
         return self._operation
-
-    @property
-    def target(self):
-        return self._target
-
-    @property
-    def solver_parameters(self):
-        return self._solver_parameters
 
     @property
     def is_Reduction(self):
@@ -225,13 +216,13 @@ class LoweredEq(IREq):
             expr = uxreplace(expr, {d: IntDiv(index, d.factor)})
 
         conditionals = frozendict(conditionals)
-
+        # from IPython import embed; embed()
         # Lower all Differentiable operations into SymPy operations
         rhs = diff2sympy(expr.rhs)
 
         # Finally create the LoweredEq with all metadata attached
         expr = super().__new__(cls, expr.lhs, rhs, evaluate=False)
-
+        # from IPython import embed; embed()
         expr._ispace = ispace
         expr._conditionals = conditionals
         expr._reads, expr._writes = detect_io(expr)
