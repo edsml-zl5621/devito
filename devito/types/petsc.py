@@ -9,6 +9,7 @@ from functools import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
+<<<<<<< HEAD
 from devito.tools import Reconstructable
 from devito.symbolics import FieldFromComposite
 from devito.types.basic import IndexedBase
@@ -17,6 +18,10 @@ from devito.types.basic import IndexedBase
 __all__ = ['DM', 'Mat', 'Vec', 'PetscMPIInt', 'KSP', 'PC', 'KSPConvergedReason',
            'DMDALocalInfo', 'PETScArray', 'MatVecEq', 'RHSEq', 'LinearSolveExpr',
            'PETScSolve']
+=======
+import sympy
+from devito.tools import Reconstructable
+>>>>>>> 7ba65f46e (compiler: Replace additions in LoweredEq with PETScRHS class which is a subclass of sympy.Expr - used to track target/solver_params through operator lowering)
 
 
 class DM(LocalObject):
@@ -178,6 +183,7 @@ class RHSEq(Eq):
 
 
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
+<<<<<<< HEAD
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
     y_matvec, x_matvec, b_tmp = [
@@ -194,22 +200,56 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                             subdomain=eq.subdomain)
 
     rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
+=======
+
+    # TODO: This is a placeholder for the actual implementation. To start,
+    # track different PETScEq's (MatVecAction, RHS) through the Operator.
+
+    y_matvec = PETScArray(name='y_matvec_'+str(target.name), dtype=target.dtype,
+                          dimensions=target.dimensions,
+                          shape=target.shape, liveness='eager')
+
+    x_matvec = PETScArray(name='x_matvec_'+str(target.name), dtype=target.dtype,
+                          dimensions=target.dimensions,
+                          shape=target.shape, liveness='eager')
+
+    b_tmp = PETScArray(name='b_tmp_'+str(target.name), dtype=target.dtype,
+                       dimensions=target.dimensions,
+                       shape=target.shape, liveness='eager')
+
+    # # TODO: Extend to rearrange equation for implicit time stepping.
+    matvecaction = MatVecEq(y_matvec, PETScRHS(eq.lhs.subs(target, x_matvec),
+                            target=target, solver_parameters=solver_parameters),
+                            subdomain=eq.subdomain)
+
+    rhs = RHSEq(b_tmp, PETScRHS(eq.rhs, target=target,
+>>>>>>> 7ba65f46e (compiler: Replace additions in LoweredEq with PETScRHS class which is a subclass of sympy.Expr - used to track target/solver_params through operator lowering)
                 solver_parameters=solver_parameters), subdomain=eq.subdomain)
 
     return [matvecaction] + [rhs]
 
 
+<<<<<<< HEAD
 class LinearSolveExpr(sympy.Function, Reconstructable):
 
     __rargs__ = ('expr',)
     __rkwargs__ = ('target', 'solver_parameters')
+=======
+class PETScRHS(sympy.Expr, Reconstructable):
+
+    __rargs__ = ('expr', 'target', 'solver_parameters',)
+>>>>>>> 7ba65f46e (compiler: Replace additions in LoweredEq with PETScRHS class which is a subclass of sympy.Expr - used to track target/solver_params through operator lowering)
 
     defaults = {
         'ksp_type': 'gmres',
         'pc_type': 'jacobi'
     }
 
+<<<<<<< HEAD
     def __new__(cls, expr, target=None, solver_parameters=None, **kwargs):
+=======
+    def __new__(cls, expr, target, solver_parameters, **kwargs):
+>>>>>>> 7ba65f46e (compiler: Replace additions in LoweredEq with PETScRHS class which is a subclass of sympy.Expr - used to track target/solver_params through operator lowering)
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -217,6 +257,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
             for key, val in cls.defaults.items():
                 solver_parameters[key] = solver_parameters.get(key, val)
 
+<<<<<<< HEAD
         obj = super().__new__(cls, expr)
         obj._expr = expr
         obj._target = target
@@ -225,14 +266,30 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
 
     def __repr__(self):
         return "%s(%s)" % (self.__class__.__name__, self.expr)
+=======
+        obj = sympy.Expr.__new__(cls, expr)
+        obj._expr = expr
+        obj._target = target
+        obj._solver_parameters = solver_parameters
+
+        return obj
+
+    def __repr__(self):
+        return "%s" % self.expr
+>>>>>>> 7ba65f46e (compiler: Replace additions in LoweredEq with PETScRHS class which is a subclass of sympy.Expr - used to track target/solver_params through operator lowering)
 
     __str__ = __repr__
 
     def _sympystr(self, printer):
         return str(self)
 
+<<<<<<< HEAD
     def __hash__(self):
         return hash(self.target)
+=======
+    def _hashable_content(self):
+        return super()._hashable_content() + (self.target,)
+>>>>>>> 7ba65f46e (compiler: Replace additions in LoweredEq with PETScRHS class which is a subclass of sympy.Expr - used to track target/solver_params through operator lowering)
 
     @property
     def expr(self):
