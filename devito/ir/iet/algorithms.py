@@ -4,7 +4,7 @@ from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, 
                            Section, HaloSpot, ExpressionBundle, MatVecAction,
                            RHSLinearSystem)
 from devito.tools import timed_pass
-from devito.types import PETScRHS
+from devito.types import LinearSolveExpr
 from devito.ir.equations import OpMatVec, OpRHS
 
 __all__ = ['iet_build']
@@ -27,7 +27,7 @@ def iet_build(stree):
             for e in i.exprs:
                 if e.is_Increment:
                     exprs.append(Increment(e))
-                elif isinstance(e.rhs, PETScRHS):
+                elif isinstance(e.rhs, LinearSolveExpr):
                     exprs.append(Op_to_Expr(e.operation)(e, operation=e.operation))
                 else:
                     exprs.append(Expression(e, operation=e.operation))

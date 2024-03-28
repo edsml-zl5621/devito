@@ -157,17 +157,17 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                        shape=target.shape, liveness='eager')
 
     # # TODO: Extend to rearrange equation for implicit time stepping.
-    matvecaction = MatVecEq(y_matvec, PETScRHS(eq.lhs.subs(target, x_matvec),
+    matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.lhs.subs(target, x_matvec),
                             target=target, solver_parameters=solver_parameters),
                             subdomain=eq.subdomain)
 
-    rhs = RHSEq(b_tmp, PETScRHS(eq.rhs, target=target,
+    rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
                 solver_parameters=solver_parameters), subdomain=eq.subdomain)
 
     return [matvecaction] + [rhs]
 
 
-class PETScRHS(sympy.Expr, Reconstructable):
+class LinearSolveExpr(sympy.Expr, Reconstructable):
 
     __rargs__ = ('expr', 'target', 'solver_parameters',)
 
