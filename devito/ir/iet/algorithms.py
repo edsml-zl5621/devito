@@ -27,13 +27,9 @@ def iet_build(stree):
                 if e.is_Increment:
                     exprs.append(Increment(e))
                 elif e.operation is OpMatVec:
-                    exprs.append(MatVecAction(e, operation=e.operation,
-                                              target=e.target,
-                                              solver_parameters=e.solver_parameters))
+                    exprs.append(MatVecAction(e, operation=e.operation))
                 elif e.operation is OpRHS:
-                    exprs.append(RHSLinearSystem(e, operation=e.operation,
-                                                 target=e.target,
-                                                 solver_parameters=e.solver_parameters))
+                    exprs.append(RHSLinearSystem(e, operation=e.operation))
                 else:
                     exprs.append(Expression(e, operation=e.operation))
             body = ExpressionBundle(i.ispace, i.ops, i.traffic, body=exprs)
