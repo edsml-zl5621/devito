@@ -334,7 +334,7 @@ class Operator(Callable):
         expressions = lower_exprs(expressions, **kwargs)
 
         processed = [LoweredEq(i) for i in expressions]
-        # from IPython import embed; embed()
+
         return processed
 
     # Compilation -- Cluster level
