@@ -120,3 +120,13 @@ def test_petsc_solve():
     assert op.arguments().get('y_m') == 0
     assert op.arguments().get('y_M') == 1
     assert op.arguments().get('x_M') == 1
+
+    # Check the target
+    assert rhs_expr[-1].expr.rhs.target == f
+    assert action_expr[-1].expr.rhs.target == f
+
+    # Check the solver parameters
+    assert rhs_expr[-1].expr.rhs.solver_parameters == \
+        {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
+    assert action_expr[-1].expr.rhs.solver_parameters == \
+        {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
