@@ -353,7 +353,7 @@ class Operator(Callable):
         expressions = concretize_subdims(expressions, **kwargs)
 
         processed = [LoweredEq(i) for i in expressions]
-        # from IPython import embed; embed()
+
         return processed
 
     # Compilation -- Cluster level
