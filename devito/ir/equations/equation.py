@@ -213,13 +213,13 @@ class LoweredEq(IREq):
             expr = uxreplace(expr, {d: IntDiv(index, d.factor)})
 
         conditionals = frozendict(conditionals)
-        # from IPython import embed; embed()
+
         # Lower all Differentiable operations into SymPy operations
         rhs = diff2sympy(expr.rhs)
 
         # Finally create the LoweredEq with all metadata attached
         expr = super().__new__(cls, expr.lhs, rhs, evaluate=False)
-        # from IPython import embed; embed()
+
         expr._ispace = ispace
         expr._conditionals = conditionals
         expr._reads, expr._writes = detect_io(expr)
