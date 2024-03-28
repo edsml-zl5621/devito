@@ -167,16 +167,17 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     return [matvecaction] + [rhs]
 
 
-class LinearSolveExpr(sympy.Expr, Reconstructable):
+class LinearSolveExpr(sympy.Function, Reconstructable):
 
-    __rargs__ = ('expr', 'target', 'solver_parameters',)
+    __rargs__ = ('expr',)
+    __rkwargs__ = ('target', 'solver_parameters',)
 
     defaults = {
         'ksp_type': 'gmres',
         'pc_type': 'jacobi'
     }
 
-    def __new__(cls, expr, target, solver_parameters, **kwargs):
+    def __new__(cls, expr, target=None, solver_parameters=None, **kwargs):
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -184,15 +185,14 @@ class LinearSolveExpr(sympy.Expr, Reconstructable):
             for key, val in cls.defaults.items():
                 solver_parameters[key] = solver_parameters.get(key, val)
 
-        obj = sympy.Expr.__new__(cls, expr)
+        obj = sympy.Function.__new__(cls, expr)
         obj._expr = expr
         obj._target = target
         obj._solver_parameters = solver_parameters
-
         return obj
 
     def __repr__(self):
-        return "%s" % self.expr
+        return "%s(%s)" % (self.__class__.__name__, self.expr)
 
     __str__ = __repr__
 
@@ -200,7 +200,7 @@ class LinearSolveExpr(sympy.Expr, Reconstructable):
         return str(self)
 
     def _hashable_content(self):
-        return super()._hashable_content() + (self.target,)
+        return super()._hashable_content() + (self.expr, self.target)
 
     @property
     def expr(self):
