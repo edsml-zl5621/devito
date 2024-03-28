@@ -4,6 +4,7 @@ from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, 
                            Section, HaloSpot, ExpressionBundle, MatVecAction,
                            RHSLinearSystem)
 from devito.tools import timed_pass
+from devito.types import PETScRHS
 from devito.ir.equations import OpMatVec, OpRHS
 
 __all__ = ['iet_build']
@@ -26,10 +27,8 @@ def iet_build(stree):
             for e in i.exprs:
                 if e.is_Increment:
                     exprs.append(Increment(e))
-                elif e.operation is OpMatVec:
-                    exprs.append(MatVecAction(e, operation=e.operation))
-                elif e.operation is OpRHS:
-                    exprs.append(RHSLinearSystem(e, operation=e.operation))
+                elif isinstance(e.rhs, PETScRHS):
+                    exprs.append(Op_to_Expr(e.operation)(e, operation=e.operation))
                 else:
                     exprs.append(Expression(e, operation=e.operation))
             body = ExpressionBundle(i.ispace, i.ops, i.traffic, body=exprs)
@@ -57,3 +56,12 @@ def iet_build(stree):
         queues.setdefault(i.parent, []).append(body)
 
     assert False
+
+
+def Op_to_Expr(operation):
+    """Map Eq operation to IET Expression type."""
+
+    return {
+        OpMatVec: MatVecAction,
+        OpRHS: RHSLinearSystem
+    }[operation]
