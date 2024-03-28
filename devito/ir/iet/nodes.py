@@ -485,8 +485,11 @@ class Increment(AugmentedExpression):
 
 
 class LinearSolverExpression(Expression):
-    """General expression required by a matrix-free linear solve of the
-    form Ax=b."""
+
+    """
+    General expression required by a matrix-free linear solve of the
+    form Ax=b.
+    """
 
     def __init__(self, expr, pragmas=None, operation=None):
         super().__init__(expr, pragmas=pragmas, operation=operation)
@@ -494,11 +497,19 @@ class LinearSolverExpression(Expression):
 
 class MatVecAction(LinearSolverExpression):
 
+    """
+    Expression representing matrix-vector multiplication.
+    """
+
     def __init__(self, expr, pragmas=None, operation=OpMatVec):
         super().__init__(expr, pragmas=pragmas, operation=operation)
 
 
 class RHSLinearSystem(LinearSolverExpression):
+
+    """
+    Expression to build the RHS of a linear system.
+    """
 
     def __init__(self, expr, pragmas=None, operation=OpRHS):
         super().__init__(expr, pragmas=pragmas, operation=operation)
