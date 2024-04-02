@@ -119,7 +119,7 @@ def test_petsc_solve():
 
     # Verify that the RHS expression has been shifted according to the
     # computational domain. This is necessary because the RHS of the
-    # linear system originates Devito allocated Function objects, not PETSc objects.
+    # linear system is built from Devito allocated Function objects, not PETSc objects.
     assert str(rhs_expr[-1].expr.rhs.args[0]) == 'g[x + 2, y + 2]'
 
     # Check the iteration bounds have not changed since PETSc DMDA handles
