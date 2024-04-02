@@ -1,12 +1,12 @@
+import sympy
+import numpy as np
 from devito.tools import CustomDtype
 from devito.types import LocalObject, Eq
 from devito.types.array import ArrayBasic
-import numpy as np
 from cached_property import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
-import sympy
 from devito.tools import Reconstructable
 
 
@@ -144,17 +144,12 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: This is a placeholder for the actual implementation. To start,
     # track different PETScEq's (MatVecAction, RHS) through the Operator.
 
-    y_matvec = PETScArray(name='y_matvec_'+str(target.name), dtype=target.dtype,
-                          dimensions=target.dimensions,
-                          shape=target.shape, liveness='eager')
-
-    x_matvec = PETScArray(name='x_matvec_'+str(target.name), dtype=target.dtype,
-                          dimensions=target.dimensions,
-                          shape=target.shape, liveness='eager')
-
-    b_tmp = PETScArray(name='b_tmp_'+str(target.name), dtype=target.dtype,
-                       dimensions=target.dimensions,
-                       shape=target.shape, liveness='eager')
+    y_matvec, x_matvec, b_tmp = [
+        PETScArray(name=f'{prefix}_{target.name}',
+                   dtype=target.dtype,
+                   dimensions=target.dimensions,
+                   shape=target.shape, liveness='eager')
+        for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
     # # TODO: Extend to rearrange equation for implicit time stepping.
     matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.lhs.subs(target, x_matvec),
@@ -170,7 +165,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 class LinearSolveExpr(sympy.Function, Reconstructable):
 
     __rargs__ = ('expr',)
-    __rkwargs__ = ('target', 'solver_parameters',)
+    __rkwargs__ = ('target', 'solver_parameters')
 
     defaults = {
         'ksp_type': 'gmres',
