@@ -1,11 +1,13 @@
-from devito.tools import CustomDtype
-from devito.types import LocalObject
-from devito.types.array import ArrayBasic
+import sympy
 import numpy as np
+from devito.tools import CustomDtype
+from devito.types import LocalObject, Eq
+from devito.types.array import ArrayBasic
 from cached_property import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
+from devito.tools import Reconstructable
 
 
 class DM(LocalObject):
@@ -118,3 +120,93 @@ def dtype_to_petsctype(dtype):
         np.int64: 'PetscInt',
         np.float64: 'PetscScalar'
     }[dtype]
+
+
+class MatVecEq(Eq):
+    """
+    Represents the mathematical expression of applying a linear
+    operator to a vector. This is a key component
+    for running matrix-free solvers.
+    """
+    pass
+
+
+class RHSEq(Eq):
+    """
+    Represents the mathematical expression of building the
+    rhs of a linear system.
+    """
+    pass
+
+
+def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
+
+    # TODO: This is a placeholder for the actual implementation. To start,
+    # track different PETScEq's (MatVecAction, RHS) through the Operator.
+
+    y_matvec, x_matvec, b_tmp = [
+        PETScArray(name=f'{prefix}_{target.name}',
+                   dtype=target.dtype,
+                   dimensions=target.dimensions,
+                   shape=target.shape, liveness='eager')
+        for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
+
+    # # TODO: Extend to rearrange equation for implicit time stepping.
+    matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.lhs.subs(target, x_matvec),
+                            target=target, solver_parameters=solver_parameters),
+                            subdomain=eq.subdomain)
+
+    rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
+                solver_parameters=solver_parameters), subdomain=eq.subdomain)
+
+    return [matvecaction] + [rhs]
+
+
+class LinearSolveExpr(sympy.Function, Reconstructable):
+
+    __rargs__ = ('expr',)
+    __rkwargs__ = ('target', 'solver_parameters')
+
+    defaults = {
+        'ksp_type': 'gmres',
+        'pc_type': 'jacobi'
+    }
+
+    def __new__(cls, expr, target=None, solver_parameters=None, **kwargs):
+
+        if solver_parameters is None:
+            solver_parameters = cls.defaults
+        else:
+            for key, val in cls.defaults.items():
+                solver_parameters[key] = solver_parameters.get(key, val)
+
+        obj = super().__new__(cls, expr)
+        obj._expr = expr
+        obj._target = target
+        obj._solver_parameters = solver_parameters
+        return obj
+
+    def __repr__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.expr)
+
+    __str__ = __repr__
+
+    def _sympystr(self, printer):
+        return str(self)
+
+    def __hash__(self):
+        return hash(self.target)
+
+    @property
+    def expr(self):
+        return self._expr
+
+    @property
+    def target(self):
+        return self._target
+
+    @property
+    def solver_parameters(self):
+        return self._solver_parameters
+
+    func = Reconstructable._rebuild

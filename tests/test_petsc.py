@@ -1,9 +1,10 @@
-from devito import Grid, Function, Eq
-from devito.ir.iet import Call, ElementalFunction, Definition, DummyExpr
+import numpy as np
+from devito import Grid, Function, Eq, Operator
+from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
+                           MatVecAction, FindNodes, RHSLinearSystem)
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
-                          PC, KSPConvergedReason, PETScArray)
-import numpy as np
+                          PC, KSPConvergedReason, PETScArray, PETScSolve)
 
 
 def test_petsc_local_object():
@@ -88,3 +89,52 @@ def test_petsc_subs():
     assert str(eqn_subs.rhs.evaluate) == '-2.0*arr(x, y)/h_x**2' + \
         ' + arr(x - h_x, y)/h_x**2 + arr(x + h_x, y)/h_x**2 - 2.0*arr(x, y)/h_y**2' + \
         ' + arr(x, y - h_y)/h_y**2 + arr(x, y + h_y)/h_y**2'
+
+
+def test_petsc_solve():
+    """
+    Test PETScSolve.
+    """
+    grid = Grid((2, 2))
+
+    f = Function(name='f', grid=grid, space_order=2)
+    g = Function(name='g', grid=grid, space_order=2)
+
+    eqn = Eq(f.laplace, g)
+
+    petsc = PETScSolve(eqn, f)
+
+    op = Operator(petsc, opt='noop')
+
+    action_expr = FindNodes(MatVecAction).visit(op)
+
+    rhs_expr = FindNodes(RHSLinearSystem).visit(op)
+
+    # Verify that the action expression has not been shifted by the
+    # computational domain since the halo is abstracted within DMDA.
+    assert str(action_expr[-1].expr.rhs.args[0]) == \
+        '-2.0*x_matvec_f[x, y]/h_x**2 + x_matvec_f[x - 1, y]/h_x**2' + \
+        ' + x_matvec_f[x + 1, y]/h_x**2 - 2.0*x_matvec_f[x, y]/h_y**2' + \
+        ' + x_matvec_f[x, y - 1]/h_y**2 + x_matvec_f[x, y + 1]/h_y**2'
+
+    # Verify that the RHS expression has been shifted according to the
+    # computational domain. This is necessary because the RHS of the
+    # linear system is built from Devito allocated Function objects, not PETSc objects.
+    assert str(rhs_expr[-1].expr.rhs.args[0]) == 'g[x + 2, y + 2]'
+
+    # Check the iteration bounds have not changed since PETSc DMDA handles
+    # negative indexing (the halo is abstracted).
+    assert op.arguments().get('x_m') == 0
+    assert op.arguments().get('y_m') == 0
+    assert op.arguments().get('y_M') == 1
+    assert op.arguments().get('x_M') == 1
+
+    # Check the target
+    assert rhs_expr[-1].expr.rhs.target == f
+    assert action_expr[-1].expr.rhs.target == f
+
+    # Check the solver parameters
+    assert rhs_expr[-1].expr.rhs.solver_parameters == \
+        {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
+    assert action_expr[-1].expr.rhs.solver_parameters == \
+        {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
