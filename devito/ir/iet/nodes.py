@@ -490,9 +490,7 @@ class LinearSolverExpression(Expression):
     General expression required by a matrix-free linear solve of the
     form Ax=b.
     """
-
-    def __init__(self, expr, pragmas=None, operation=None):
-        super().__init__(expr, pragmas=pragmas, operation=operation)
+    pass
 
 
 class MatVecAction(LinearSolverExpression):
