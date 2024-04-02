@@ -1,10 +1,10 @@
+import numpy as np
 from devito import Grid, Function, Eq, Operator
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            MatVecAction, FindNodes, RHSLinearSystem)
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
                           PC, KSPConvergedReason, PETScArray, PETScSolve)
-import numpy as np
 
 
 def test_petsc_local_object():
@@ -92,7 +92,9 @@ def test_petsc_subs():
 
 
 def test_petsc_solve():
-
+    """
+    Test PETScSolve.
+    """
     grid = Grid((2, 2))
 
     f = Function(name='f', grid=grid, space_order=2)
@@ -108,14 +110,20 @@ def test_petsc_solve():
 
     rhs_expr = FindNodes(RHSLinearSystem).visit(op)
 
-    assert str(action_expr[-1]) == 'y_matvec_f[x][y] =' + \
-        ' -2.0F*x_matvec_f[x][y]/pow(h_x, 2) + x_matvec_f[x - 1][y]/pow(h_x, 2)' + \
-        ' + x_matvec_f[x + 1][y]/pow(h_x, 2) - 2.0F*x_matvec_f[x][y]/pow(h_y, 2)' + \
-        ' + x_matvec_f[x][y - 1]/pow(h_y, 2) + x_matvec_f[x][y + 1]/pow(h_y, 2);'
+    # Verify that the action expression has not been shifted by the
+    # computational domain since the halo is abstracted within DMDA.
+    assert str(action_expr[-1].expr.rhs.args[0]) == \
+        '-2.0*x_matvec_f[x, y]/h_x**2 + x_matvec_f[x - 1, y]/h_x**2' + \
+        ' + x_matvec_f[x + 1, y]/h_x**2 - 2.0*x_matvec_f[x, y]/h_y**2' + \
+        ' + x_matvec_f[x, y - 1]/h_y**2 + x_matvec_f[x, y + 1]/h_y**2'
 
-    assert str(rhs_expr[-1]) == 'b_tmp_f[x][y] = g[x + 2][y + 2];'
+    # Verify that the RHS expression has been shifted according to the
+    # computational domain. This is necessary because the RHS of the
+    # linear system originates Devito allocated Function objects, not PETSc objects.
+    assert str(rhs_expr[-1].expr.rhs.args[0]) == 'g[x + 2, y + 2]'
 
-    # Check the iteration bounds
+    # Check the iteration bounds have not changed since PETSc DMDA handles
+    # negative indexing (the halo is abstracted).
     assert op.arguments().get('x_m') == 0
     assert op.arguments().get('y_m') == 0
     assert op.arguments().get('y_M') == 1

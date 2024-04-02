@@ -487,8 +487,8 @@ class Increment(AugmentedExpression):
 class LinearSolverExpression(Expression):
 
     """
-    General expression required by a matrix-free linear solve of the
-    form Ax=b.
+    Base class for general expressions required by a
+    matrix-free linear solve of the form Ax=b.
     """
     pass
 
