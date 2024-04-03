@@ -477,6 +477,7 @@ class Operator(Callable):
 
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
+        # from IPython import embed; embed()
         graph = cls._specialize_iet(graph, **kwargs)
 
         lower_petsc(graph, **kwargs)
