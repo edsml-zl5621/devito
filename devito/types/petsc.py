@@ -215,8 +215,8 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     s1 = Scalar(name='s1')
 
     # Wrapped rhs in LinearSolveExpr for simplicity in iet_build pass.
-    mock_action = MockEq(s0, LinearSolveExpr(y_matvec.indexify(indices=indices)))
-    mock_rhs = MockEq(s1, LinearSolveExpr(b_tmp.indexify(indices=indices)))
+    mock_action = Eq(s0, Mock(y_matvec.indexify(indices=indices)))
+    mock_rhs = Eq(s1, Mock(b_tmp.indexify(indices=indices)))
 
     return [matvecaction, mock_action] + [rhs, mock_rhs]
 
@@ -267,5 +267,30 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     @property
     def solver_parameters(self):
         return self._solver_parameters
+
+    func = Reconstructable._rebuild
+
+
+class Mock(sympy.Function, Reconstructable):
+
+    __rargs__ = ('expr',)
+
+    def __new__(cls, expr, **kwargs):
+
+        obj = super().__new__(cls, expr)
+        obj._expr = expr
+        return obj
+
+    def __repr__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.expr)
+
+    __str__ = __repr__
+
+    def _sympystr(self, printer):
+        return str(self)
+
+    @property
+    def expr(self):
+        return self._expr
 
     func = Reconstructable._rebuild
