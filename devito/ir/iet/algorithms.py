@@ -25,7 +25,6 @@ def iet_build(stree):
         elif i.is_Exprs:
             exprs = []
             for e in i.exprs:
-                # from IPython import embed; embed()
                 if e.is_Increment:
                     exprs.append(Increment(e))
                 elif isinstance(e.rhs, LinearSolveExpr):

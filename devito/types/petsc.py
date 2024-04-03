@@ -207,8 +207,8 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # Create mock equations to ensure distinct iteration loops for each component
     # of the linear solve.
     indices = tuple(d + 1 for d in target.dimensions)
-    s0 = Scalar(name='s0')
-    s1 = Scalar(name='s1')
+    s0 = Symbol(name='s0')
+    s1 = Symbol(name='s1')
 
     # Wrapped rhs in LinearSolveExpr for simplicity in iet_build pass.
     mock_action = MockEq(s0, LinearSolveExpr(y_matvec.indexify(indices=indices)))

@@ -22,11 +22,8 @@ def drop_mocks(iet):
     """
     Drop the spatial iteration loop containing each LinSolveMock.
     """
-
     mapper = {}
-
     for tree in retrieve_iteration_tree(iet):
-
         # Eventually, when using implicit dims etc do not want to drop
         # the time loop.
         root = filter_iterations(tree, key=lambda i: i.dim.is_Space)
