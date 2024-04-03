@@ -267,6 +267,10 @@ class Cluster:
         return self.exprs and all(isinstance(e.rhs, CriticalRegion) for e in self.exprs)
 
     @property
+    def is_mock(self):
+        return self.exprs and all(isinstance(e.rhs, Mock) for e in self.exprs)
+
+    @property
     def is_async(self):
         """
         True if an asynchronous Cluster, False otherwise.

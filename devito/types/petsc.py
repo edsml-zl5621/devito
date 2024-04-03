@@ -240,5 +240,97 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # Only need symbolic representation of equation in mat-vec action callback.
     action = action_tmp.subs(target, x_matvec)
 
+<<<<<<< HEAD
     
     return [action] + [rhs]
+=======
+    rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
+                solver_parameters=solver_parameters), subdomain=eq.subdomain)
+
+    # Create mock equations to ensure distinct iteration loops for each component
+    # of the linear solve.
+    indices = tuple(d + 1 for d in target.dimensions)
+    s0 = Symbol(name='s0')
+    s1 = Symbol(name='s1')
+
+    # Wrapped rhs in LinearSolveExpr for simplicity in iet_build pass.
+    mock_action = Eq(s0, Mock(y_matvec.indexify(indices=indices)))
+    mock_rhs = Eq(s1, Mock(b_tmp.indexify(indices=indices)))
+
+    return [matvecaction, mock_action] + [rhs, mock_rhs]
+
+
+class LinearSolveExpr(sympy.Function, Reconstructable):
+
+    __rargs__ = ('expr',)
+    __rkwargs__ = ('target', 'solver_parameters')
+
+    defaults = {
+        'ksp_type': 'gmres',
+        'pc_type': 'jacobi'
+    }
+
+    def __new__(cls, expr, target=None, solver_parameters=None, **kwargs):
+
+        if solver_parameters is None:
+            solver_parameters = cls.defaults
+        else:
+            for key, val in cls.defaults.items():
+                solver_parameters[key] = solver_parameters.get(key, val)
+
+        obj = super().__new__(cls, expr)
+        obj._expr = expr
+        obj._target = target
+        obj._solver_parameters = solver_parameters
+        return obj
+
+    def __repr__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.expr)
+
+    __str__ = __repr__
+
+    def _sympystr(self, printer):
+        return str(self)
+
+    def __hash__(self):
+        return hash(self.target)
+
+    @property
+    def expr(self):
+        return self._expr
+
+    @property
+    def target(self):
+        return self._target
+
+    @property
+    def solver_parameters(self):
+        return self._solver_parameters
+
+    func = Reconstructable._rebuild
+
+
+class Mock(sympy.Function, Reconstructable):
+
+    __rargs__ = ('expr',)
+
+    def __new__(cls, expr, **kwargs):
+
+        obj = super().__new__(cls, expr)
+        obj._expr = expr
+        return obj
+
+    def __repr__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.expr)
+
+    __str__ = __repr__
+
+    def _sympystr(self, printer):
+        return str(self)
+
+    @property
+    def expr(self):
+        return self._expr
+
+    func = Reconstructable._rebuild
+>>>>>>> ed408fdce (compiler: Simplify by just having a Mock RHS which drops corresponding Cluster before IET level)
