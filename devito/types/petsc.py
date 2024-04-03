@@ -197,8 +197,6 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     indices = tuple(d + 1 for d in target.dimensions)
     s0 = Symbol(name='s0')
     s1 = Symbol(name='s1')
-
-    # Wrapped rhs in LinearSolveExpr for simplicity in iet_build pass.
     mock_action = Eq(s0, Mock(y_matvec.indexify(indices=indices)))
     mock_rhs = Eq(s1, Mock(b_tmp.indexify(indices=indices)))
 
