@@ -152,7 +152,6 @@ def preprocess(clusters, options=None, **kwargs):
     queue = []
     processed = []
     for c in clusters:
-        # from IPython import embed; embed()
         if c.is_halo_touch:
             hs = HaloScheme.union(e.rhs.halo_scheme for e in c.exprs)
             queue.append(c.rebuild(exprs=[], halo_scheme=hs))
