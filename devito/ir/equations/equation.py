@@ -8,10 +8,10 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
 from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import Eq, Inc, ReduceMax, ReduceMin
-from devito.types import MatVecEq, RHSEq
+from devito.types import MatVecEq, RHSEq, MockEq
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
-           'OpMatVec', 'OpRHS']
+           'OpMatVec', 'OpRHS', 'OpMock']
 
 
 class IREq(sympy.Eq, Pickable):
@@ -101,6 +101,7 @@ class Operation(Tag):
             ReduceMin: OpMin,
             MatVecEq: OpMatVec,
             RHSEq: OpRHS,
+            MockEq: OpMock,
         }
         try:
             return reduction_mapper[type(expr)]
@@ -123,6 +124,8 @@ OpMin = Operation('min')
 OpMatVec = Operation('matvec')
 # Building the right-hand side of linear system.
 OpRHS = Operation('rhs')
+# Operation linked to MockEq, placeholders to be removed at the IET level.
+OpMock = Operation('mock')
 
 
 class LoweredEq(IREq):
