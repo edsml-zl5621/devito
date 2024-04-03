@@ -134,15 +134,7 @@ class Profiler(object):
             for i in sections:
                 n = i.name
                 assert n in timer.fields
-                # TODO: Need an improved method for profiling with PETSc..?
-                # The Mock expressions (along with their corresponding iteration loops)
-                # are still detected as Sections with an empty body (even though they
-                # are dropped). If they are dropped here, there is a mismatch between
-                # the no.of Sections present in the Kernel and no.of Sections displayed
-                # in the profiler struct.
-                if i.body != ():
-                    mapper[i] = i._rebuild(body=TimedList(timer=timer,
-                                                          lname=n, body=i.body))
+                mapper[i] = i._rebuild(body=TimedList(timer=timer, lname=n, body=i.body))
             return Transformer(mapper, nested=True).visit(iet)
         else:
             return iet
