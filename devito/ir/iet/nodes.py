@@ -522,7 +522,7 @@ class LinSolveMock(LinearSolverExpression):
     at the IET level.
     """
     # NOTE: The requirement for init=False otherwise there are issues
-    # inside specialize_iet?
+    # inside specialize_iet.
 
     def __init__(self, expr, init=False, pragmas=None, operation=OpMock):
         super().__init__(expr, init=init, pragmas=pragmas, operation=operation)
