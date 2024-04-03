@@ -256,7 +256,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
 class Mock(sympy.Function, Reconstructable):
 
     """
-    Represents a 'mock' dependency ensure distinct iteration loops.
+    Represents a 'mock' dependency to ensure distinct iteration loops.
 
     For example, the mat-vec action iteration loop is to be isolated from the
     expression loop used to build the RHS of the linear system. This separation
