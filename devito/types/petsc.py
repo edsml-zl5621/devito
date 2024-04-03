@@ -192,7 +192,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
                 solver_parameters=solver_parameters), subdomain=eq.subdomain)
 
-    # Create mock equations to ensure distinct iteration loops for each component
+    # Create 'mock' dependencies to ensure distinct iteration loops for each component
     # of the linear solve.
     indices = tuple(d + 1 for d in target.dimensions)
     s0 = Symbol(name='s0')
@@ -256,7 +256,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
 class Mock(sympy.Function, Reconstructable):
 
     """
-    Represents a mock/placeholder RHS to ensure distinct iteration loops.
+    Represents a 'mock' dependency ensure distinct iteration loops.
 
     For example, the mat-vec action iteration loop is to be isolated from the
     expression loop used to build the RHS of the linear system. This separation
