@@ -10,7 +10,8 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpMatVec, OpRHS
+from devito.ir.equations import (DummyEq, OpInc, OpMin, OpMax, OpMatVec, OpRHS,
+                                 OpMock)
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, WithLock, PrefetchUpdate, detect_io)
@@ -28,7 +29,8 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'MatVecAction', 'RHSLinearSystem']
+           'CallableBody', 'Transfer', 'Callback', 'MatVecAction', 'RHSLinearSystem',
+           'LinSolveMock']
 
 # First-class IET nodes
 
@@ -509,6 +511,19 @@ class RHSLinearSystem(LinearSolverExpression):
                  target=None, solver_parameters=None):
         super().__init__(expr, pragmas=pragmas, operation=operation,
                          target=target, solver_parameters=solver_parameters)
+
+
+class LinSolveMock(LinearSolverExpression):
+
+    """
+    Placeholder expression to wrap MockEqs, which are dropped
+    at the IET level.
+    """
+    # NOTE: The requirement for init=False otherwise there are issues
+    # inside specialize_iet?
+
+    def __init__(self, expr, init=False, pragmas=None, operation=OpMock):
+        super().__init__(expr, init=init, pragmas=pragmas, operation=operation)
 
 
 class Iteration(Node):
