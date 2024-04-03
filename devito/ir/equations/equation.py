@@ -13,7 +13,7 @@ from devito.types import (Eq, Inc, ReduceMax, ReduceMin,
 from devito.types.petsc import Action, RHS
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
-           'OpMatVec', 'OpRHS']
+           'OpMatVec', 'OpRHS', 'OpMock']
 
 
 class IREq(sympy.Eq, Pickable):
@@ -125,6 +125,8 @@ OpMin = Operation('min')
 OpMatVec = Operation('matvec')
 # Building the right-hand side of linear system.
 OpRHS = Operation('rhs')
+# Operation linked to MockEq, placeholders to be removed at the IET level.
+OpMock = Operation('mock')
 
 
 class LoweredEq(IREq):
