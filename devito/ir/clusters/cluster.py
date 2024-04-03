@@ -244,7 +244,7 @@ class Cluster:
         """
         True if encoding a non-mathematical operation, False otherwise.
         """
-        return self.is_halo_touch or self.is_dist_reduce or self.is_fence
+        return self.is_halo_touch or self.is_fence or self.is_dist_reduce
 
     @property
     def is_halo_touch(self):
