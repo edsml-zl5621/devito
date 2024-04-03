@@ -10,7 +10,7 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
 from devito.symbolics import IntDiv, limits_mapper, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import (Eq, Inc, ReduceMax, ReduceMin,
-                          relational_min, MatVecEq, RHSEq, MockEq)
+                          relational_min, MatVecEq, RHSEq)
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
            'identity_mapper']
@@ -105,8 +105,7 @@ class Operation(Tag):
             ReduceMax: OpMax,
             ReduceMin: OpMin,
             MatVecEq: OpMatVec,
-            RHSEq: OpRHS,
-            MockEq: OpMock,
+            RHSEq: OpRHS
         }
         try:
             return reduction_mapper[type(expr)]
@@ -129,8 +128,6 @@ OpMin = Operation('min')
 OpMatVec = Operation('matvec')
 # Building the right-hand side of linear system.
 OpRHS = Operation('rhs')
-# Operation linked to MockEq, placeholders to be removed at the IET level.
-OpMock = Operation('mock')
 
 
 identity_mapper = {
