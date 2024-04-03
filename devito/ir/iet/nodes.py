@@ -521,11 +521,9 @@ class LinSolveMock(LinearSolverExpression):
     Placeholder expression to wrap MockEqs, which are dropped
     at the IET level.
     """
-    # NOTE: The requirement for init=False otherwise there are issues
-    # inside specialize_iet.
 
-    def __init__(self, expr, init=False, pragmas=None, operation=OpMock):
-        super().__init__(expr, init=init, pragmas=pragmas, operation=operation)
+    def __init__(self, expr, pragmas=None, operation=OpMock):
+        super().__init__(expr, pragmas=pragmas, operation=operation)
 
 
 class Iteration(Node):
