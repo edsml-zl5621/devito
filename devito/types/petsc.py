@@ -177,6 +177,18 @@ class RHSEq(Eq):
     pass
 
 
+class MockEq(Eq):
+    """
+    Represents a mock/placeholder equation to ensure distinct iteration loops.
+
+    For example, the mat-vec action iteration loop is to be isolated from the
+    expression loop used to build the RHS of the linear system. This separation
+    facilitates the utilisation of the mat-vec iteration loop in callback functions
+    created at the IET level.
+    """
+    pass
+
+
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
@@ -196,7 +208,17 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
                 solver_parameters=solver_parameters), subdomain=eq.subdomain)
 
-    return [matvecaction] + [rhs]
+    # Create mock equations to ensure distinct iteration loops for each component
+    # of the linear solve.
+    indices = tuple(d + 1 for d in target.dimensions)
+    s0 = Scalar(name='s0')
+    s1 = Scalar(name='s1')
+
+    # Wrapped rhs in LinearSolveExpr for simplicity in iet_build pass.
+    mock_action = MockEq(s0, LinearSolveExpr(y_matvec.indexify(indices=indices)))
+    mock_rhs = MockEq(s1, LinearSolveExpr(b_tmp.indexify(indices=indices)))
+
+    return [matvecaction, mock_action] + [rhs, mock_rhs]
 
 
 class LinearSolveExpr(sympy.Function, Reconstructable):

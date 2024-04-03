@@ -2,10 +2,10 @@ from collections import OrderedDict
 
 from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, SyncSpot,
                            Section, HaloSpot, ExpressionBundle, MatVecAction,
-                           RHSLinearSystem)
+                           RHSLinearSystem, LinSolveMock)
 from devito.tools import timed_pass
 from devito.types import LinearSolveExpr
-from devito.ir.equations import OpMatVec, OpRHS
+from devito.ir.equations import OpMatVec, OpRHS, OpMock
 
 __all__ = ['iet_build']
 
@@ -25,6 +25,7 @@ def iet_build(stree):
         elif i.is_Exprs:
             exprs = []
             for e in i.exprs:
+                # from IPython import embed; embed()
                 if e.is_Increment:
                     exprs.append(Increment(e))
                 elif isinstance(e.rhs, LinearSolveExpr):
@@ -65,4 +66,5 @@ def iet_build(stree):
 # Mapping special Eq operations to their corresponding IET Expression subclass types.
 # These operations correspond to subclasses of Eq utilised within PETScSolve.
 linsolve_mapper = {OpMatVec: MatVecAction,
-                   OpRHS: RHSLinearSystem}
+                   OpRHS: RHSLinearSystem,
+                   OpMock: LinSolveMock}
