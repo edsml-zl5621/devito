@@ -1,8 +1,7 @@
 from collections import OrderedDict
 
 from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, SyncSpot,
-                           Section, HaloSpot, ExpressionBundle, MatVecAction,
-                           RHSLinearSystem)
+                           Section, HaloSpot, ExpressionBundle)
 from devito.tools import timed_pass
 from devito.petsc.types import LinearSolveExpr
 from devito.petsc.utils import petsc_iet_mapper
@@ -25,6 +24,7 @@ def iet_build(stree):
         elif i.is_Exprs:
             exprs = []
             for e in i.exprs:
+                # from IPython import embed; embed()
                 if e.is_Increment:
                     exprs.append(Increment(e))
                 elif isinstance(e.rhs, LinearSolveExpr):
