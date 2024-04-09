@@ -66,15 +66,15 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
 
   PetscCall(DMDACreate2d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,13,13,PETSC_DECIDE,PETSC_DECIDE,1,2,NULL,NULL,&(da_pn)));
   PetscCall(DMSetUp(da_pn));
+  PetscCall(DMSetApplicationContext(da_pn, ctx));
   PetscCall(DMSetMatType(da_pn,MATSHELL));
   PetscCall(DMCreateMatrix(da_pn,&(A_matfree_pn)));
-  PetscCall(MatShellSetContext(A_matfree_pn,ctx));
-  
+
   PetscCall(DMCreateGlobalVector(da_pn,&(x_pn)));
   PetscCall(DMCreateLocalVector(da_pn,&(xlocal_pn)));
   PetscCall(DMCreateGlobalVector(da_pn,&(b_pn)));
   PetscCall(VecReplaceArray(xlocal_pn,pn_vec->data));
-  
+
   PetscCall(KSPCreate(PETSC_COMM_SELF,&(ksp_pn)));
   PetscCall(KSPSetOperators(ksp_pn,A_matfree_pn,A_matfree_pn));
   PetscCall(KSPSetTolerances(ksp_pn,1.00000000000000e-7F,PETSC_DEFAULT,PETSC_DEFAULT,10000));
@@ -85,7 +85,7 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
 
   PetscCall(MatShellSetOperation(A_matfree_pn,MATOP_GET_DIAGONAL,(void (*)(void))preconditioner_callback_pn));
   PetscCall(MatShellSetOperation(A_matfree_pn,MATOP_MULT,(void (*)(void))MyMatShellMult_pn));
-  
+
   // Setup RHS vector b
   PetscCall(DMDAVecGetArray(da_pn,b_pn,&b_tmp_pn));
   for (int x = x_m; x <= x_M; x += 1)
@@ -115,11 +115,11 @@ PetscErrorCode preconditioner_callback_pn(Mat A_matfree_pn, Vec yvec_pn)
   PetscScalar** y_pre_pn;
 
   PetscFunctionBegin;
-  
-  PetscCall(MatShellGetContext(A_matfree_pn,&(ctx)));
+
   PetscCall(MatGetDM(A_matfree_pn,&(da_pn)));
+  PetscCall(DMGetApplicationContext(da_pn, &ctx));
   PetscCall(DMDAVecGetArray(da_pn,yvec_pn,&y_pre_pn));
-  
+
   // Interior
   for (int i0x = ctx->i0x_ltkn + ctx->x_m; i0x <= -ctx->i0x_rtkn + ctx->x_M; i0x += 1)
   {
@@ -128,7 +128,7 @@ PetscErrorCode preconditioner_callback_pn(Mat A_matfree_pn, Vec yvec_pn)
       y_pre_pn[i0x][i0y] = -2.0*pow(ctx->h_x, -2) - 2.0*pow(ctx->h_y, -2);
     }
   }
-  // Boundary loops
+  // Boundary loops - values are just 1 on the diagonal (Dirichlet BCs)
   for (int x = ctx->x_m; x <= ctx->x_M; x += 1)
   {
     for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
@@ -162,20 +162,21 @@ PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn)
 {
   DM da_pn;
   Vec local_xvec_pn;
-
+  struct MatContext * ctx;
   PetscScalar** xvec_tmp_pn;
   PetscScalar** y_matvec_pn;
-  struct MatContext * ctx;
 
   PetscFunctionBegin;
 
-  PetscCall(MatShellGetContext(A_matfree_pn,&(ctx)));
   PetscCall(MatGetDM(A_matfree_pn,&(da_pn)));
+  PetscCall(DMGetApplicationContext(da_pn, &ctx));
+
   PetscCall(DMGetLocalVector(da_pn,&(local_xvec_pn)));
   PetscCall(DMGlobalToLocalBegin(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
   PetscCall(DMGlobalToLocalEnd(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
   PetscCall(DMDAVecGetArrayRead(da_pn,local_xvec_pn,&xvec_tmp_pn));
   PetscCall(DMDAVecGetArray(da_pn,yvec_pn,&y_matvec_pn));
+
   // Interior
   for (int i0x = ctx->i0x_ltkn + ctx->x_m; i0x <= -ctx->i0x_rtkn + ctx->x_M; i0x += 1)
   {
@@ -185,17 +186,6 @@ PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn)
     }
   }
   // Boundary loops
-  for (int x = ctx->x_m; x <= ctx->x_M; x += 1)
-  {
-    for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
-    {
-      y_matvec_pn[x][i1y] = xvec_tmp_pn[x][i1y];
-    }
-    for (int i2y = ctx->y_m; i2y <= -1 + ctx->i2y_ltkn + ctx->y_m; i2y += 1)
-    {
-      y_matvec_pn[x][i2y] = xvec_tmp_pn[x][i2y];
-    }
-  }
   for (int x = ctx->x_m; x <= ctx->x_M; x += 1)
   {
     for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
