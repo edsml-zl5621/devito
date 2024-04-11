@@ -59,12 +59,14 @@ eqn = Eq(pn.laplace, rhs, subdomain=grid.interior)
 tmp = np.linspace(0, Lx, nx).astype(np.float64)*np.float64(np.pi)/Lx
 top_val = np.float64(np.sin(tmp))
 
-# Initial guess - satisfies BCs
-pn.data[1:-1, 1:-1] = np.float64(0.5)
+# Intialise fields
+# Only the rhs initialisation with BCs is actually utilised by PETSc
+pn.data[:] = np.float64(0)
 pn.data[:, -1] = top_val
 
+# initialise RHS to satisfy BCs
 rhs.data[:] = np.float64(0.)
-
+rhs.data[:, -1] = top_val
 
 # # Create boundary condition expressions using subdomains
 x, y = grid.dimensions
@@ -97,3 +99,4 @@ op = Operator(petsc)
 op.apply()
 print(op.ccode)
 print(op.arguments())
+
