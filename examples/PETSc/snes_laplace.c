@@ -94,7 +94,7 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
   PetscCall(KSPSetFromOptions(ksp_pn));
   PetscCall(MatShellSetOperation(J,MATOP_GET_DIAGONAL,(void (*)(void))preconditioner_callback_pn));
   
-  // Setup constant part - rhs - in this example it is just zero everywhere
+  // Setup constant part - rhs - in this example it is just zero everywhere.
   PetscCall(DMDAVecGetArray(da_pn,b_pn,&b_tmp_pn));
   for (int x = x_m; x <= x_M; x += 1)
   {
@@ -198,6 +198,8 @@ PetscErrorCode FormFunction(SNES snes, Vec xvec_pn, Vec yvec_pn, void *null)
   }
   // Boundary loops - F is set to zero.
   // These loops are the result of using subdomains in Devito.
+  // Perhaps there is a better way of doing this in PETSc without having to explicitly 
+  // set the residual to zero for the dirichlet boundary points?
   for (int x = ctx->x_m; x <= ctx->x_M; x += 1)
   {
     for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
