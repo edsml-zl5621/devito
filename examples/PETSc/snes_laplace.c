@@ -51,6 +51,7 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
 {
   Mat J;
   Vec b_pn;
+  Vec blocal_pn;
   DM da_pn;
   KSP ksp_pn;
   SNES snes_pn;
@@ -58,7 +59,7 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
   PetscMPIInt size;
   Vec x_pn;
   Vec xlocal_pn;
-  PetscScalar** b_tmp_pn;
+  PetscScalar* b_one_dim;
 
   double (*restrict rhs)[rhs_vec->size[1]] __attribute__ ((aligned (64))) = (double (*)[rhs_vec->size[1]]) rhs_vec->data;
 
@@ -83,6 +84,7 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
   PetscCall(DMCreateGlobalVector(da_pn,&(x_pn)));
   PetscCall(DMCreateLocalVector(da_pn,&(xlocal_pn)));
   PetscCall(DMCreateGlobalVector(da_pn,&(b_pn)));
+  PetscCall(DMCreateLocalVector(da_pn,&(blocal_pn)));
   PetscCall(VecReplaceArray(xlocal_pn,pn_vec->data));
 
   PetscCall(SNESGetKSP(snes_pn, &ksp_pn));
@@ -93,20 +95,22 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
   PetscCall(PCJacobiSetType(pc_pn,PC_JACOBI_DIAGONAL));
   PetscCall(KSPSetFromOptions(ksp_pn));
   PetscCall(MatShellSetOperation(J,MATOP_GET_DIAGONAL,(void (*)(void))preconditioner_callback_pn));
-  
+
   // Setup constant part - rhs - in this example it is just zero everywhere.
-  PetscCall(DMDAVecGetArray(da_pn,b_pn,&b_tmp_pn));
+  PetscCall(VecGetArray(blocal_pn, &b_one_dim));
+  PetscScalar (* b_tmp_pn)[17] = (PetscScalar (*)[17])b_one_dim;
   for (int x = x_m; x <= x_M; x += 1)
   {
     for (int y = y_m; y <= y_M; y += 1)
     {
-      b_tmp_pn[x][y] = rhs[x + 2][y + 2];
+      b_tmp_pn[x + 2][y + 2] = rhs[x + 2][y + 2];
     }
   }
-  PetscCall(DMDAVecRestoreArray(da_pn,b_pn,&b_tmp_pn));
+  PetscCall(VecRestoreArray(blocal_pn,&b_one_dim));
   // Set up initial guess using user initialised field - satisfies BCs
-  // This worls because I used VecReplaceArray above.
+  // This works because I used VecReplaceArray above.
   PetscCall(DMLocalToGlobal(da_pn,xlocal_pn,INSERT_VALUES,x_pn));
+  PetscCall(DMLocalToGlobal(da_pn,blocal_pn,INSERT_VALUES,b_pn));
   PetscCall(SNESSolve(snes_pn,b_pn,x_pn));
   PetscCall(DMGlobalToLocal(da_pn,x_pn,INSERT_VALUES,xlocal_pn));
 
@@ -122,21 +126,25 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
 PetscErrorCode preconditioner_callback_pn(Mat A_matfree_pn, Vec yvec_pn)
 {
   DM da_pn;
+  Vec local_yvec_pn;
   struct MatContext * ctx;
-  PetscScalar** y_pre_pn;
+  PetscScalar* y_one_dim;
 
   PetscFunctionBegin;
 
   PetscCall(MatGetDM(A_matfree_pn,&(da_pn)));
   PetscCall(DMGetApplicationContext(da_pn, &ctx));
-  PetscCall(DMDAVecGetArray(da_pn,yvec_pn,&y_pre_pn));
+
+  PetscCall(DMGetLocalVector(da_pn,&(local_yvec_pn)));
+  PetscCall(VecGetArray(local_yvec_pn,&y_one_dim));
+  PetscScalar (* y_pre_pn)[17] = (PetscScalar (*)[17])y_one_dim;
 
   // Interior
   for (int i0x = ctx->i0x_ltkn + ctx->x_m; i0x <= -ctx->i0x_rtkn + ctx->x_M; i0x += 1)
   {
     for (int i0y = ctx->i0y_ltkn + ctx->y_m; i0y <= -ctx->i0y_rtkn + ctx->y_M; i0y += 1)
     {
-      y_pre_pn[i0x][i0y] = -2.0*pow(ctx->h_x, -2) - 2.0*pow(ctx->h_y, -2);
+      y_pre_pn[i0x + 2][i0y + 2] = -2.0*pow(ctx->h_x, -2) - 2.0*pow(ctx->h_y, -2);
     }
   }
   // Boundary loops - values are 1 on diagonal (Dirichlet BCs)
@@ -145,38 +153,42 @@ PetscErrorCode preconditioner_callback_pn(Mat A_matfree_pn, Vec yvec_pn)
   {
     for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
     {
-      y_pre_pn[x][i1y] = 1.;
+      y_pre_pn[x + 2][i1y + 2] = 1.;
     }
     for (int i2y = ctx->y_m; i2y <= -1 + ctx->i2y_ltkn + ctx->y_m; i2y += 1)
     {
-      y_pre_pn[x][i2y] = 1.;
+      y_pre_pn[x + 2][i2y + 2] = 1.;
     }
   }
   for (int i3x = ctx->x_m; i3x <= -1 + ctx->i3x_ltkn + ctx->x_m; i3x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_pre_pn[i3x][y] = 1.;
+      y_pre_pn[i3x + 2][y + 2] = 1.;
     }
   }
   for (int i4x = 1 - ctx->i4x_rtkn + ctx->x_M; i4x <= ctx->x_M; i4x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_pre_pn[i4x][y] = 1.;
+      y_pre_pn[i4x + 2][y + 2] = 1.;
     }
   }
-  PetscCall(DMDAVecRestoreArray(da_pn,yvec_pn,&y_pre_pn));
+
+  PetscCall(VecRestoreArray(local_yvec_pn, &y_one_dim));
+  PetscCall(DMLocalToGlobalBegin(da_pn,local_yvec_pn,INSERT_VALUES,yvec_pn));
+  PetscCall(DMLocalToGlobalEnd(da_pn,local_yvec_pn,INSERT_VALUES,yvec_pn));
   PetscFunctionReturn(0);
 }
+
 
 PetscErrorCode FormFunction(SNES snes, Vec xvec_pn, Vec yvec_pn, void *null)
 {
   DM da_pn;
-  Vec local_xvec_pn;
+  Vec local_xvec_pn, local_yvec_pn;
   struct MatContext * ctx;
-  PetscScalar** xvec_tmp_pn;
-  PetscScalar** y_matvec_pn;
+  const PetscScalar* x_one_dim;
+  PetscScalar* y_one_dim;
 
   PetscFunctionBegin;
   PetscCall(SNESGetDM(snes, &da_pn));
@@ -185,78 +197,93 @@ PetscErrorCode FormFunction(SNES snes, Vec xvec_pn, Vec yvec_pn, void *null)
   PetscCall(DMGetLocalVector(da_pn,&(local_xvec_pn)));
   PetscCall(DMGlobalToLocalBegin(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
   PetscCall(DMGlobalToLocalEnd(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
-  PetscCall(DMDAVecGetArrayRead(da_pn,local_xvec_pn,&xvec_tmp_pn));
-  PetscCall(DMDAVecGetArray(da_pn,yvec_pn,&y_matvec_pn));
+  
+  PetscCall(DMGetLocalVector(da_pn,&(local_yvec_pn)));
+
+  PetscCall(VecGetArrayRead(local_xvec_pn,&x_one_dim));
+  PetscCall(VecGetArray(local_yvec_pn,&y_one_dim));
+
+  PetscScalar (* xvec_tmp_pn)[17] = (PetscScalar (*)[17])x_one_dim;
+  PetscScalar (* y_matvec_pn)[17] = (PetscScalar (*)[17])y_one_dim;
   
   // Interior
   for (int i0x = ctx->i0x_ltkn + ctx->x_m; i0x <= -ctx->i0x_rtkn + ctx->x_M; i0x += 1)
   {
     for (int i0y = ctx->i0y_ltkn + ctx->y_m; i0y <= -ctx->i0y_rtkn + ctx->y_M; i0y += 1)
     {
-      y_matvec_pn[i0x][i0y] = -2.0*pow(ctx->h_x, -2)*xvec_tmp_pn[i0x][i0y] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x - 1][i0y] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 1][i0y] - 2.0*pow(ctx->h_y, -2)*xvec_tmp_pn[i0x][i0y] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x][i0y - 1] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x][i0y + 1];
+      y_matvec_pn[i0x + 2][i0y + 2] = -2.0*pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 2][i0y + 2] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 1][i0y + 2] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 3][i0y + 2] - 2.0*pow(ctx->h_y, -2)*xvec_tmp_pn[i0x + 2][i0y + 2] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x + 2][i0y + 1] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x + 2][i0y + 3];
     }
   }
   // Boundary loops - F is set to zero.
   // These loops are the result of using subdomains in Devito.
-  // Perhaps there is a better way of doing this in PETSc without having to explicitly 
-  // set the residual to zero for the dirichlet boundary points?
   for (int x = ctx->x_m; x <= ctx->x_M; x += 1)
   {
     for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
     {
-      y_matvec_pn[x][i1y] = 0.;
+      y_matvec_pn[x + 2][i1y + 2] = 0.;
     }
     for (int i2y = ctx->y_m; i2y <= -1 + ctx->i2y_ltkn + ctx->y_m; i2y += 1)
     {
-      y_matvec_pn[x][i2y] = 0.;
+      y_matvec_pn[x + 2][i2y + 2] = 0.;
     }
   }
   for (int i3x = ctx->x_m; i3x <= -1 + ctx->i3x_ltkn + ctx->x_m; i3x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_matvec_pn[i3x][y] = 0.;
+      y_matvec_pn[i3x + 2][y + 2] = 0.;
     }
   }
   for (int i4x = 1 - ctx->i4x_rtkn + ctx->x_M; i4x <= ctx->x_M; i4x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_matvec_pn[i4x][y] = 0.;
+      y_matvec_pn[i4x + 2][y + 2] = 0.;
     }
   }
-  PetscCall(DMDAVecRestoreArrayRead(da_pn,local_xvec_pn,&xvec_tmp_pn));
-  PetscCall(DMDAVecRestoreArray(da_pn,yvec_pn,&y_matvec_pn));
-  PetscCall(DMRestoreLocalVector(da_pn,&(local_xvec_pn)));
+  
+  PetscCall(VecRestoreArrayRead(local_xvec_pn, &x_one_dim));
+  PetscCall(VecRestoreArray(local_yvec_pn, &y_one_dim));
+  PetscCall(DMLocalToGlobalBegin(da_pn,local_yvec_pn,INSERT_VALUES,yvec_pn));
+  PetscCall(DMLocalToGlobalEnd(da_pn,local_yvec_pn,INSERT_VALUES,yvec_pn));
   PetscFunctionReturn(0);
 
 }
+
 
 PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn)
 {
   DM da_pn;
   Vec local_xvec_pn;
+  Vec local_yvec_pn;
   struct MatContext * ctx;
-  PetscScalar** xvec_tmp_pn;
-  PetscScalar** y_matvec_pn;
+  const PetscScalar* x_one_dim;
+  PetscScalar* y_one_dim;
 
   PetscFunctionBegin;
 
   PetscCall(MatGetDM(A_matfree_pn,&(da_pn)));
   PetscCall(DMGetApplicationContext(da_pn, &ctx));
-  
+
   PetscCall(DMGetLocalVector(da_pn,&(local_xvec_pn)));
   PetscCall(DMGlobalToLocalBegin(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
   PetscCall(DMGlobalToLocalEnd(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
-  PetscCall(DMDAVecGetArrayRead(da_pn,local_xvec_pn,&xvec_tmp_pn));
-  PetscCall(DMDAVecGetArray(da_pn,yvec_pn,&y_matvec_pn));
+  
+  PetscCall(DMGetLocalVector(da_pn,&(local_yvec_pn)));
 
+  PetscCall(VecGetArrayRead(local_xvec_pn,&x_one_dim));
+  PetscCall(VecGetArray(local_yvec_pn,&y_one_dim));
+
+  PetscScalar (* xvec_tmp_pn)[17] = (PetscScalar (*)[17])x_one_dim;
+  PetscScalar (* y_matvec_pn)[17] = (PetscScalar (*)[17])y_one_dim;
+
+  
   // Interior
   for (int i0x = ctx->i0x_ltkn + ctx->x_m; i0x <= -ctx->i0x_rtkn + ctx->x_M; i0x += 1)
   {
     for (int i0y = ctx->i0y_ltkn + ctx->y_m; i0y <= -ctx->i0y_rtkn + ctx->y_M; i0y += 1)
     {
-      y_matvec_pn[i0x][i0y] = -2.0*pow(ctx->h_x, -2)*xvec_tmp_pn[i0x][i0y] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x - 1][i0y] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 1][i0y] - 2.0*pow(ctx->h_y, -2)*xvec_tmp_pn[i0x][i0y] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x][i0y - 1] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x][i0y + 1];
+      y_matvec_pn[i0x + 2][i0y + 2] = -2.0*pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 2][i0y + 2] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 1][i0y + 2] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 3][i0y + 2] - 2.0*pow(ctx->h_y, -2)*xvec_tmp_pn[i0x + 2][i0y + 2] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x + 2][i0y + 1] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x + 2][i0y + 3];
     }
   }
   // Boundary loops - equivalent to 1 on diagonal.
@@ -265,29 +292,30 @@ PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn)
   {
     for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
     {
-      y_matvec_pn[x][i1y] = xvec_tmp_pn[x][i1y];
+      y_matvec_pn[x + 2][i1y + 2] = xvec_tmp_pn[x + 2][i1y + 2];
     }
     for (int i2y = ctx->y_m; i2y <= -1 + ctx->i2y_ltkn + ctx->y_m; i2y += 1)
     {
-      y_matvec_pn[x][i2y] = xvec_tmp_pn[x][i2y];
+      y_matvec_pn[x + 2][i2y + 2] = xvec_tmp_pn[x + 2][i2y + 2];
     }
   }
   for (int i3x = ctx->x_m; i3x <= -1 + ctx->i3x_ltkn + ctx->x_m; i3x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_matvec_pn[i3x][y] = xvec_tmp_pn[i3x][y];
+      y_matvec_pn[i3x + 2][y + 2] = xvec_tmp_pn[i3x + 2][y + 2];
     }
   }
   for (int i4x = 1 - ctx->i4x_rtkn + ctx->x_M; i4x <= ctx->x_M; i4x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_matvec_pn[i4x][y] = xvec_tmp_pn[i4x][y];
+      y_matvec_pn[i4x + 2][y + 2] = xvec_tmp_pn[i4x + 2][y + 2];
     }
   }
-  PetscCall(DMDAVecRestoreArrayRead(da_pn,local_xvec_pn,&xvec_tmp_pn));
-  PetscCall(DMDAVecRestoreArray(da_pn,yvec_pn,&y_matvec_pn));
-  PetscCall(DMRestoreLocalVector(da_pn,&(local_xvec_pn)));
+  PetscCall(VecRestoreArrayRead(local_xvec_pn, &x_one_dim));
+  PetscCall(VecRestoreArray(local_yvec_pn, &y_one_dim));
+  PetscCall(DMLocalToGlobalBegin(da_pn,local_yvec_pn,INSERT_VALUES,yvec_pn));
+  PetscCall(DMLocalToGlobalEnd(da_pn,local_yvec_pn,INSERT_VALUES,yvec_pn));
   PetscFunctionReturn(0);
 }
