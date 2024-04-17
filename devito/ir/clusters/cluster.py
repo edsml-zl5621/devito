@@ -14,7 +14,7 @@ from devito.mpi.halo_scheme import HaloScheme, HaloTouch
 from devito.mpi.reduction_scheme import DistReduce
 from devito.symbolics import estimate_cost
 from devito.tools import as_tuple, flatten, infer_dtype
-from devito.types import WeakFence, CriticalRegion, ArrayBasic
+from devito.types import WeakFence, CriticalRegion
 
 __all__ = ["Cluster", "ClusterGroup"]
 
@@ -363,8 +363,6 @@ class Cluster:
         # OOB accesses
         oobs = set()
         for f, v in parts.items():
-            if isinstance(f, ArrayBasic):
-                continue
             for i in v:
                 if i.dim.is_Sub:
                     d = i.dim.parent
