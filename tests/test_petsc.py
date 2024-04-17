@@ -41,16 +41,14 @@ def test_petsc_functions():
     grid = Grid((2, 2))
     x, y = grid.dimensions
 
-    tmp = Function(name='tmp', grid=grid, space_order=2)
-
     ptr0 = PETScFunction(name='ptr0', dimensions=grid.dimensions, dtype=np.float32)
     ptr1 = PETScFunction(name='ptr1', dimensions=grid.dimensions, dtype=np.float32,
-                      is_const=True)
+                         is_const=True)
     ptr2 = PETScFunction(name='ptr2', dimensions=grid.dimensions, dtype=np.float64,
-                      is_const=True)
+                         is_const=True)
     ptr3 = PETScFunction(name='ptr3', dimensions=grid.dimensions, dtype=np.int32)
     ptr4 = PETScFunction(name='ptr4', dimensions=grid.dimensions, dtype=np.int64,
-                      is_const=True)
+                         is_const=True)
 
     defn0 = Definition(ptr0)
     defn1 = Definition(ptr1)
