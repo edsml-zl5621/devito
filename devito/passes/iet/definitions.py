@@ -17,7 +17,7 @@ from devito.passes.iet.langbase import LangBB
 from devito.symbolics import (Byref, DefFunction, FieldFromPointer, IndexedPointer,
                               SizeOf, VOID, Keyword, pow_to_mul)
 from devito.tools import as_mapper, as_list, as_tuple, filter_sorted, flatten
-from devito.types import Array, CustomDimension, DeviceMap, DeviceRM, Eq, Symbol
+from devito.types import Array, CustomDimension, DeviceMap, DeviceRM, Eq, Symbol, PETScFunction
 
 __all__ = ['DataManager', 'DeviceAwareDataManager', 'Storage']
 
@@ -397,7 +397,10 @@ class DataManager(object):
         # Some objects don't distinguish their _C_symbol because they are known,
         # by construction, not to require it, thus making the generated code
         # cleaner. These objects don't need a cast
-        bases = [i for i in bases if i.name != i.function._C_name]
+        # Some specical objects, such as PETScArrays, require casting to be performed
+        # after specific IET Calls. Therefore, they are not generated here.
+        bases = [i for i in bases if i.name != i.function._C_name and not i.function.is_LocalFunction]
+        # bases = [i for i in bases if i.name != i.function._C_name]
 
         # Create and attach the type casts
         casts = tuple(self.lang.PointerCast(i.function, obj=i) for i in bases

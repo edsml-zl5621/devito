@@ -1024,7 +1024,7 @@ class PointerCast(ExprStmt, Node):
         """
         The shape used in the left-hand side and right-hand side of the PointerCast.
         """
-        if self.function.is_ArrayBasic:
+        if self.function.is_ArrayBasic or self.function.is_LocalFunction:
             return self.function.symbolic_shape[1:]
         else:
             return tuple(self.function._C_get_field(FULL, d).size

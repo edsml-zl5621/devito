@@ -250,7 +250,10 @@ class CGen(Visitor):
             strshape = ''
             if isinstance(obj, (AbstractFunction, IndexedData)) and mode >= 1:
                 if not obj._mem_stack:
-                    strtype = '%s%s' % (strtype, self._restrict_keyword)
+                    if obj.is_LocalFunction:
+                        strtype = '%s' % (strtype)
+                    else:
+                        strtype = '%s%s' % (strtype, self._restrict_keyword)
         strtype = ' '.join(qualifiers + [strtype])
 
         if obj.is_LocalObject and obj._C_modifier is not None and mode == 2:
@@ -397,9 +400,13 @@ class CGen(Visitor):
             else:
                 v = f.name
             if o.flat is None:
+                # from IPython import embed; embed()
                 shape = ''.join("[%s]" % ccode(i) for i in o.castshape)
                 rshape = '(*)%s' % shape
-                lvalue = c.Value(i._C_typedata, '(*restrict %s)%s' % (v, shape))
+                if f.is_LocalFunction:
+                    lvalue = c.Value(i._C_typedata, '(* %s)%s' % (v, shape))
+                else:
+                    lvalue = c.Value(i._C_typedata, '(*restrict %s)%s' % (v, shape))
             else:
                 rshape = '*'
                 lvalue = c.Value(i._C_typedata, '*%s' % v)

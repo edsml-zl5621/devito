@@ -19,6 +19,7 @@ from devito.types.args import ArgProvider
 from devito.types.caching import Cached, Uncached
 from devito.types.lazy import Evaluable
 from devito.types.utils import DimensionTuple
+from devito.tools import CustomDtype
 
 __all__ = ['Symbol', 'Scalar', 'Indexed', 'IndexedData', 'DeviceMap']
 
@@ -83,6 +84,10 @@ class CodeSymbol(object):
         The type of the object in the generated code as a `str`.
         """
         _type = self._C_ctype
+
+        if isinstance(_type, CustomDtype):
+            return ctypes_to_cstr(_type)
+
         while issubclass(_type, _Pointer):
             _type = _type._type_
 
@@ -259,6 +264,7 @@ class Basic(CodeSymbol):
     is_Bundle = False
     is_Object = False
     is_LocalObject = False
+    is_LocalFunction = False
 
     # Created by the user
     is_Input = False
@@ -1591,3 +1597,4 @@ class Indexed(sympy.Indexed):
         except AttributeError:
             pass
         return super()._subs(old, new, **hints)
+
