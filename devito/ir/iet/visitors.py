@@ -400,7 +400,6 @@ class CGen(Visitor):
             else:
                 v = f.name
             if o.flat is None:
-                # from IPython import embed; embed()
                 shape = ''.join("[%s]" % ccode(i) for i in o.castshape)
                 rshape = '(*)%s' % shape
                 if f.is_LocalFunction:
