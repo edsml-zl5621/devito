@@ -4,7 +4,7 @@ from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            MatVecAction, FindNodes, RHSLinearSystem)
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
-                          PC, KSPConvergedReason, PETScArray, PETScSolve)
+                          PC, KSPConvergedReason, PETScFunction, PETScSolve)
 
 
 def test_petsc_local_object():
@@ -36,18 +36,20 @@ def test_petsc_local_object():
 
 def test_petsc_functions():
     """
-    Test C++ support for PETScArrays.
+    Test C++ support for PETScFunctions.
     """
     grid = Grid((2, 2))
     x, y = grid.dimensions
 
-    ptr0 = PETScArray(name='ptr0', dimensions=grid.dimensions, dtype=np.float32)
-    ptr1 = PETScArray(name='ptr1', dimensions=grid.dimensions, dtype=np.float32,
+    tmp = Function(name='tmp', grid=grid, space_order=2)
+
+    ptr0 = PETScFunction(name='ptr0', dimensions=grid.dimensions, dtype=np.float32)
+    ptr1 = PETScFunction(name='ptr1', dimensions=grid.dimensions, dtype=np.float32,
                       is_const=True)
-    ptr2 = PETScArray(name='ptr2', dimensions=grid.dimensions, dtype=np.float64,
+    ptr2 = PETScFunction(name='ptr2', dimensions=grid.dimensions, dtype=np.float64,
                       is_const=True)
-    ptr3 = PETScArray(name='ptr3', dimensions=grid.dimensions, dtype=np.int32)
-    ptr4 = PETScArray(name='ptr4', dimensions=grid.dimensions, dtype=np.int64,
+    ptr3 = PETScFunction(name='ptr3', dimensions=grid.dimensions, dtype=np.int32)
+    ptr4 = PETScFunction(name='ptr4', dimensions=grid.dimensions, dtype=np.int64,
                       is_const=True)
 
     defn0 = Definition(ptr0)
@@ -58,11 +60,11 @@ def test_petsc_functions():
 
     expr = DummyExpr(ptr0.indexed[x, y], ptr1.indexed[x, y] + 1)
 
-    assert str(defn0) == 'PetscScalar**restrict ptr0;'
-    assert str(defn1) == 'const PetscScalar**restrict ptr1;'
-    assert str(defn2) == 'const PetscScalar**restrict ptr2;'
-    assert str(defn3) == 'PetscInt**restrict ptr3;'
-    assert str(defn4) == 'const PetscInt**restrict ptr4;'
+    assert str(defn0) == 'PetscScalar* ptr0_vec;'
+    assert str(defn1) == 'const PetscScalar* ptr1_vec;'
+    assert str(defn2) == 'const PetscScalar* ptr2_vec;'
+    assert str(defn3) == 'PetscInt* ptr3_vec;'
+    assert str(defn4) == 'const PetscInt* ptr4_vec;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
 
 
@@ -75,7 +77,7 @@ def test_petsc_subs():
     f1 = Function(name='f1', grid=grid, space_order=2)
     f2 = Function(name='f2', grid=grid, space_order=2)
 
-    arr = PETScArray(name='arr', dimensions=f2.dimensions, dtype=f2.dtype)
+    arr = PETScFunction(name='arr', dimensions=f2.dimensions, dtype=f2.dtype)
 
     eqn = Eq(f1, f2.laplace)
     eqn_subs = eqn.subs(f2, arr)
@@ -110,20 +112,14 @@ def test_petsc_solve():
 
     rhs_expr = FindNodes(RHSLinearSystem).visit(op)
 
-    # Verify that the action expression has not been shifted by the
-    # computational domain since the halo is abstracted within DMDA.
     assert str(action_expr[-1].expr.rhs.args[0]) == \
-        '-2.0*x_matvec_f[x, y]/h_x**2 + x_matvec_f[x - 1, y]/h_x**2' + \
-        ' + x_matvec_f[x + 1, y]/h_x**2 - 2.0*x_matvec_f[x, y]/h_y**2' + \
-        ' + x_matvec_f[x, y - 1]/h_y**2 + x_matvec_f[x, y + 1]/h_y**2'
+        'x_matvec_f[x + 1, y + 2]/h_x**2 - 2.0*x_matvec_f[x + 2, y + 2]/h_x**2' + \
+        ' + x_matvec_f[x + 3, y + 2]/h_x**2 + x_matvec_f[x + 2, y + 1]/h_y**2' + \
+        ' - 2.0*x_matvec_f[x + 2, y + 2]/h_y**2 + x_matvec_f[x + 2, y + 3]/h_y**2'
 
-    # Verify that the RHS expression has been shifted according to the
-    # computational domain. This is necessary because the RHS of the
-    # linear system is built from Devito allocated Function objects, not PETSc objects.
     assert str(rhs_expr[-1].expr.rhs.args[0]) == 'g[x + 2, y + 2]'
 
-    # Check the iteration bounds have not changed since PETSc DMDA handles
-    # negative indexing (the halo is abstracted).
+    # Check the iteration bounds are correct.
     assert op.arguments().get('x_m') == 0
     assert op.arguments().get('y_m') == 0
     assert op.arguments().get('y_M') == 1

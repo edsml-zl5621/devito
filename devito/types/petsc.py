@@ -75,7 +75,8 @@ class LocalFunction(AbstractFunction, Differentiable):
 
     is_LocalFunction = True
 
-    __rkwargs__ = AbstractFunction.__rkwargs__ + ('is_const', 'liveness', 'coefficients')
+    __rkwargs__ = AbstractFunction.__rkwargs__ + ('is_const', 'liveness', 'coefficients',
+                                                  'dimensions')
 
     # Default method for the finite difference approximation weights computation.
     _default_fd = 'taylor'
@@ -220,7 +221,8 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         PETScFunction(name=f'{prefix}_{target.name}',
                    dtype=target.dtype,
                    dimensions=target.dimensions,
-                   shape=target.shape, liveness='eager')
+                   shape=target.shape, liveness='eager',
+                   halo=target.halo)
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
     # # TODO: Extend to rearrange equation for implicit time stepping.
