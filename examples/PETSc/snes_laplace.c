@@ -106,6 +106,33 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
       b_tmp_pn[x + 2][y + 2] = rhs[x + 2][y + 2];
     }
   }
+  // boundary loops - need to set b to zero on essential boundary nodes
+  for (int x = ctx->x_m; x <= ctx->x_M; x += 1)
+  {
+    for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
+    {
+      b_tmp_pn[x + 2][i1y + 2] = 0.;
+    }
+    for (int i2y = ctx->y_m; i2y <= -1 + ctx->i2y_ltkn + ctx->y_m; i2y += 1)
+    {
+      b_tmp_pn[x + 2][i2y + 2] = 0.;
+    }
+  }
+  for (int i3x = ctx->x_m; i3x <= -1 + ctx->i3x_ltkn + ctx->x_m; i3x += 1)
+  {
+    for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
+    {
+      b_tmp_pn[i3x + 2][y + 2] = 0.;
+    }
+  }
+  for (int i4x = 1 - ctx->i4x_rtkn + ctx->x_M; i4x <= ctx->x_M; i4x += 1)
+  {
+    for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
+    {
+      b_tmp_pn[i4x + 2][y + 2] = 0.;
+    }
+  }
+
   PetscCall(VecRestoreArray(blocal_pn,&b_one_dim));
   // Set up initial guess using user initialised field - satisfies BCs
   // This works because I used VecReplaceArray above.
@@ -147,31 +174,31 @@ PetscErrorCode preconditioner_callback_pn(Mat A_matfree_pn, Vec yvec_pn)
       y_pre_pn[i0x + 2][i0y + 2] = -2.0*pow(ctx->h_x, -2) - 2.0*pow(ctx->h_y, -2);
     }
   }
-  // Boundary loops - values are 1 on diagonal (Dirichlet BCs)
+  // Boundary loops 
   // These loops are the result of using subdomains in Devito.
   for (int x = ctx->x_m; x <= ctx->x_M; x += 1)
   {
     for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
     {
-      y_pre_pn[x + 2][i1y + 2] = 1.;
+      y_pre_pn[x + 2][i1y + 2] = -2.0*pow(ctx->h_x, -2) - 2.0*pow(ctx->h_y, -2);
     }
     for (int i2y = ctx->y_m; i2y <= -1 + ctx->i2y_ltkn + ctx->y_m; i2y += 1)
     {
-      y_pre_pn[x + 2][i2y + 2] = 1.;
+      y_pre_pn[x + 2][i2y + 2] = -2.0*pow(ctx->h_x, -2) - 2.0*pow(ctx->h_y, -2);
     }
   }
   for (int i3x = ctx->x_m; i3x <= -1 + ctx->i3x_ltkn + ctx->x_m; i3x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_pre_pn[i3x + 2][y + 2] = 1.;
+      y_pre_pn[i3x + 2][y + 2] = -2.0*pow(ctx->h_x, -2) - 2.0*pow(ctx->h_y, -2);
     }
   }
   for (int i4x = 1 - ctx->i4x_rtkn + ctx->x_M; i4x <= ctx->x_M; i4x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_pre_pn[i4x + 2][y + 2] = 1.;
+      y_pre_pn[i4x + 2][y + 2] = -2.0*pow(ctx->h_x, -2) - 2.0*pow(ctx->h_y, -2);
     }
   }
 
@@ -197,7 +224,7 @@ PetscErrorCode FormFunction(SNES snes, Vec xvec_pn, Vec yvec_pn, void *null)
   PetscCall(DMGetLocalVector(da_pn,&(local_xvec_pn)));
   PetscCall(DMGlobalToLocalBegin(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
   PetscCall(DMGlobalToLocalEnd(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
-  
+
   PetscCall(DMGetLocalVector(da_pn,&(local_yvec_pn)));
 
   PetscCall(VecGetArrayRead(local_xvec_pn,&x_one_dim));
@@ -205,7 +232,7 @@ PetscErrorCode FormFunction(SNES snes, Vec xvec_pn, Vec yvec_pn, void *null)
 
   PetscScalar (* xvec_tmp_pn)[17] = (PetscScalar (*)[17])x_one_dim;
   PetscScalar (* y_matvec_pn)[17] = (PetscScalar (*)[17])y_one_dim;
-  
+
   // Interior
   for (int i0x = ctx->i0x_ltkn + ctx->x_m; i0x <= -ctx->i0x_rtkn + ctx->x_M; i0x += 1)
   {
@@ -241,7 +268,7 @@ PetscErrorCode FormFunction(SNES snes, Vec xvec_pn, Vec yvec_pn, void *null)
       y_matvec_pn[i4x + 2][y + 2] = 0.;
     }
   }
-  
+
   PetscCall(VecRestoreArrayRead(local_xvec_pn, &x_one_dim));
   PetscCall(VecRestoreArray(local_yvec_pn, &y_one_dim));
   PetscCall(DMLocalToGlobalBegin(da_pn,local_yvec_pn,INSERT_VALUES,yvec_pn));
@@ -268,7 +295,7 @@ PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn)
   PetscCall(DMGetLocalVector(da_pn,&(local_xvec_pn)));
   PetscCall(DMGlobalToLocalBegin(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
   PetscCall(DMGlobalToLocalEnd(da_pn,xvec_pn,INSERT_VALUES,local_xvec_pn));
-  
+
   PetscCall(DMGetLocalVector(da_pn,&(local_yvec_pn)));
 
   PetscCall(VecGetArrayRead(local_xvec_pn,&x_one_dim));
@@ -277,7 +304,7 @@ PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn)
   PetscScalar (* xvec_tmp_pn)[17] = (PetscScalar (*)[17])x_one_dim;
   PetscScalar (* y_matvec_pn)[17] = (PetscScalar (*)[17])y_one_dim;
 
-  
+
   // Interior
   for (int i0x = ctx->i0x_ltkn + ctx->x_m; i0x <= -ctx->i0x_rtkn + ctx->x_M; i0x += 1)
   {
@@ -286,31 +313,31 @@ PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn)
       y_matvec_pn[i0x + 2][i0y + 2] = -2.0*pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 2][i0y + 2] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 1][i0y + 2] + pow(ctx->h_x, -2)*xvec_tmp_pn[i0x + 3][i0y + 2] - 2.0*pow(ctx->h_y, -2)*xvec_tmp_pn[i0x + 2][i0y + 2] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x + 2][i0y + 1] + pow(ctx->h_y, -2)*xvec_tmp_pn[i0x + 2][i0y + 3];
     }
   }
-  // Boundary loops - equivalent to 1 on diagonal.
+  // Boundary loops - just diagonal component on row.
   // These loops are the result of using subdomains in Devito.
   for (int x = ctx->x_m; x <= ctx->x_M; x += 1)
   {
     for (int i1y = 1 - ctx->i1y_rtkn + ctx->y_M; i1y <= ctx->y_M; i1y += 1)
     {
-      y_matvec_pn[x + 2][i1y + 2] = xvec_tmp_pn[x + 2][i1y + 2];
+      y_matvec_pn[x + 2][i1y + 2] = -2.0*pow(ctx->h_x, -2)*xvec_tmp_pn[x + 2][i1y + 2] - 2.0*pow(ctx->h_y, -2)*xvec_tmp_pn[x + 2][i1y + 2];
     }
     for (int i2y = ctx->y_m; i2y <= -1 + ctx->i2y_ltkn + ctx->y_m; i2y += 1)
     {
-      y_matvec_pn[x + 2][i2y + 2] = xvec_tmp_pn[x + 2][i2y + 2];
+      y_matvec_pn[x + 2][i2y + 2] = -2.0*pow(ctx->h_x, -2)*xvec_tmp_pn[x + 2][i2y + 2] - 2.0*pow(ctx->h_y, -2)*xvec_tmp_pn[x + 2][i2y + 2];
     }
   }
   for (int i3x = ctx->x_m; i3x <= -1 + ctx->i3x_ltkn + ctx->x_m; i3x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_matvec_pn[i3x + 2][y + 2] = xvec_tmp_pn[i3x + 2][y + 2];
+      y_matvec_pn[i3x + 2][y + 2] = -2.0*pow(ctx->h_x, -2)*xvec_tmp_pn[i3x + 2][y + 2] - 2.0*pow(ctx->h_y, -2)*xvec_tmp_pn[i3x + 2][y + 2];
     }
   }
   for (int i4x = 1 - ctx->i4x_rtkn + ctx->x_M; i4x <= ctx->x_M; i4x += 1)
   {
     for (int y = ctx->y_m; y <= ctx->y_M; y += 1)
     {
-      y_matvec_pn[i4x + 2][y + 2] = xvec_tmp_pn[i4x + 2][y + 2];
+      y_matvec_pn[i4x + 2][y + 2] = -2.0*pow(ctx->h_x, -2)*xvec_tmp_pn[i4x + 2][y + 2] - 2.0*pow(ctx->h_y, -2)*xvec_tmp_pn[i4x + 2][y + 2];
     }
   }
   PetscCall(VecRestoreArrayRead(local_xvec_pn, &x_one_dim));
