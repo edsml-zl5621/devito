@@ -125,6 +125,9 @@ class PETScArray(ArrayBasic, Differentiable):
     @property
     def symbolic_shape(self):
         info = DMDALocalInfo(name='info')
+        # To access the local grid info via the DM in
+        # PETSc you use DMDAGetLocalInfo(da, &info)
+        # and then access the local no.of grid points via info.gmx, info.gmy, info.gmz
         locals = ['gxm', 'gym', 'gzm']
         field_from_composites = [
             FieldFromComposite(lgp, info) for lgp in locals[:len(self.dimensions)]]
