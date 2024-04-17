@@ -60,29 +60,24 @@ tmp = np.linspace(0, Lx, nx).astype(np.float64)*np.float64(np.pi)/Lx
 top_val = np.float64(np.sin(tmp))
 
 # Initial guess - satisfies BCs
-pn.data[1:-1, 1:-1] = np.float64(0.5)
+pn.data[1:-1, 1:-1] = np.float64(0.)
 pn.data[:, -1] = top_val
 
-rhs.data[:] = np.float64(0.)
-
+# rhs.data[:] = np.float64(0.)
+rhs.data[1:-1, 1:-1] = np.float64(0.)
+rhs.data[:, -1] = top_val
 
 # # Create boundary condition expressions using subdomains
 x, y = grid.dimensions
 
-top = Function(name='top', shape=(nx,), dimensions=(x,), dtype=np.float64)
-bottom = Function(name='bottom', shape=(nx,), dimensions=(x,), dtype=np.float64)
-left = Function(name='left', shape=(ny,), dimensions=(y,), dtype=np.float64)
-right = Function(name='right', shape=(ny,), dimensions=(y,), dtype=np.float64)
+boundaries = Function(name='boundaries', grid=grid, dtype=np.float64)
 
-top.data[:] = top_val
-bottom.data[:] = np.float64(0.)
-left.data[:] = np.float64(0.)
-right.data[:] = np.float64(0.)
+boundaries.data[:, -1] = top_val
 
-bcs = [Eq(pn, top, subdomain=sub1)]
-bcs += [Eq(pn, bottom, subdomain=sub2)]
-bcs += [Eq(pn, left, subdomain=sub3)]
-bcs += [Eq(pn, right, subdomain=sub4)]
+bcs = [Eq(pn, boundaries, subdomain=sub1)]
+bcs += [Eq(pn, boundaries, subdomain=sub2)]
+bcs += [Eq(pn, boundaries, subdomain=sub3)]
+bcs += [Eq(pn, boundaries, subdomain=sub4)]
 
 # ksp type, pc type and relative tolerance.
 petsc = PETScSolve(eqn, pn, bcs=bcs, solver_parameters={'ksp_type': 'gmres',
