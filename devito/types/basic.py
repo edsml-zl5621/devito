@@ -14,7 +14,7 @@ from cached_property import cached_property
 from devito.data import default_allocator
 from devito.parameters import configuration
 from devito.tools import (Pickable, as_tuple, ctypes_to_cstr, dtype_to_ctype,
-                          frozendict, memoized_meth, sympy_mutex)
+                          frozendict, memoized_meth, sympy_mutex, CustomDtype)
 from devito.types.args import ArgProvider
 from devito.types.caching import Cached, Uncached
 from devito.types.lazy import Evaluable
@@ -83,6 +83,9 @@ class CodeSymbol(object):
         The type of the object in the generated code as a `str`.
         """
         _type = self._C_ctype
+        if isinstance(_type, CustomDtype):
+            return ctypes_to_cstr(_type)
+
         while issubclass(_type, _Pointer):
             _type = _type._type_
 
