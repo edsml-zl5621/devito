@@ -367,8 +367,6 @@ class Cluster:
         # OOB accesses
         oobs = set()
         for f, v in parts.items():
-            if isinstance(f, ArrayBasic):
-                continue
             for i in v:
                 if i.dim.is_Sub:
                     d = i.dim.parent
