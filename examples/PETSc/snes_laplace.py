@@ -52,8 +52,8 @@ pn = Function(name='pn', grid=grid, space_order=2, dtype=np.float64)
 
 rhs = Function(name='rhs', grid=grid, space_order=2, dtype=np.float64)
 
-eqn = Eq(pn.laplace, rhs, subdomain=grid.interior)
-
+# eqn = Eq(pn.laplace, rhs, subdomain=grid.interior)
+eqn = Eq(rhs, pn.laplace, subdomain=grid.interior)
 
 # initialise fields
 tmp = np.linspace(0, Lx, nx).astype(np.float64)*np.float64(np.pi)/Lx
@@ -70,7 +70,7 @@ rhs.data[:, -1] = top_val
 # # Create boundary condition expressions using subdomains
 x, y = grid.dimensions
 
-boundaries = Function(name='boundaries', grid=grid, dtype=np.float64)
+boundaries = Function(name='boundaries', grid=grid, space_order=2, dtype=np.float64)
 
 boundaries.data[:, -1] = top_val
 
@@ -79,15 +79,9 @@ bcs += [Eq(pn, boundaries, subdomain=sub2)]
 bcs += [Eq(pn, boundaries, subdomain=sub3)]
 bcs += [Eq(pn, boundaries, subdomain=sub4)]
 
-# ksp type, pc type and relative tolerance.
-petsc = PETScSolve(eqn, pn, bcs=bcs, solver_parameters={'ksp_type': 'gmres',
-                                                                'pc_type': 'jacobi',
-                                                                'ksp_rtol': 1e-7,
-                                                                'ksp_max_it': 10000})
-
 
 # Build the op
-op = Operator(petsc)
+op = Operator([eqn] + bcs, opt='noop')
 
 op.apply()
 print(op.ccode)
