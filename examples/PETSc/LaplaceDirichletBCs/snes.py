@@ -63,9 +63,7 @@ top_val = np.float64(np.sin(tmp))
 pn.data[1:-1, 1:-1] = np.float64(0.)
 pn.data[:, -1] = top_val
 
-# rhs.data[:] = np.float64(0.)
-rhs.data[1:-1, 1:-1] = np.float64(0.)
-rhs.data[:, -1] = top_val
+rhs.data[:] = np.float64(0.)
 
 # # Create boundary condition expressions using subdomains
 x, y = grid.dimensions
