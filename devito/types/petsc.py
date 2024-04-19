@@ -129,11 +129,9 @@ class PETScArray(ArrayBasic, Differentiable):
         # To access the local grid info via the DM in
         # PETSc you use DMDAGetLocalInfo(da, &info)
         # and then access the local no.of grid points via info.gmx, info.gmy, info.gmz
-        locals = ['gxm', 'gym', 'gzm']
         field_from_composites = [
-            FieldFromComposite(lgp, info) for lgp in locals[:len(self.dimensions)]]
-        ret = tuple(i for i in field_from_composites)
-        return DimensionTuple(*ret, getters=self.dimensions)
+            FieldFromComposite('g%sm' % d.name, info) for d in self.dimensions]
+        return DimensionTuple(*field_from_composites, getters=self.dimensions)
 
     @cached_property
     def indexed(self):

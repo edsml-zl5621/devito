@@ -386,7 +386,7 @@ class DataManager:
             The input Iteration/Expression tree.
         """
         # Candidates
-        indexeds = FindSymbols('indexeds').visit(iet)
+        indexeds = FindSymbols('indexeds|indexedbases').visit(iet)
         # Create Function -> n-dimensional array casts
         # E.g. `float (*u)[.] = (float (*)[.]) u_vec->data`
         # NOTE: a cast is needed only if the underlying data object isn't already
