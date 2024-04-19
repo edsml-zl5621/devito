@@ -160,3 +160,22 @@ def test_petsc_cast():
     assert str(cast2) == \
         'PetscScalar (*restrict arr2)[info.gym][info.gzm] = ' + \
         '(PetscScalar (*)[info.gym][info.gzm]) arr2_vec;'
+
+
+def test_no_automatic_cast():
+    """
+    Verify that the compiler does not automatically generate casts for PETScArrays.
+    They will be generated at specific points within the C code, particularly after
+    other PETSc calls, rather than necessarily at the top of the Kernel.
+    """
+    grid = Grid((2, 2))
+
+    f = Function(name='f', grid=grid, space_order=2)
+
+    arr = PETScArray(name='arr', dimensions=f.dimensions, shape=f.shape)
+
+    eqn = Eq(arr, f.laplace)
+
+    op = Operator(eqn, opt='noop')
+
+    assert len(op.body.casts) == 1
