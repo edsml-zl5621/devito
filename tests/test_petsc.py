@@ -164,7 +164,7 @@ def test_petsc_cast():
 
 def test_no_automatic_cast():
     """
-    Verify that the compiler does not automatically generate casts for PETScArrays.
+    Verify that the compiler doesn't automatically generate casts for PETScArrays.
     They will be generated at specific points within the C code, particularly after
     other PETSc calls, rather than necessarily at the top of the Kernel.
     """
