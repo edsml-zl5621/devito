@@ -10,6 +10,7 @@ from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import Reconstructable
 from devito.symbolics import FieldFromComposite
+from devito.types.basic import IndexedBase
 
 
 class DM(LocalObject):
@@ -133,6 +134,15 @@ class PETScArray(ArrayBasic, Differentiable):
             FieldFromComposite(lgp, info) for lgp in locals[:len(self.dimensions)]]
         ret = tuple(i for i in field_from_composites)
         return DimensionTuple(*ret, getters=self.dimensions)
+    
+    @cached_property
+    def indexed(self):
+        """The wrapped IndexedData object."""
+        return PETScIndexedData(self.name, shape=self._shape, function=self.function)
+    
+
+class PETScIndexedData(IndexedBase):
+    pass
 
 
 def dtype_to_petsctype(dtype):
