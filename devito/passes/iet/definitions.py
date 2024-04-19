@@ -19,7 +19,7 @@ from devito.symbolics import (Byref, DefFunction, FieldFromPointer, IndexedPoint
                               SizeOf, VOID, Keyword, pow_to_mul)
 from devito.tools import as_mapper, as_list, as_tuple, filter_sorted, flatten
 from devito.types import (Array, ComponentAccess, CustomDimension, DeviceMap,
-                          DeviceRM, Eq, Symbol)
+                          DeviceRM, Eq, Symbol, IndexedData)
 
 __all__ = ['DataManager', 'DeviceAwareDataManager', 'Storage']
 
@@ -437,7 +437,6 @@ class DataManager:
             The input Iteration/Expression tree.
         """
         # Candidates
-        # indexeds = FindSymbols('indexeds|indexedbases').visit(iet)
         indexeds = FindSymbols('indexeds').visit(iet)
         # Create Function -> n-dimensional array casts
         # E.g. `float (*u)[.] = (float (*)[.]) u_vec->data`
@@ -446,8 +445,8 @@ class DataManager:
         # (i) Dereferencing a PointerArray, e.g., `float (*r0)[.] = (float(*)[.]) pr0[.]`
         # (ii) Declaring a raw pointer, e.g., `float * r0 = NULL; *malloc(&(r0), ...)
         defines = set(FindSymbols('defines|globals').visit(iet))
-        # indexeds = [i for i in indexeds if isinstance(i.base, IndexedData)]
-        bases = sorted({i.base for i in indexeds if isinstance(i.base, IndexedData)}, key=lambda i: i.name)
+        bases = sorted({i.base for i in indexeds
+                        if isinstance(i.base, IndexedData)}, key=lambda i: i.name)
 
         # Some objects don't distinguish their _C_symbol because they are known,
         # by construction, not to require it, thus making the generated code

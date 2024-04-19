@@ -134,12 +134,11 @@ class PETScArray(ArrayBasic, Differentiable):
             FieldFromComposite(lgp, info) for lgp in locals[:len(self.dimensions)]]
         ret = tuple(i for i in field_from_composites)
         return DimensionTuple(*ret, getters=self.dimensions)
-    
+
     @cached_property
     def indexed(self):
-        """The wrapped IndexedData object."""
         return PETScIndexedData(self.name, shape=self._shape, function=self.function)
-    
+
 
 class PETScIndexedData(IndexedBase):
     pass
