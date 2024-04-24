@@ -47,7 +47,7 @@ PetscErrorCode preconditioner_callback_pn(Mat A_matfree_pn, Vec yvec_pn);
 PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn);
 PetscErrorCode FormFunction(SNES snes, Vec xvec_pn, Vec yvec_pn, void *null);
 
-int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, const int x_M, const int x_m, const int y_M, const int y_m, struct MatContext * ctx, struct profiler * timers)
+int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, const int x_M, const int x_m, const int y_M, const int y_m, MPI_Comm comm, struct MatContext * ctx, struct profiler * timers)
 {
   Mat J;
   Vec b_pn;
@@ -60,16 +60,17 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
   Vec x_pn;
   Vec xlocal_pn;
   PetscScalar* b_one_dim;
-
+  DMDALocalInfo info;
   double (*restrict rhs)[rhs_vec->size[1]] __attribute__ ((aligned (64))) = (double (*)[rhs_vec->size[1]]) rhs_vec->data;
 
   PetscFunctionBeginUser;
   // Temporary initialisation and SERIAL only example
   PetscCall(PetscInitialize(NULL,NULL,NULL,NULL));
-  PetscCallMPI(MPI_Comm_size(PETSC_COMM_SELF,&(size)));
+  PetscCallMPI(MPI_Comm_size(comm,&(size)));
 
-  PetscCall(SNESCreate(PETSC_COMM_SELF, &snes_pn));
-  PetscCall(DMDACreate2d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,7,13,PETSC_DECIDE,PETSC_DECIDE,1,2,NULL,NULL,&(da_pn)));
+  PetscCall(SNESCreate(comm, &snes_pn));
+  // the number of processors in each direction will obviously change in each case
+  PetscCall(DMDACreate2d(comm,DM_BOUNDARY_GHOSTED,DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,7,13,1,2,1,2,NULL,NULL,&(da_pn)));
   PetscCall(DMSetUp(da_pn));
   PetscCall(SNESSetDM(snes_pn, da_pn));
   PetscCall(DMSetApplicationContext(da_pn, ctx));
@@ -98,7 +99,8 @@ int Kernel(struct dataobj *restrict pn_vec, struct dataobj *restrict rhs_vec, co
 
   // Setup constant part - rhs - in this example it is just zero everywhere.
   PetscCall(VecGetArray(blocal_pn, &b_one_dim));
-  PetscScalar (* b_tmp_pn)[11] = (PetscScalar (*)[11])b_one_dim;
+  PetscCall(DMDAGetLocalInfo(da_pn, &info));
+  PetscScalar (* b_tmp_pn)[info.gxm] = (PetscScalar (*)[info.gxm])b_one_dim;
   for (int x = x_m; x <= x_M; x += 1)
   {
     for (int y = y_m; y <= y_M; y += 1)
@@ -145,6 +147,7 @@ PetscErrorCode preconditioner_callback_pn(Mat A_matfree_pn, Vec yvec_pn)
   Vec local_yvec_pn;
   struct MatContext * ctx;
   PetscScalar* y_one_dim;
+  DMDALocalInfo info;
 
   PetscFunctionBegin;
 
@@ -153,7 +156,8 @@ PetscErrorCode preconditioner_callback_pn(Mat A_matfree_pn, Vec yvec_pn)
 
   PetscCall(DMGetLocalVector(da_pn,&(local_yvec_pn)));
   PetscCall(VecGetArray(local_yvec_pn,&y_one_dim));
-  PetscScalar (* y_pre_pn)[11] = (PetscScalar (*)[11])y_one_dim;
+  PetscCall(DMDAGetLocalInfo(da_pn, &info));
+  PetscScalar (* y_pre_pn)[info.gxm] = (PetscScalar (*)[info.gxm])y_one_dim;
 
   // Interior
   for (int i0x = ctx->i0x_ltkn + ctx->x_m; i0x <= -ctx->i0x_rtkn + ctx->x_M; i0x += 1)
@@ -205,6 +209,7 @@ PetscErrorCode FormFunction(SNES snes, Vec xvec_pn, Vec yvec_pn, void *null)
   struct MatContext * ctx;
   const PetscScalar* x_one_dim;
   PetscScalar* y_one_dim;
+  DMDALocalInfo info;
 
   PetscFunctionBegin;
   PetscCall(SNESGetDM(snes, &da_pn));
@@ -218,9 +223,9 @@ PetscErrorCode FormFunction(SNES snes, Vec xvec_pn, Vec yvec_pn, void *null)
 
   PetscCall(VecGetArrayRead(local_xvec_pn,&x_one_dim));
   PetscCall(VecGetArray(local_yvec_pn,&y_one_dim));
-
-  PetscScalar (* xvec_tmp_pn)[11] = (PetscScalar (*)[11])x_one_dim;
-  PetscScalar (* y_matvec_pn)[11] = (PetscScalar (*)[11])y_one_dim;
+  PetscCall(DMDAGetLocalInfo(da_pn, &info));
+  PetscScalar (* xvec_tmp_pn)[info.gxm] = (PetscScalar (*)[info.gxm])x_one_dim;
+  PetscScalar (* y_matvec_pn)[info.gxm] = (PetscScalar (*)[info.gxm])y_one_dim;
 
   // Interior
   for (int i0x = ctx->i0x_ltkn + ctx->x_m; i0x <= -ctx->i0x_rtkn + ctx->x_M; i0x += 1)
@@ -276,7 +281,7 @@ PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn)
   struct MatContext * ctx;
   const PetscScalar* x_one_dim;
   PetscScalar* y_one_dim;
-
+  DMDALocalInfo info;
   PetscFunctionBegin;
 
   PetscCall(MatGetDM(A_matfree_pn,&(da_pn)));
@@ -290,9 +295,9 @@ PetscErrorCode MyMatShellMult_pn(Mat A_matfree_pn, Vec xvec_pn, Vec yvec_pn)
 
   PetscCall(VecGetArrayRead(local_xvec_pn,&x_one_dim));
   PetscCall(VecGetArray(local_yvec_pn,&y_one_dim));
-
-  PetscScalar (* xvec_tmp_pn)[11] = (PetscScalar (*)[11])x_one_dim;
-  PetscScalar (* y_matvec_pn)[11] = (PetscScalar (*)[11])y_one_dim;
+  PetscCall(DMDAGetLocalInfo(da_pn, &info));
+  PetscScalar (* xvec_tmp_pn)[info.gxm] = (PetscScalar (*)[info.gxm])x_one_dim;
+  PetscScalar (* y_matvec_pn)[info.gxm] = (PetscScalar (*)[info.gxm])y_one_dim;
 
 
   // Interior
