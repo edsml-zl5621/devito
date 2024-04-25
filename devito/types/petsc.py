@@ -131,7 +131,8 @@ class PETScArray(ArrayBasic, Differentiable):
         # and then access the local no.of grid points via info.gmx, info.gmy, info.gmz
         field_from_composites = [
             FieldFromComposite('g%sm' % d.name, info) for d in self.dimensions]
-        return DimensionTuple(*field_from_composites, getters=self.dimensions)
+        # Reverse it since DMDA is setup backwards to Devito dimensions.
+        return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
 
     @cached_property
     def indexed(self):
