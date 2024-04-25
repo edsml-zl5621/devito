@@ -156,10 +156,10 @@ def test_petsc_cast():
     assert str(cast0) == \
         'PetscScalar (*restrict arr0) = (PetscScalar (*)) arr0_vec;'
     assert str(cast1) == \
-        'PetscScalar (*restrict arr1)[info.gym] = (PetscScalar (*)[info.gym]) arr1_vec;'
+        'PetscScalar (*restrict arr1)[info.gxm] = (PetscScalar (*)[info.gxm]) arr1_vec;'
     assert str(cast2) == \
-        'PetscScalar (*restrict arr2)[info.gym][info.gzm] = ' + \
-        '(PetscScalar (*)[info.gym][info.gzm]) arr2_vec;'
+        'PetscScalar (*restrict arr2)[info.gym][info.gxm] = ' + \
+        '(PetscScalar (*)[info.gym][info.gxm]) arr2_vec;'
 
 
 def test_no_automatic_cast():
