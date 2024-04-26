@@ -22,7 +22,7 @@ def lower_petsc(iet, **kwargs):
         targets = [i.expr.rhs.target for i in is_petsc]
 
         # Initialize PETSc i.e generate the one off PETSc calls.
-        init_setup = petsc_setup(targets)
+        init_setup = petsc_setup(targets, **kwargs)
 
         # TODO: Insert code that utilises the metadata attached to each LinSolveExpr
         # that appears in the RHS of each LinearSolverExpression.
@@ -40,10 +40,13 @@ def lower_petsc(iet, **kwargs):
     return iet, {}
 
 
-def petsc_setup(targets):
+def petsc_setup(targets, **kwargs):
 
     # Assumption: all targets are generated from the same Grid.
-    communicator = targets[-1].grid.distributor._obj_comm
+    if kwargs['options']['mpi']:
+        communicator = targets[-1].grid.distributor._obj_comm
+    else:
+        communicator = 'MPI_COMM_SELF'
 
     size = PetscMPIInt(name='size')
 
