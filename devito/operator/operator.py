@@ -475,6 +475,8 @@ class Operator(Callable):
         graph = Graph(iet, **kwargs)
 
         lower_petsc(graph, **kwargs)
+        
+        graph = cls._specialize_iet(graph, **kwargs)
 
         graph = cls._specialize_iet(graph, **kwargs)
 
