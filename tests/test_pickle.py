@@ -5,7 +5,6 @@ import pytest
 import numpy as np
 from sympy import Symbol
 
-from conftest import skipif
 from devito import (Constant, Eq, Function, TimeFunction, SparseFunction, Grid,
                     Dimension, SubDimension, ConditionalDimension, IncrDimension,
                     TimeDimension, SteppingDimension, Operator, MPI, Min, solve,
@@ -79,10 +78,12 @@ class TestBasic(object):
         assert f.dtype == new_f.dtype
         assert f.shape == new_f.shape
 
-    def test_sparse_function(self, pickle):
+    @pytest.mark.parametrize('interp', ['linear', 'sinc'])
+    def test_sparse_function(self, pickle, interp):
         grid = Grid(shape=(3,))
         sf = SparseFunction(name='sf', grid=grid, npoint=3, space_order=2,
-                            coordinates=[(0.,), (1.,), (2.,)])
+                            coordinates=[(0.,), (1.,), (2.,)],
+                            interpolation=interp)
         sf.data[0] = 1.
 
         pkl_sf = pickle.dumps(sf)
@@ -91,6 +92,7 @@ class TestBasic(object):
         # .data is initialized, so it should have been pickled too
         assert np.all(sf.data[0] == 1.)
         assert np.all(new_sf.data[0] == 1.)
+        assert new_sf.interpolation == interp
 
         # coordinates should also have been pickled
         assert np.all(sf.coordinates.data == new_sf.coordinates.data)
@@ -633,9 +635,8 @@ class TestOperator(object):
 
         assert str(op) == str(new_op)
 
-    @skipif(['nompi'])
     @pytest.mark.parallel(mode=[1])
-    def test_mpi_objects(self, pickle):
+    def test_mpi_objects(self, pickle, mode):
         grid = Grid(shape=(4, 4, 4))
 
         # Neighbours
@@ -682,9 +683,8 @@ class TestOperator(object):
         assert tid.symbolic_min.name == new_tid.symbolic_min.name
         assert tid.symbolic_max.name == new_tid.symbolic_max.name
 
-    @skipif(['nompi'])
     @pytest.mark.parallel(mode=[2])
-    def test_mpi_grid(self, pickle):
+    def test_mpi_grid(self, pickle, mode):
         grid = Grid(shape=(4, 4, 4))
 
         pkl_grid = pickle.dumps(grid)
@@ -703,9 +703,8 @@ class TestOperator(object):
             assert new_grid.distributor.comm.size == 1
         MPI.COMM_WORLD.Barrier()
 
-    @skipif(['nompi'])
     @pytest.mark.parallel(mode=[(1, 'full')])
-    def test_mpi_fullmode_objects(self, pickle):
+    def test_mpi_fullmode_objects(self, pickle, mode):
         grid = Grid(shape=(4, 4, 4))
         x, y, _ = grid.dimensions
 
@@ -743,9 +742,8 @@ class TestOperator(object):
             assert v[0] is d.symbolic_min
             assert v[1] == Min(d.symbolic_max, d.symbolic_min)
 
-    @skipif(['nompi'])
     @pytest.mark.parallel(mode=[(1, 'basic'), (1, 'full')])
-    def test_mpi_operator(self, pickle):
+    def test_mpi_operator(self, pickle, mode):
         grid = Grid(shape=(4,))
         f = TimeFunction(name='f', grid=grid)
 

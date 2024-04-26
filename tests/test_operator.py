@@ -1207,9 +1207,8 @@ class TestApplyArguments(object):
         except:
             assert False
 
-    @skipif('nompi')
     @pytest.mark.parallel(mode=1)
-    def test_new_distributor(self):
+    def test_new_distributor(self, mode):
         """
         Test that `comm` and `nb` are correctly updated when a different distributor
         from that it was originally built with is required by an operator.

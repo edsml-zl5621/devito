@@ -3,7 +3,6 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.misc import ascent
 
-from conftest import skipif
 from devito import ConditionalDimension, Grid, Function, TimeFunction, switchconfig
 from devito.builtins import (assign, norm, gaussian_smooth, initialize_function,
                              inner, mmin, mmax, sum, sumall)
@@ -92,9 +91,8 @@ class TestAssign(object):
 
         assert np.all(f.data == 1)
 
-    @skipif('nompi')
     @pytest.mark.parallel(mode=4)
-    def test_assign_parallel(self):
+    def test_assign_parallel(self, mode):
         a = np.arange(64).reshape((8, 8))
         grid = Grid(shape=a.shape)
 
@@ -175,9 +173,8 @@ class TestGaussianSmooth(object):
 
         assert np.amax(np.abs(sp_smoothed - np.array(dv_smoothed))) <= 1e-5
 
-    @skipif('nompi')
     @pytest.mark.parallel(mode=[(4, 'full')])
-    def test_gs_parallel(self):
+    def test_gs_parallel(self, mode):
         a = np.arange(64).reshape((8, 8))
         grid = Grid(shape=a.shape)
 
@@ -238,9 +235,8 @@ class TestInitializeFunction(object):
 
         assert np.all(a[:] - np.array(f.data[:]) == 0)
 
-    @skipif('nompi')
     @pytest.mark.parallel(mode=4)
-    def test_if_parallel(self):
+    def test_if_parallel(self, mode):
         a = np.arange(36).reshape((6, 6))
         grid = Grid(shape=(18, 18))
         x, y = grid.dimensions
@@ -294,10 +290,9 @@ class TestInitializeFunction(object):
             assert np.take(f._data_with_outhalo, 0, axis=-1)[7] == 1
             assert np.take(f._data_with_outhalo, -1, axis=-1)[7] == 3
 
-    @skipif('nompi')
     @pytest.mark.parametrize('nbl', [0, 2])
     @pytest.mark.parallel(mode=4)
-    def test_if_halo_mpi(self, nbl):
+    def test_if_halo_mpi(self, nbl, mode):
         """
         Test that FD halo is padded as well.
         """

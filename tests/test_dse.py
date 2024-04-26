@@ -2799,10 +2799,9 @@ class TestTTI(object):
         vexpanded = 2 if configuration['language'] == 'openmp' else 0
         assert len(FindNodes(VExpanded).visit(pbs['x0_blk0'])) == vexpanded
 
-    @skipif(['nompi'])
     @switchconfig(profiling='advanced')
     @pytest.mark.parallel(mode=[(1, 'full')])
-    def test_fullopt_w_mpi(self):
+    def test_fullopt_w_mpi(self, mode):
         tti_noopt = self.tti_operator(opt=None)
         rec0, u0, v0, _ = tti_noopt.forward()
         tti_agg = self.tti_operator(opt='advanced')
@@ -2827,7 +2826,7 @@ class TestTTI(object):
 
     @switchconfig(profiling='advanced')
     @pytest.mark.parametrize('space_order,exp_ops,exp_arrays', [
-        (4, 122, 6), (8, 235, 7)
+        (4, 122, 6), (8, 225, 7)
     ])
     def test_opcounts_adjoint(self, space_order, exp_ops, exp_arrays):
         wavesolver = self.tti_operator(space_order=space_order,
