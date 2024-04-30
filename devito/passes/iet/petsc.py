@@ -42,7 +42,7 @@ def petsc_setup(targets, **kwargs):
     if kwargs['options']['mpi']:
         communicator = targets[-1].grid.distributor._obj_comm
     else:
-        communicator = 'MPI_COMM_SELF'
+        communicator = 'PETSC_COMM_SELF'
 
     size = PetscMPIInt(name='size')
 
