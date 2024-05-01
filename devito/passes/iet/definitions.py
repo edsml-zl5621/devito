@@ -385,6 +385,7 @@ class DataManager(object):
         """
         # Candidates
         indexeds = FindSymbols('indexeds|indexedbases').visit(iet)
+
         # Create Function -> n-dimensional array casts
         # E.g. `float (*u)[.] = (float (*)[.]) u_vec->data`
         # NOTE: a cast is needed only if the underlying data object isn't already
