@@ -260,7 +260,7 @@ def petsc_lift(clusters):
 
         ispace = c.ispace
         if isinstance(c.exprs[0].rhs, LinearSolveExpr):
-            ispace = c.ispace.lift(c.exprs[0].rhs.target.dimensions)
+            ispace = ispace.lift(c.exprs[0].rhs.target.dimensions)
 
         processed.append(c.rebuild(ispace=ispace))
 
