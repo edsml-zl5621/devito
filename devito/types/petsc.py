@@ -240,24 +240,9 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # Only need symbolic representation of equation in mat-vec action callback.
     action = action_tmp.subs(target, x_matvec)
 
-<<<<<<< HEAD
+
     
     return [action] + [rhs]
-=======
-    rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
-                solver_parameters=solver_parameters), subdomain=eq.subdomain)
-
-    # Create mock equations to ensure distinct iteration loops for each component
-    # of the linear solve.
-    indices = tuple(d + 1 for d in target.dimensions)
-    s0 = Symbol(name='s0')
-    s1 = Symbol(name='s1')
-
-    # Wrapped rhs in LinearSolveExpr for simplicity in iet_build pass.
-    mock_action = Eq(s0, Mock(y_matvec.indexify(indices=indices)))
-    mock_rhs = Eq(s1, Mock(b_tmp.indexify(indices=indices)))
-
-    return [matvecaction, mock_action] + [rhs, mock_rhs]
 
 
 class LinearSolveExpr(sympy.Function, Reconstructable):
@@ -333,4 +318,3 @@ class Mock(sympy.Function, Reconstructable):
         return self._expr
 
     func = Reconstructable._rebuild
->>>>>>> ed408fdce (compiler: Simplify by just having a Mock RHS which drops corresponding Cluster before IET level)
