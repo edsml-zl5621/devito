@@ -208,17 +208,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
                 solver_parameters=solver_parameters), subdomain=eq.subdomain)
 
-    # Create mock equations to ensure distinct iteration loops for each component
-    # of the linear solve.
-    indices = tuple(d + 1 for d in target.dimensions)
-    s0 = Scalar(name='s0')
-    s1 = Scalar(name='s1')
-
-    # Wrapped rhs in LinearSolveExpr for simplicity in iet_build pass.
-    mock_action = Eq(s0, Mock(y_matvec.indexify(indices=indices)))
-    mock_rhs = Eq(s1, Mock(b_tmp.indexify(indices=indices)))
-
-    return [matvecaction, mock_action] + [rhs, mock_rhs]
+    return [matvecaction] + [rhs]
 
 
 class LinearSolveExpr(sympy.Function, Reconstructable):
@@ -271,26 +261,19 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     func = Reconstructable._rebuild
 
 
-class Mock(sympy.Function, Reconstructable):
+def petsc_lift(clusters):
+    """
+    Lift the iteration space associated with each PETSc equation.
+    TODO: Potentially only need to lift the PETSc equations required
+    by the callback functions.
+    """
+    processed = []
+    for c in clusters:
 
-    __rargs__ = ('expr',)
+        ispace = c.ispace
+        if isinstance(c.exprs[0].rhs, LinearSolveExpr):
+            ispace = c.ispace.lift(c.exprs[0].rhs.target.dimensions)
 
-    def __new__(cls, expr, **kwargs):
+        processed.append(c.rebuild(ispace=ispace))
 
-        obj = super().__new__(cls, expr)
-        obj._expr = expr
-        return obj
-
-    def __repr__(self):
-        return "%s(%s)" % (self.__class__.__name__, self.expr)
-
-    __str__ = __repr__
-
-    def _sympystr(self, printer):
-        return str(self)
-
-    @property
-    def expr(self):
-        return self._expr
-
-    func = Reconstructable._rebuild
+    return processed
