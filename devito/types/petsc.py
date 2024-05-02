@@ -241,7 +241,6 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     action = action_tmp.subs(target, x_matvec)
 
 
-    
     return [action] + [rhs]
 
 
@@ -291,30 +290,5 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     @property
     def solver_parameters(self):
         return self._solver_parameters
-
-    func = Reconstructable._rebuild
-
-
-class Mock(sympy.Function, Reconstructable):
-
-    __rargs__ = ('expr',)
-
-    def __new__(cls, expr, **kwargs):
-
-        obj = super().__new__(cls, expr)
-        obj._expr = expr
-        return obj
-
-    def __repr__(self):
-        return "%s(%s)" % (self.__class__.__name__, self.expr)
-
-    __str__ = __repr__
-
-    def _sympystr(self, printer):
-        return str(self)
-
-    @property
-    def expr(self):
-        return self._expr
 
     func = Reconstructable._rebuild
