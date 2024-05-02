@@ -2,14 +2,18 @@ from devito.tools import CustomDtype
 from devito.types import LocalObject, Eq
 from devito.types.utils import DimensionTuple
 from devito.types.array import ArrayBasic
-import numpy as np
-from cached_property import cached_property
+from functools import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
 import sympy
 from devito.tools import Reconstructable
 from devito.symbolics import FieldFromComposite
+
+__all__ = ['DM', 'Mat', 'Vec', 'PetscMPIInt', 'KSP', 'PC', 'KSPConvergedReason',
+           'DMDALocalInfo', 'PETScArray', 'MatVecEq', 'RHSEq', 'LinearSolveExpr',
+           'PETScSolve']
+
 
 class DM(LocalObject):
     """
@@ -240,24 +244,8 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # Only need symbolic representation of equation in mat-vec action callback.
     action = action_tmp.subs(target, x_matvec)
 
-<<<<<<< HEAD
-    
+
     return [action] + [rhs]
-=======
-    rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
-                solver_parameters=solver_parameters), subdomain=eq.subdomain)
-
-    # Create mock equations to ensure distinct iteration loops for each component
-    # of the linear solve.
-    indices = tuple(d + 1 for d in target.dimensions)
-    s0 = Symbol(name='s0')
-    s1 = Symbol(name='s1')
-
-    # Wrapped rhs in LinearSolveExpr for simplicity in iet_build pass.
-    mock_action = Eq(s0, Mock(y_matvec.indexify(indices=indices)))
-    mock_rhs = Eq(s1, Mock(b_tmp.indexify(indices=indices)))
-
-    return [matvecaction, mock_action] + [rhs, mock_rhs]
 
 
 class LinearSolveExpr(sympy.Function, Reconstructable):
@@ -308,29 +296,3 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         return self._solver_parameters
 
     func = Reconstructable._rebuild
-
-
-class Mock(sympy.Function, Reconstructable):
-
-    __rargs__ = ('expr',)
-
-    def __new__(cls, expr, **kwargs):
-
-        obj = super().__new__(cls, expr)
-        obj._expr = expr
-        return obj
-
-    def __repr__(self):
-        return "%s(%s)" % (self.__class__.__name__, self.expr)
-
-    __str__ = __repr__
-
-    def _sympystr(self, printer):
-        return str(self)
-
-    @property
-    def expr(self):
-        return self._expr
-
-    func = Reconstructable._rebuild
->>>>>>> ed408fdce (compiler: Simplify by just having a Mock RHS which drops corresponding Cluster before IET level)
