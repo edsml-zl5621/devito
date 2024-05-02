@@ -34,7 +34,6 @@ def clusterize(exprs, **kwargs):
 
     # Setup the IterationSpaces based on data dependence analysis
     clusters = impose_total_ordering(clusters)
-
     clusters = Schedule().process(clusters)
 
     # Handle SteppingDimensions
