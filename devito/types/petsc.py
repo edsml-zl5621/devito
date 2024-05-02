@@ -259,3 +259,21 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         return self._solver_parameters
 
     func = Reconstructable._rebuild
+
+
+def petsc_lift(clusters):
+    """
+    Lift the iteration space associated with each PETSc equation.
+    TODO: Potentially only need to lift the PETSc equations required
+    by the callback functions.
+    """
+    processed = []
+    for c in clusters:
+
+        ispace = c.ispace
+        if isinstance(c.exprs[0].rhs, LinearSolveExpr):
+            ispace = c.ispace.lift(c.exprs[0].rhs.target.dimensions)
+
+        processed.append(c.rebuild(ispace=ispace))
+
+    return processed
