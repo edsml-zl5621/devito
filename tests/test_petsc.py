@@ -2,7 +2,7 @@ import numpy as np
 from devito import Grid, Function, Eq, Operator
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            MatVecAction, FindNodes, RHSLinearSystem,
-                           PointerCast)
+                           PointerCast, retrieve_iteration_tree)
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
                           PC, KSPConvergedReason, PETScArray, PETScSolve)
@@ -133,6 +133,10 @@ def test_petsc_solve():
         {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
     assert action_expr[-1].expr.rhs.solver_parameters == \
         {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
+
+    # Check the matvec action and rhs have distinct iteration loops i.e
+    # each iteration space was "lifted" properly.
+    assert len(retrieve_iteration_tree(op)) == 2
 
 
 def test_petsc_cast():
