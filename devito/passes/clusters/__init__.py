@@ -9,3 +9,4 @@ from .implicit import *  # noqa
 from .misc import *  # noqa
 from .derivatives import *  # noqa
 from .unevaluate import *  # noqa
+from .petsc import *  # noqa

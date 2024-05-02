@@ -18,7 +18,7 @@ from devito.symbolics import (limits_mapper, retrieve_indexed, uxreplace,
                               xreplace_indices)
 from devito.tools import (DefaultOrderedDict, Stamp, as_mapper, flatten,
                           is_integer, timed_pass, toposort)
-from devito.types import Array, Eq, Symbol, petsc_lift
+from devito.types import Array, Eq, Symbol
 from devito.types.dimension import BOTTOM, ModuloDimension
 
 __all__ = ['clusterize']
@@ -33,7 +33,6 @@ def clusterize(exprs, **kwargs):
 
     # Setup the IterationSpaces based on data dependence analysis
     clusters = impose_total_ordering(clusters)
-    clusters = petsc_lift(clusters)
     clusters = Schedule().process(clusters)
 
     # Handle SteppingDimensions

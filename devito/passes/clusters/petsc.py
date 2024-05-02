@@ -7,9 +7,11 @@ __all__ = ['petsc_lift']
 @timed_pass()
 def petsc_lift(clusters):
     """
-    Lift the iteration space associated with each PETSc equation.
+    Lift the iteration space surrounding each PETSc equation to create
+    distinct iteration loops. This simplifys the movement of the loops
+    into specific callback functions generated at the IET level.
     TODO: Potentially only need to lift the PETSc equations required
-    by the callback functions.
+    by the callback functions, not the ones that stay inside the main kernel.
     """
     processed = []
     for c in clusters:
