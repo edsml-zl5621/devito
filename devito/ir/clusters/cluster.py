@@ -244,7 +244,7 @@ class Cluster:
         """
         True if encoding a non-mathematical operation, False otherwise.
         """
-        return self.is_halo_touch or self.is_dist_reduce or self.is_fence or self.is_mock
+        return self.is_halo_touch or self.is_fence or self.is_dist_reduce
 
     @property
     def is_halo_touch(self):
@@ -265,10 +265,6 @@ class Cluster:
     @property
     def is_critical_region(self):
         return self.exprs and all(isinstance(e.rhs, CriticalRegion) for e in self.exprs)
-
-    @property
-    def is_mock(self):
-        return self.exprs and all(isinstance(e.rhs, Mock) for e in self.exprs)
 
     @property
     def is_async(self):
