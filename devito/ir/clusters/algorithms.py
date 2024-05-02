@@ -18,9 +18,8 @@ from devito.symbolics import (limits_mapper, retrieve_indexed, uxreplace,
                               xreplace_indices)
 from devito.tools import (DefaultOrderedDict, Stamp, as_mapper, flatten,
                           is_integer, timed_pass, toposort)
-from devito.types import Array, Eq, Symbol
+from devito.types import Array, Eq, Symbol, petsc_lift
 from devito.types.dimension import BOTTOM, ModuloDimension
-from devito.types import LinearSolveExpr
 
 __all__ = ['clusterize']
 
@@ -34,6 +33,7 @@ def clusterize(exprs, **kwargs):
 
     # Setup the IterationSpaces based on data dependence analysis
     clusters = impose_total_ordering(clusters)
+    clusters = petsc_lift(clusters)
     clusters = Schedule().process(clusters)
 
     # Handle SteppingDimensions
@@ -71,9 +71,6 @@ def impose_total_ordering(clusters):
             # See issue #2204
             relations = c.ispace.relations
         ispace = c.ispace.reorder(relations=relations, mode='total')
-
-        if isinstance(c.exprs[0].rhs, LinearSolveExpr):
-            ispace = ispace.lift(c.exprs[0].rhs.target.dimensions)
 
         processed.append(c.rebuild(ispace=ispace))
 
