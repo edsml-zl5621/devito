@@ -184,7 +184,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                    halo=target.halo)
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
-    # # TODO: Extend to rearrange equation for implicit time stepping.
+    # TODO: Extend to rearrange equation for implicit time stepping.
     matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.lhs.subs(target, x_matvec),
                             target=target, solver_parameters=solver_parameters),
                             subdomain=eq.subdomain)
@@ -192,15 +192,8 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
                 solver_parameters=solver_parameters), subdomain=eq.subdomain)
 
-    # Create 'mock' dependencies to ensure distinct iteration loops for each component
-    # of the linear solve.
-    indices = tuple(d + 1 for d in target.dimensions)
-    s0 = Symbol(name='s0')
-    s1 = Symbol(name='s1')
-    mock_action = Eq(s0, Mock(y_matvec.indexify(indices=indices)))
-    mock_rhs = Eq(s1, Mock(b_tmp.indexify(indices=indices)))
 
-    return [matvecaction, mock_action] + [rhs, mock_rhs]
+    return [matvecaction] + [rhs]
 
 
 class LinearSolveExpr(sympy.Function, Reconstructable):
