@@ -192,7 +192,6 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
                 solver_parameters=solver_parameters), subdomain=eq.subdomain)
 
-
     return [matvecaction] + [rhs]
 
 
@@ -242,39 +241,5 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     @property
     def solver_parameters(self):
         return self._solver_parameters
-
-    func = Reconstructable._rebuild
-
-
-class Mock(sympy.Function, Reconstructable):
-
-    """
-    Represents a 'mock' dependency to ensure distinct iteration loops.
-
-    For example, the mat-vec action iteration loop is to be isolated from the
-    expression loop used to build the RHS of the linear system. This separation
-    facilitates the utilisation of the mat-vec iteration loop in callback functions
-    created at the IET level.
-    """
-
-    __rargs__ = ('expr',)
-
-    def __new__(cls, expr, **kwargs):
-
-        obj = super().__new__(cls, expr)
-        obj._expr = expr
-        return obj
-
-    def __repr__(self):
-        return "%s(%s)" % (self.__class__.__name__, self.expr)
-
-    __str__ = __repr__
-
-    def _sympystr(self, printer):
-        return str(self)
-
-    @property
-    def expr(self):
-        return self._expr
 
     func = Reconstructable._rebuild
