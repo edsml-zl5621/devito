@@ -173,7 +173,6 @@ class RHSEq(Eq):
 
 
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
-
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
     y_matvec, x_matvec, b_tmp = [
