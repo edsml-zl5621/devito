@@ -100,7 +100,7 @@ class Operation(Tag):
             ReduceMax: OpMax,
             ReduceMin: OpMin,
             MatVecEq: OpMatVec,
-            RHSEq: OpRHS,
+            RHSEq: OpRHS
         }
         try:
             return reduction_mapper[type(expr)]

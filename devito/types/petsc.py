@@ -1,5 +1,6 @@
 import sympy
 import numpy as np
+
 from devito.tools import CustomDtype
 from devito.types import LocalObject, Eq
 from devito.types.utils import DimensionTuple
@@ -11,6 +12,11 @@ from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import Reconstructable
 from devito.symbolics import FieldFromComposite
 from devito.types.basic import IndexedBase
+
+
+__all__ = ['DM', 'Mat', 'Vec', 'PetscMPIInt', 'KSP', 'PC', 'KSPConvergedReason',
+           'DMDALocalInfo', 'PETScArray', 'MatVecEq', 'RHSEq', 'LinearSolveExpr',
+           'PETScSolve']
 
 
 class DM(LocalObject):
@@ -172,9 +178,7 @@ class RHSEq(Eq):
 
 
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
-
-    # TODO: This is a placeholder for the actual implementation. To start,
-    # track different PETScEq's (MatVecAction, RHS) through the Operator.
+    # TODO: Add check for time dimensions and utilise implicit dimensions.
 
     y_matvec, x_matvec, b_tmp = [
         PETScArray(name=f'{prefix}_{target.name}',
@@ -184,7 +188,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                    halo=target.halo)
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
-    # # TODO: Extend to rearrange equation for implicit time stepping.
+    # TODO: Extend to rearrange equation for implicit time stepping.
     matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.lhs.subs(target, x_matvec),
                             target=target, solver_parameters=solver_parameters),
                             subdomain=eq.subdomain)
