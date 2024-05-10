@@ -127,18 +127,12 @@ def test_petsc_solve():
     rhs_expr = FindNodes(RHSLinearSystem).visit(op)
 
     assert str(action_expr[-1].expr.rhs) == \
-<<<<<<< HEAD
         'ctx->h_x**(-2)*x_matvec_f[x + 1, y + 2]' + \
         ' - 2.0*ctx->h_x**(-2)*x_matvec_f[x + 2, y + 2]' + \
         ' + ctx->h_x**(-2)*x_matvec_f[x + 3, y + 2]' + \
         ' + ctx->h_y**(-2)*x_matvec_f[x + 2, y + 1]' + \
         ' - 2.0*ctx->h_y**(-2)*x_matvec_f[x + 2, y + 2]' + \
         ' + ctx->h_y**(-2)*x_matvec_f[x + 2, y + 3]'
-=======
-        'x_matvec_f[x + 1, y + 2]/h_x**2 - 2.0*x_matvec_f[x + 2, y + 2]/h_x**2' + \
-        ' + x_matvec_f[x + 3, y + 2]/h_x**2 + x_matvec_f[x + 2, y + 1]/h_y**2' + \
-        ' - 2.0*x_matvec_f[x + 2, y + 2]/h_y**2 + x_matvec_f[x + 2, y + 3]/h_y**2'
->>>>>>> f0ffa7e87 (tests: Add linsolve test and clean lower_petsc)
 
     assert str(rhs_expr[-1].expr.rhs) == 'g[x + 2, y + 2]'
 
@@ -148,7 +142,6 @@ def test_petsc_solve():
     assert op.arguments().get('y_M') == 1
     assert op.arguments().get('x_M') == 1
 
-<<<<<<< HEAD
     assert len(retrieve_iteration_tree(op)) == 1
 
     # TODO: Remove pragmas from PETSc callback functions
@@ -186,11 +179,6 @@ def test_multiple_petsc_solves():
     # Only create 1 struct per Grid/DMDA
     assert len(structs) == 1
     assert len(structs[0].fields) == 6
-=======
-    # Check the matvec action and rhs have distinct iteration loops i.e
-    # each iteration space was "lifted" properly.
-    assert len(retrieve_iteration_tree(op)) == 2
->>>>>>> f0ffa7e87 (tests: Add linsolve test and clean lower_petsc)
 
 
 @skipif('petsc')
@@ -242,10 +230,7 @@ def test_no_automatic_cast():
     assert len(op.body.casts) == 1
 
 
-<<<<<<< HEAD
 @skipif('petsc')
-=======
->>>>>>> f0ffa7e87 (tests: Add linsolve test and clean lower_petsc)
 def test_LinearSolveExpr():
 
     grid = Grid((2, 2))
@@ -260,7 +245,7 @@ def test_LinearSolveExpr():
     # Check the target
     assert linsolveexpr.target == f
     # Check the solver parameters
-<<<<<<< HEAD
+
     assert linsolveexpr.solver_parameters == \
         {'ksp_type': 'gmres', 'pc_type': 'jacobi', 'ksp_rtol': 1e-07,
          'ksp_atol': 1e-50, 'ksp_divtol': 10000.0, 'ksp_max_it': 10000}
@@ -454,6 +439,3 @@ def test_centre_stencil(expr, so, target, expected):
     centre = centre_stencil(eval(expr), eval(target))
 
     assert str(centre) == expected
-=======
-    assert linsolveexpr.solver_parameters == {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
->>>>>>> f0ffa7e87 (tests: Add linsolve test and clean lower_petsc)
