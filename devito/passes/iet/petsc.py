@@ -21,8 +21,11 @@ def lower_petsc(iet, **kwargs):
         # Collect all solution fields we're solving for
         targets = [i.expr.rhs.target for i in is_petsc]
 
-        # Initialize PETSc i.e generate the one off PETSc calls.
-        init_setup = petsc_setup(targets, **kwargs)
+        # Initalize PETSc
+        init = init_petsc(**kwargs)
+
+        # MPI
+        call_mpi = mpi_petsc(targets, **kwargs)
 
         # TODO: Insert code that utilises the metadata attached to each LinSolveExpr
         # that appears in the RHS of each LinearSolverExpression.
@@ -34,13 +37,27 @@ def lower_petsc(iet, **kwargs):
 
         iet = Transformer(mapper).visit(iet)
 
-        body = iet.body._rebuild(body=(tuple(init_setup) + iet.body.body))
+        body = iet.body._rebuild(init=init, body=call_mpi + iet.body.body)
         iet = iet._rebuild(body=body)
 
     return iet, {}
 
 
-def petsc_setup(targets, **kwargs):
+def init_petsc(**kwargs):
+
+    # Initialize PETSc -> for now, assuming all solver options have to be 
+    # specifed via the parameters dict in PETScSolve.
+    # NOTE: Are users going to be able to use PETSc command line arguments?
+    # In firedrake, they have an options_prefix for each solver, enabling the use
+    # of command line options.
+    initialize = Call('PetscCall', [Call('PetscInitialize',
+                                         arguments=['NULL', 'NULL',
+                                                    'NULL', 'NULL'])])
+
+    return tuple([initialize])
+
+
+def mpi_petsc(targets, **kwargs):
 
     # Assumption: all targets are generated from the same Grid.
     if kwargs['options']['mpi']:
@@ -50,13 +67,8 @@ def petsc_setup(targets, **kwargs):
 
     size = PetscMPIInt(name='size')
 
-    # Initialize PETSc
-    initialize = Call('PetscCall', [Call('PetscInitialize',
-                                         arguments=['NULL', 'NULL',
-                                                    'NULL', 'NULL'])])
-
     call_mpi = Call('PetscCallMPI', [Call('MPI_Comm_size',
                                           arguments=[communicator,
                                                      Byref(size)])])
 
-    return [initialize, call_mpi]
+    return tuple([call_mpi])
