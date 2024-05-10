@@ -1,7 +1,7 @@
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (FindNodes, Call, LinearSolverExpression,
-                           Transformer)
-from devito.types import PetscMPIInt
+from devito.ir.iet import (FindNodes, Call, MatVecAction,
+                           Transformer, FindSymbols, LinearSolverExpression)
+from devito.types import PetscMPIInt, PETScStruct, DMDALocalInfo, DM
 from devito.symbolics import Byref
 
 __all__ = ['lower_petsc']
@@ -13,8 +13,9 @@ def lower_petsc(iet, **kwargs):
     # TODO: Drop the LinearSolveExpr's using .args[0] so that _rebuild doesn't
     # appear in ccode
 
-    # Determine if there is was a PETScSolve
-    is_petsc = FindNodes(LinearSolverExpression).visit(iet)
+    # Check if PETScSolve was used and count occurrences. Each PETScSolve
+    # will have a unique MatVecAction.
+    is_petsc = FindNodes(MatVecAction).visit(iet)
 
     if is_petsc:
 
@@ -24,8 +25,15 @@ def lower_petsc(iet, **kwargs):
         # Initalize PETSc
         init = init_petsc(**kwargs)
 
-        # MPI
-        call_mpi = mpi_petsc(targets, **kwargs)
+        # Create context data struct.
+        struct = build_struct(iet)
+
+        objs = build_core_objects(targets[-1], struct, **kwargs)
+
+        # Create core PETSc calls required by general linear solves,
+        # which only need to be generated once e.g create DMDA.
+        core = core_petsc(targets[-1], objs, **kwargs)
+
 
         # TODO: Insert code that utilises the metadata attached to each LinSolveExpr
         # that appears in the RHS of each LinearSolverExpression.
@@ -33,11 +41,11 @@ def lower_petsc(iet, **kwargs):
         # Remove the LinSolveExpr that was utilised above to carry metadata.
         mapper = {expr:
                   expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr))
-                  for expr in is_petsc}
+                  for expr in FindNodes(LinearSolverExpression).visit(iet)}
 
         iet = Transformer(mapper).visit(iet)
 
-        body = iet.body._rebuild(init=init, body=call_mpi + iet.body.body)
+        body = iet.body._rebuild(init=init, body=core + iet.body.body)
         iet = iet._rebuild(body=body)
 
     return iet, {}
@@ -57,18 +65,72 @@ def init_petsc(**kwargs):
     return tuple([initialize])
 
 
-def mpi_petsc(targets, **kwargs):
+def build_struct(iet):
+    # Place all context data required by the shell routines
+    # into a PETScStruct.
+    usr_ctx = []
 
-    # Assumption: all targets are generated from the same Grid.
+    basics = FindSymbols('basics').visit(iet)
+    avoid = FindSymbols('dimensions|indexedbases').visit(iet)
+    usr_ctx.extend(data for data in basics if data not in avoid)
+
+    return PETScStruct('ctx', usr_ctx)
+
+
+def core_petsc(target, objs, **kwargs):
+    # Assumption: all targets are generated from the same Grid,
+    # so we can use any target.
+    
+    # MPI
+    call_mpi = Call('PetscCallMPI', [Call('MPI_Comm_size',
+                                          arguments=[objs['comm'],
+                                                     Byref(objs['size'])])])
+    
+    # Create DMDA
+    dmda = create_dmda(target, objs)
+    dm_setup = Call('PetscCall', [Call('DMSetUp', arguments=[objs['da']])])
+    dm_app_ctx = Call('PetscCall', [Call('DMSetApplicationContext', arguments=[objs['da'], objs['struct']])])
+    dm_mat_type = Call('PetscCall', [Call('DMSetMatType', arguments=[objs['da'], 'MATSHELL'])])
+
+    return tuple([call_mpi]) + tuple([dmda, dm_setup, dm_app_ctx])
+
+
+def build_core_objects(target, struct, **kwargs):
+
     if kwargs['options']['mpi']:
-        communicator = targets[-1].grid.distributor._obj_comm
+        communicator = target.grid.distributor._obj_comm
     else:
         communicator = 'PETSC_COMM_SELF'
 
-    size = PetscMPIInt(name='size')
+    return {'da': DM(name='da'),
+            'size': PetscMPIInt(name='size'),
+            'info': DMDALocalInfo(name='info'),
+            'comm': communicator,
+            'struct': struct,
+    }
 
-    call_mpi = Call('PetscCallMPI', [Call('MPI_Comm_size',
-                                          arguments=[communicator,
-                                                     Byref(size)])])
 
-    return tuple([call_mpi])
+def create_dmda(target, objs):
+
+    args = [objs['comm']]
+    
+    args += ['DM_BOUNDARY_GHOSTED' for _  in range(len(target.space_dimensions))]
+
+    # stencil type
+    args += ['DMDA_STENCIL_BOX']
+
+    # global dimensions
+    args += list(target.shape_global)[::-1]
+
+    # no.of processors in each dimension
+    args += list(target.grid.distributor.topology)[::-1]
+
+    args += [1, target.space_order]
+
+    args += ['NULL' for _ in range(len(target.space_dimensions))]
+
+    args += [Byref(objs['da'])]
+
+    dmda = Call(f'DMDACreate{len(target.space_dimensions)}d', arguments=args)
+
+    return dmda
