@@ -191,3 +191,36 @@ def test_LinearSolveExpr():
     assert linsolveexpr.target == f
     # Check the solver parameters
     assert linsolveexpr.solver_parameters == {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
+
+
+def test_dmda_create():
+
+    grid1 = Grid((2))
+    grid2 = Grid((2, 2))
+    grid3 = Grid((4, 5, 6))
+
+    f1 = Function(name='f1', grid=grid1, space_order=2)
+    f2 = Function(name='f2', grid=grid2, space_order=4)
+    f3 = Function(name='f3', grid=grid3, space_order=6)
+
+    eqn1 = Eq(f1.laplace, 10)
+    eqn2 = Eq(f2.laplace, 10)
+    eqn3 = Eq(f3.laplace, 10)
+
+    petsc1 = PETScSolve(eqn1, f1)
+    petsc2 = PETScSolve(eqn2, f2)
+    petsc3 = PETScSolve(eqn3, f3)
+
+    op1 = Operator(petsc1, opt='noop')
+    op2 = Operator(petsc2, opt='noop')
+    op3 = Operator(petsc3, opt='noop')
+
+    assert 'PetscCall(DMDACreate1d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
+        '2,1,2,NULL,&(da)));' in str(op1)
+
+    assert 'PetscCall(DMDACreate2d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
+        'DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,2,2,1,1,1,4,NULL,NULL,&(da)));' in str(op2)
+
+    assert 'PetscCall(DMDACreate3d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
+        'DM_BOUNDARY_GHOSTED,DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,6,5,4' + \
+        ',1,1,1,1,6,NULL,NULL,NULL,&(da)));' in str(op3)
