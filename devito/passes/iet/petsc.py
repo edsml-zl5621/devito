@@ -119,13 +119,15 @@ def create_dmda(target, objs):
     args += ['DM_BOUNDARY_GHOSTED' for _ in range(len(target.space_dimensions))]
 
     # stencil type
-    args += ['DMDA_STENCIL_BOX']
+    if len(target.space_dimensions) > 1:
+        args += ['DMDA_STENCIL_BOX']
 
     # global dimensions
     args += list(target.shape_global)[::-1]
 
     # no.of processors in each dimension
-    args += list(target.grid.distributor.topology)[::-1]
+    if len(target.space_dimensions) > 1:
+        args += list(target.grid.distributor.topology)[::-1]
 
     args += [1, target.space_order]
 
@@ -133,6 +135,7 @@ def create_dmda(target, objs):
 
     args += [Byref(objs['da'])]
 
-    dmda = Call(f'DMDACreate{len(target.space_dimensions)}d', arguments=args)
+    dmda = Call('PetscCall', [Call(f'DMDACreate{len(target.space_dimensions)}d',
+                                   arguments=args)])
 
     return dmda
