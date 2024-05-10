@@ -10,9 +10,6 @@ __all__ = ['lower_petsc']
 @iet_pass
 def lower_petsc(iet, **kwargs):
 
-    # TODO: Drop the LinearSolveExpr's using .args[0] so that _rebuild doesn't
-    # appear in ccode
-
     # Check if PETScSolve was used and count occurrences. Each PETScSolve
     # will have a unique MatVecAction.
     is_petsc = FindNodes(MatVecAction).visit(iet)
@@ -28,11 +25,11 @@ def lower_petsc(iet, **kwargs):
         # Create context data struct.
         struct = build_struct(iet)
 
-        objs = build_core_objects(targets[-1], struct, **kwargs)
+        objs = build_core_objects(targets[-1], **kwargs)
 
-        # Create core PETSc calls required by general linear solves,
-        # which only need to be generated once e.g create DMDA.
-        core = core_petsc(targets[-1], objs, **kwargs)
+        # Create one off PETSc calls required by solvers on same grid e.g
+        # setting up DMDA.
+        core = core_petsc(targets[-1], struct, objs, **kwargs)
 
         # TODO: Insert code that utilises the metadata attached to each LinSolveExpr
         # that appears in the RHS of each LinearSolverExpression.
@@ -76,7 +73,7 @@ def build_struct(iet):
     return PETScStruct('ctx', usr_ctx)
 
 
-def core_petsc(target, objs, **kwargs):
+def core_petsc(target, struct, objs, **kwargs):
     # Assumption: all targets are generated from the same Grid,
     # so we can use any target.
 
@@ -89,7 +86,7 @@ def core_petsc(target, objs, **kwargs):
     dmda = create_dmda(target, objs)
     dm_setup = Call('PetscCall', [Call('DMSetUp', arguments=[objs['da']])])
     dm_app_ctx = Call('PetscCall', [Call('DMSetApplicationContext',
-                                         arguments=[objs['da'], objs['struct']])])
+                                         arguments=[objs['da'], struct])])
     dm_mat_type = Call('PetscCall', [Call('DMSetMatType',
                                           arguments=[objs['da'], 'MATSHELL'])])
     dm_local_info = Call('PetscCall', [Call('DMDAGetLocalInfo',
@@ -98,7 +95,7 @@ def core_petsc(target, objs, **kwargs):
     return tuple([call_mpi, dmda, dm_setup, dm_app_ctx, dm_mat_type, dm_local_info])
 
 
-def build_core_objects(target, struct, **kwargs):
+def build_core_objects(target, **kwargs):
 
     if kwargs['options']['mpi']:
         communicator = target.grid.distributor._obj_comm
@@ -108,8 +105,7 @@ def build_core_objects(target, struct, **kwargs):
     return {'da': DM(name='da'),
             'size': PetscMPIInt(name='size'),
             'info': DMDALocalInfo(name='info'),
-            'comm': communicator,
-            'struct': struct}
+            'comm': communicator}
 
 
 def create_dmda(target, objs):
