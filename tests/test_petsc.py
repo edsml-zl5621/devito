@@ -6,7 +6,8 @@ from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
 from devito.passes.iet.languages.C import CDataManager
 from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
                           PC, KSPConvergedReason, PETScArray, PETScSolve,
-                          LinearSolveExpr)
+                          LinearSolveExpr, PETScStruct)
+import os
 
 
 def test_petsc_local_object():
@@ -224,3 +225,35 @@ def test_dmda_create():
     assert 'PetscCall(DMDACreate3d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
         'DM_BOUNDARY_GHOSTED,DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,6,5,4' + \
         ',1,1,1,1,6,NULL,NULL,NULL,&(da)));' in str(op3)
+    
+    # Check only one DMDA is created per grid
+    op4 = Operator(petsc2+petsc2, opt='noop')
+    assert str(op4).count('DMDACreate2d') == 1
+
+
+def test_cinterface_petsc_struct():
+
+    grid = Grid(shape=(11, 11))
+    f = Function(name='f', grid=grid, space_order=2)
+    eq = Eq(f.laplace, 10)
+    petsc = PETScSolve(eq, f)
+
+    name = "foo"
+    op = Operator(petsc, name=name)
+
+    # Trigger the generation of a .c and a .h files
+    ccode, hcode = op.cinterface(force=True)
+
+    dirname = op._compiler.get_jit_dir()
+    assert os.path.isfile(os.path.join(dirname, "%s.c" % name))
+    assert os.path.isfile(os.path.join(dirname, "%s.h" % name))
+
+    ccode = str(ccode)
+    hcode = str(hcode)
+
+    assert 'include "%s.h"' % name in ccode
+
+    # The public `struct MatContext` only appears in the header file
+    assert any(isinstance(i, PETScStruct) for i in op.parameters)
+    assert 'struct MatContext\n{' not in ccode
+    assert 'struct MatContext\n{' in hcode
