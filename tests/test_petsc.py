@@ -225,7 +225,7 @@ def test_dmda_create():
     assert 'PetscCall(DMDACreate3d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
         'DM_BOUNDARY_GHOSTED,DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,6,5,4' + \
         ',1,1,1,1,6,NULL,NULL,NULL,&(da)));' in str(op3)
-    
+
     # Check only one DMDA is created per grid
     op4 = Operator(petsc2+petsc2, opt='noop')
     assert str(op4).count('DMDACreate2d') == 1
