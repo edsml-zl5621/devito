@@ -112,16 +112,11 @@ def test_petsc_solve():
 
     rhs_expr = FindNodes(RHSLinearSystem).visit(op)
 
-    # Verify that the action expression has not been shifted by the
-    # computational domain since the halo is abstracted within DMDA.
     assert str(action_expr[-1].expr.rhs) == \
-        '-2.0*x_matvec_f[x, y]/h_x**2 + x_matvec_f[x - 1, y]/h_x**2' + \
-        ' + x_matvec_f[x + 1, y]/h_x**2 - 2.0*x_matvec_f[x, y]/h_y**2' + \
-        ' + x_matvec_f[x, y - 1]/h_y**2 + x_matvec_f[x, y + 1]/h_y**2'
+        'x_matvec_f[x + 1, y + 2]/h_x**2 - 2.0*x_matvec_f[x + 2, y + 2]/h_x**2' + \
+        ' + x_matvec_f[x + 3, y + 2]/h_x**2 + x_matvec_f[x + 2, y + 1]/h_y**2' + \
+        ' - 2.0*x_matvec_f[x + 2, y + 2]/h_y**2 + x_matvec_f[x + 2, y + 3]/h_y**2'
 
-    # Verify that the RHS expression has been shifted according to the
-    # computational domain. This is necessary because the RHS of the
-    # linear system is built from Devito allocated Function objects, not PETSc objects.
     assert str(rhs_expr[-1].expr.rhs) == 'g[x + 2, y + 2]'
 
     # Check the iteration bounds are correct.
@@ -129,27 +124,6 @@ def test_petsc_solve():
     assert op.arguments().get('y_m') == 0
     assert op.arguments().get('y_M') == 1
     assert op.arguments().get('x_M') == 1
-
-
-def test_LinearSolveExpr():
-
-    grid = Grid((2, 2))
-
-    f = Function(name='f', grid=grid, space_order=2)
-    g = Function(name='g', grid=grid, space_order=2)
-
-    eqn = Eq(f, g.laplace)
-
-    linsolveexpr = LinearSolveExpr(eqn.rhs, target=f)
-
-    # Check the target
-    assert linsolveexpr.target == f
-    # Check the solver parameters
-<<<<<<< HEAD
-    assert rhs_expr[-1].expr.rhs.solver_parameters == \
-        {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
-    assert action_expr[-1].expr.rhs.solver_parameters == \
-        {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
 
     # Check the matvec action and rhs have distinct iteration loops i.e
     # each iteration space was "lifted" properly.
@@ -200,6 +174,20 @@ def test_no_automatic_cast():
     op = Operator(eqn, opt='noop')
 
     assert len(op.body.casts) == 1
-=======
+
+
+def test_LinearSolveExpr():
+
+    grid = Grid((2, 2))
+
+    f = Function(name='f', grid=grid, space_order=2)
+    g = Function(name='g', grid=grid, space_order=2)
+
+    eqn = Eq(f, g.laplace)
+
+    linsolveexpr = LinearSolveExpr(eqn.rhs, target=f)
+
+    # Check the target
+    assert linsolveexpr.target == f
+    # Check the solver parameters
     assert linsolveexpr.solver_parameters == {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
->>>>>>> 6a8ba40f0 (tests: Fix test now that LinSolveExpr is removed)
