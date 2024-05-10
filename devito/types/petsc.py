@@ -1,18 +1,22 @@
 from devito.tools import CustomDtype
-from devito.types import LocalObject, Eq
+from devito.types import LocalObject, Eq, CompositeObject
 from devito.types.utils import DimensionTuple
 from devito.types.array import ArrayBasic
 from functools import cached_property
 from devito.finite_differences import Differentiable
-from devito.types.basic import AbstractFunction
+from devito.types.basic import AbstractFunction, Symbol
 from devito.finite_differences.tools import fd_weights_registry
+<<<<<<< HEAD
 import sympy
 from devito.tools import Reconstructable
+=======
+from devito.tools import Reconstructable, dtype_to_ctype
+>>>>>>> 229508722 (compiler: Add core petsc calls to lower_petsc)
 from devito.symbolics import FieldFromComposite
 
 __all__ = ['DM', 'Mat', 'Vec', 'PetscMPIInt', 'KSP', 'PC', 'KSPConvergedReason',
            'DMDALocalInfo', 'PETScArray', 'MatVecEq', 'RHSEq', 'LinearSolveExpr',
-           'PETScSolve']
+           'PETScSolve', 'PETScStruct']
 
 
 class DM(LocalObject):
@@ -296,3 +300,24 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         return self._solver_parameters
 
     func = Reconstructable._rebuild
+
+
+class PETScStruct(CompositeObject):
+
+    __rargs__ = ('name', 'usr_ctx',)
+
+    def __init__(self, name, usr_ctx):
+        pfields = [(i._C_name,
+                    dtype_to_ctype(i.dtype)) for i in usr_ctx if isinstance(i, Symbol)]
+        self._usr_ctx = usr_ctx
+        super().__init__(name, 'MatContext', pfields)
+
+    @property
+    def usr_ctx(self):
+        return self._usr_ctx
+
+    def _arg_values(self, **kwargs):
+        values = super()._arg_values(**kwargs)
+        for i in self.fields:
+            setattr(values[self.name]._obj, i, kwargs['args'][i])
+        return values
