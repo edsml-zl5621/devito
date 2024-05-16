@@ -71,7 +71,7 @@ def lower_petsc(iet, **kwargs):
 
             efuncs.append(matvec_callback)
 
-        # Remove the LinSolveExpr from iet and efuncs that was used to carry
+        # Remove the LinSolveExpr from iet and efuncs that were used to carry
         # metadata e.g solver_parameters
         main_mapper.update(rebuild_expr_mapper(iet))
         efunc_mapper = {efunc: rebuild_expr_mapper(efunc) for efunc in efuncs}
@@ -79,8 +79,7 @@ def lower_petsc(iet, **kwargs):
         iet = Transformer(main_mapper).visit(iet)
         efuncs = [Transformer(efunc_mapper[efunc]).visit(efunc) for efunc in efuncs]
 
-        # Replace symbols appearing in the struct and body of each efunc with
-        # a pointer to the struct
+        # Replace symbols appearing in each efunc with a pointer to the struct
         efuncs = transform_efuncs(efuncs, struct)
 
         body = iet.body._rebuild(body=(tuple(init_setup) + iet.body.body))
