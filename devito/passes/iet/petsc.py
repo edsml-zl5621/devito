@@ -2,7 +2,7 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Call, MatVecAction,
                            Transformer, FindSymbols, LinearSolverExpression)
 from devito.types import PetscMPIInt, PETScStruct, DMDALocalInfo, DM
-from devito.symbolics import Byref
+from devito.symbolics import Byref, Macro
 
 __all__ = ['lower_petsc']
 
@@ -11,30 +11,32 @@ __all__ = ['lower_petsc']
 def lower_petsc(iet, **kwargs):
 
     # Check if PETScSolve was used and count occurrences. Each PETScSolve
-    # will have a unique MatVecAction.
-    is_petsc = FindNodes(MatVecAction).visit(iet)
+    # will have a unique MatVecAction
+    petsc_nodes = FindNodes(MatVecAction).visit(iet)
 
-    if is_petsc:
+    if not petsc_nodes:
+        return iet, {}
 
-        # Collect all solution fields we're solving for
-        targets = [i.expr.rhs.target for i in is_petsc]
+    if petsc_nodes:
+
+        # Collect all petsc solution fields
+        targets = [i.expr.rhs.target for i in petsc_nodes]
 
         # Initalize PETSc
         init = init_petsc(**kwargs)
 
-        # Create context data struct.
+        # Create context data struct
         struct = build_struct(iet)
 
         objs = build_core_objects(targets[-1], **kwargs)
 
-        # Create one off PETSc calls required by solvers on same grid e.g
-        # setting up DMDA.
+        # Create core PETSc calls (not specific to each PETScSolve)
         core = core_petsc(targets[-1], struct, objs, **kwargs)
 
         # TODO: Insert code that utilises the metadata attached to each LinSolveExpr
-        # that appears in the RHS of each LinearSolverExpression.
+        # that appears in the RHS of each LinearSolverExpression
 
-        # Remove the LinSolveExpr that was utilised above to carry metadata.
+        # Remove the LinSolveExpr that was utilised above to carry metadata
         mapper = {expr:
                   expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr))
                   for expr in FindNodes(LinearSolverExpression).visit(iet)}
@@ -44,26 +46,26 @@ def lower_petsc(iet, **kwargs):
         body = iet.body._rebuild(init=init, body=core + iet.body.body)
         iet = iet._rebuild(body=body)
 
-    return iet, {}
+        return iet, {}
 
 
 def init_petsc(**kwargs):
 
     # Initialize PETSc -> for now, assuming all solver options have to be
-    # specifed via the parameters dict in PETScSolve.
-    # NOTE: Are users going to be able to use PETSc command line arguments?
+    # specifed via the parameters dict in PETScSolve
+    # TODO: Are users going to be able to use PETSc command line arguments?
     # In firedrake, they have an options_prefix for each solver, enabling the use
-    # of command line options.
+    # of command line options
     initialize = Call('PetscCall', [Call('PetscInitialize',
-                                         arguments=['NULL', 'NULL',
-                                                    'NULL', 'NULL'])])
+                                         arguments=[Null, Null,
+                                                    Null, Null])])
 
     return tuple([initialize])
 
 
 def build_struct(iet):
     # Place all context data required by the shell routines
-    # into a PETScStruct.
+    # into a PETScStruct
     usr_ctx = []
 
     basics = FindSymbols('basics').visit(iet)
@@ -74,8 +76,6 @@ def build_struct(iet):
 
 
 def core_petsc(target, struct, objs, **kwargs):
-    # Assumption: all targets are generated from the same Grid,
-    # so we can use any target.
 
     # MPI
     call_mpi = Call('PetscCallMPI', [Call('MPI_Comm_size',
@@ -114,20 +114,20 @@ def create_dmda(target, objs):
 
     args += ['DM_BOUNDARY_GHOSTED' for _ in range(len(target.space_dimensions))]
 
-    # stencil type
+    # Stencil type
     if len(target.space_dimensions) > 1:
         args += ['DMDA_STENCIL_BOX']
 
-    # global dimensions
+    # Global dimensions
     args += list(target.shape_global)[::-1]
 
-    # no.of processors in each dimension
+    # No.of processors in each dimension
     if len(target.space_dimensions) > 1:
         args += list(target.grid.distributor.topology)[::-1]
 
     args += [1, target.space_order]
 
-    args += ['NULL' for _ in range(len(target.space_dimensions))]
+    args += [Null for _ in range(len(target.space_dimensions))]
 
     args += [Byref(objs['da'])]
 
@@ -135,3 +135,6 @@ def create_dmda(target, objs):
                                    arguments=args)])
 
     return dmda
+
+
+Null = Macro('NULL')
