@@ -16,7 +16,7 @@ from devito.types.basic import IndexedBase
 
 __all__ = ['DM', 'Mat', 'Vec', 'PetscMPIInt', 'KSP', 'PC', 'KSPConvergedReason',
            'DMDALocalInfo', 'PETScArray', 'MatVecEq', 'RHSEq', 'LinearSolveExpr',
-           'PETScSolve', 'PETScStruct']
+           'PETScSolve', 'PETScStruct', 'SNES', 'PetscErrorCode']
 
 
 class DM(LocalObject):
@@ -56,6 +56,13 @@ class KSP(LocalObject):
     dtype = CustomDtype('KSP')
 
 
+class SNES(LocalObject):
+    """
+    PETSc SNES : Non-Linear Systems Solvers.
+    """
+    dtype = CustomDtype('SNES')
+
+
 class PC(LocalObject):
     """
     PETSc object that manages all preconditioners (PC).
@@ -77,6 +84,14 @@ class DMDALocalInfo(LocalObject):
     about the local grid.
     """
     dtype = CustomDtype('DMDALocalInfo')
+
+
+class PetscErrorCode(LocalObject):
+    """
+    PETSc datatype used to return PETSc error codes.
+    https://petsc.org/release/manualpages/Sys/PetscErrorCode/
+    """
+    dtype = CustomDtype('PetscErrorCode')
 
 
 class PETScArray(ArrayBasic, Differentiable):
@@ -192,6 +207,9 @@ class MockEq(Eq):
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
+    # TODO: Current assumption is lhs is part of pde that remains
+    # constant at each time-step. Need to insert function to extract this from eq.
+
     y_matvec, x_matvec, b_tmp = [
         PETScArray(name=f'{prefix}_{target.name}',
                    dtype=target.dtype,
@@ -201,14 +219,30 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
     # TODO: Extend to rearrange equation for implicit time stepping.
-    matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.lhs.subs(target, x_matvec),
+
+    matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.rhs.subs(target, x_matvec),
                             target=target, solver_parameters=solver_parameters),
                             subdomain=eq.subdomain)
 
-    rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
+    # Part of pde that remains constant at each time-step
+    rhs = RHSEq(b_tmp, LinearSolveExpr(eq.lhs, target=target,
                 solver_parameters=solver_parameters), subdomain=eq.subdomain)
+    
+    if not bcs:
+        return [matvecaction] + [rhs]
 
-    return [matvecaction] + [rhs]
+    else:
+        bcs_for_matvec = []
+        for bc in bcs:
+            # TODO: Insert code to distiguish between essential and natural boundary conditions
+            # since these are treated differently within the solver
+            # NOTE: May eventually remove the essential bcs from the solve (and move to rhs)
+            # but for now, they are included since this is not trivial to implement when using DMDA
+            bcs_for_matvec.append(MatVecEq(y_matvec, LinearSolveExpr(bc.rhs.subs(target, x_matvec),
+                            target=target, solver_parameters=solver_parameters),
+                            subdomain=bc.subdomain))
+            
+        return [matvecaction] + bcs_for_matvec + [rhs]
 
 
 class LinearSolveExpr(sympy.Function, Reconstructable):
