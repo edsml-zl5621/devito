@@ -6,12 +6,8 @@ from functools import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction, Symbol
 from devito.finite_differences.tools import fd_weights_registry
-<<<<<<< HEAD
 import sympy
 from devito.tools import Reconstructable
-=======
-from devito.tools import Reconstructable, dtype_to_ctype
->>>>>>> 229508722 (compiler: Add core petsc calls to lower_petsc)
 from devito.symbolics import FieldFromComposite
 
 __all__ = ['DM', 'Mat', 'Vec', 'PetscMPIInt', 'KSP', 'PC', 'KSPConvergedReason',
