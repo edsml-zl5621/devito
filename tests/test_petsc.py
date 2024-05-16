@@ -109,14 +109,20 @@ def test_petsc_solve():
 
     op = Operator(petsc, opt='noop')
 
-    action_expr = FindNodes(MatVecAction).visit(op)
+    callable_roots = [meta_call.root for meta_call in op._func_table.values()]
 
+    matvec_callback = [root for root in callable_roots if root.name == 'MyMatShellMult_f']
+
+    action_expr = FindNodes(MatVecAction).visit(matvec_callback[0])
     rhs_expr = FindNodes(RHSLinearSystem).visit(op)
 
     assert str(action_expr[-1].expr.rhs) == \
-        'x_matvec_f[x + 1, y + 2]/h_x**2 - 2.0*x_matvec_f[x + 2, y + 2]/h_x**2' + \
-        ' + x_matvec_f[x + 3, y + 2]/h_x**2 + x_matvec_f[x + 2, y + 1]/h_y**2' + \
-        ' - 2.0*x_matvec_f[x + 2, y + 2]/h_y**2 + x_matvec_f[x + 2, y + 3]/h_y**2'
+        'ctx->h_x**(-2)*x_matvec_f[x + 1, y + 2]' + \
+        ' - 2.0*ctx->h_x**(-2)*x_matvec_f[x + 2, y + 2]' + \
+        ' + ctx->h_x**(-2)*x_matvec_f[x + 3, y + 2]' + \
+        ' + ctx->h_y**(-2)*x_matvec_f[x + 2, y + 1]' + \
+        ' - 2.0*ctx->h_y**(-2)*x_matvec_f[x + 2, y + 2]' + \
+        ' + ctx->h_y**(-2)*x_matvec_f[x + 2, y + 3]'
 
     assert str(rhs_expr[-1].expr.rhs) == 'g[x + 2, y + 2]'
 
@@ -126,9 +132,9 @@ def test_petsc_solve():
     assert op.arguments().get('y_M') == 1
     assert op.arguments().get('x_M') == 1
 
-    # Check the matvec action and rhs have distinct iteration loops i.e
-    # each iteration space was "lifted" properly.
-    assert len(retrieve_iteration_tree(op)) == 2
+    assert len(retrieve_iteration_tree(op)) == 1
+
+    assert len(matvec_callback[0].parameters) == 3
 
 
 def test_petsc_cast():

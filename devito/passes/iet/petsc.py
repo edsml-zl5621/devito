@@ -1,10 +1,11 @@
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (FindNodes, Call, MatVecAction, RHSLinearSystem,
+from devito.ir.iet import (FindNodes, Call, MatVecAction,
                            Transformer, FindSymbols, LinearSolverExpression,
-                           MapNodes, Iteration, Callable, Callback)
+                           MapNodes, Iteration, Callable, Callback, List, Uxreplace,
+                           Definition)
 from devito.types import (PetscMPIInt, PETScStruct, DMDALocalInfo, DM, Mat,
                           Vec, KSP, PC, SNES, PetscErrorCode)
-from devito.symbolics import Byref, Macro
+from devito.symbolics import Byref, Macro, FieldFromPointer
 import cgen as c
 
 __all__ = ['lower_petsc']
@@ -34,7 +35,6 @@ def lower_petsc(iet, **kwargs):
         # Create core PETSc calls (not specific to each PETScSolve)
         core = core_petsc(unique_targets[-1], struct, objs, **kwargs)
 
-        # from IPython import embed; embed()
         matvec_mapper = MapNodes(Iteration, MatVecAction, 'groupby').visit(iet)
 
         main_mapper = {}
@@ -61,23 +61,23 @@ def lower_petsc(iet, **kwargs):
                     main_mapper.update({iter[0]: None})
 
             matvec_callback, matvec_op = create_matvec_callback(
-                target, matvec_callback_body_iters, solver_objs, objs)
+                target, matvec_callback_body_iters, solver_objs, objs, struct)
 
             setup.append(matvec_op)
             setup.append(c.Line())
 
             efuncs.append(matvec_callback)
 
-        
-        # from IPython import embed; embed()
+        # Remove the LinSolveExpr from iet and efuncs that were used to carry
+        # metadata e.g solver_parameters
+        main_mapper.update(rebuild_expr_mapper(iet))
+        efunc_mapper = {efunc: rebuild_expr_mapper(efunc) for efunc in efuncs}
+
         iet = Transformer(main_mapper).visit(iet)
+        efuncs = [Transformer(efunc_mapper[efunc]).visit(efunc) for efunc in efuncs]
 
-        # Remove the LinSolveExpr that was utilised above to carry metadata
-        lin_solver_mapper = {expr:
-                  expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr))
-                  for expr in FindNodes(LinearSolverExpression).visit(iet)}
-
-        iet = Transformer(lin_solver_mapper).visit(iet)
+        # Replace symbols appearing in each efunc with a pointer to the struct
+        efuncs = transform_efuncs(efuncs, struct)
 
         body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
         iet = iet._rebuild(body=body)
@@ -128,7 +128,8 @@ def core_petsc(target, struct, objs, **kwargs):
     dm_local_info = Call('PetscCall', [Call('DMDAGetLocalInfo',
                                             arguments=[objs['da'], Byref(objs['info'])])])
 
-    return tuple([call_mpi, dmda, dm_setup, dm_app_ctx, dm_mat_type, dm_local_info, c.Line()])
+    return tuple([call_mpi, dmda, dm_setup, dm_app_ctx, dm_mat_type,
+                  dm_local_info, c.Line()])
 
 
 def build_core_objects(target, **kwargs):
@@ -175,7 +176,7 @@ def create_dmda(target, objs):
 
 
 def build_solver_objs(target):
-    
+
     return {'Jac': Mat(name='J_'+str(target.name)),
             'x_global': Vec(name='x_global_'+str(target.name)),
             'x_local': Vec(name='x_local_'+str(target.name), liveness='eager'),
@@ -192,53 +193,84 @@ def generate_solver_calls(solver_objs, objs, matvec):
 
     snes_create = Call('PetscCall', [Call('SNESCreate', arguments=[
         objs['comm'], Byref(solver_objs['snes'])])])
-    
+
     snes_set_dm = Call('PetscCall', [Call('SNESSetDM', arguments=[
         solver_objs['snes'], objs['da']])])
-    
+
     create_matrix = Call('PetscCall', [Call('DMCreateMatrix', arguments=[
         objs['da'], Byref(solver_objs['Jac'])])])
-    
+
     # NOTE: Assumming all solves are linear for now.
     snes_set_type = Call('PetscCall', [Call('SNESSetType', arguments=[
         solver_objs['snes'], 'SNESKSPONLY'])])
-    
+
     global_x = Call('PetscCall', [Call('DMCreateGlobalVector', arguments=[
         objs['da'], Byref(solver_objs['x_global'])])])
-    
+
     local_x = Call('PetscCall', [Call('DMCreateLocalVector', arguments=[
         objs['da'], Byref(solver_objs['x_local'])])])
-    
+
     global_b = Call('PetscCall', [Call('DMCreateGlobalVector', arguments=[
         objs['da'], Byref(solver_objs['b_global'])])])
-    
+
     local_b = Call('PetscCall', [Call('DMCreateLocalVector', arguments=[
         objs['da'], Byref(solver_objs['b_local'])])])
-    
+
     snes_get_ksp = Call('PetscCall', [Call('SNESGetKSP', arguments=[
         solver_objs['snes'], Byref(solver_objs['ksp'])])])
-    
+
     return tuple([snes_create, snes_set_dm, create_matrix, snes_set_type,
                   global_x, local_x, global_b, local_b, snes_get_ksp])
-    
+
 
 def create_matvec_callback(target, matvec_callback_body_iters,
-                           solver_objs, objs):
+                           solver_objs, objs, struct):
+
+    defn_struct = Definition(struct)
+
+    get_context = Call('PetscCall', [Call('MatShellGetContext',
+                                          arguments=[solver_objs['Jac'],
+                                                     Byref(struct)])])
+
+    body = List(body=[defn_struct,
+                      get_context,
+                      matvec_callback_body_iters])
 
     matvec_callback = Callable('MyMatShellMult_'+str(target.name),
-                            matvec_callback_body_iters,
-                            retval=objs['err'],
-                            parameters=(solver_objs['Jac'],
-                                        solver_objs['x'],
-                                        solver_objs['y']))
-            
+                               body,
+                               retval=objs['err'],
+                               parameters=(solver_objs['Jac'],
+                                           solver_objs['x'],
+                                           solver_objs['y']))
+
     matvec_operation = Call('PetscCall', [
-        Call('MatShellSetOperation', arguments=[
-            solver_objs['Jac'],
-            'MATOP_MULT',
-            Callback(matvec_callback.name, 'void', 'void')])])
-    
+        Call('MatShellSetOperation', arguments=[solver_objs['Jac'],
+                                                'MATOP_MULT',
+                                                Callback(matvec_callback.name,
+                                                         Void, Void)])])
+
     return matvec_callback, matvec_operation
 
 
+def rebuild_expr_mapper(iet):
+
+    return {expr: expr._rebuild(
+        expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr)) for
+        expr in FindNodes(LinearSolverExpression).visit(iet)}
+
+
+def transform_efuncs(efuncs, struct):
+
+    efuncs_new = []
+    for efunc in efuncs:
+        new_body = efunc.body
+        for i in struct.usr_ctx:
+            new_body = Uxreplace({i: FieldFromPointer(i, struct)}).visit(new_body)
+        efunc_with_new_body = efunc._rebuild(body=new_body)
+        efuncs_new.append(efunc_with_new_body)
+
+    return efuncs_new
+
+
 Null = Macro('NULL')
+Void = Macro('Void')
