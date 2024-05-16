@@ -1170,8 +1170,9 @@ class Callback(Call):
     engine fails to bind the callback to a specific Call. Consequently,
     errors occur during the creation of the call graph.
     """
-
-    def __init__(self, name, retval, param_types):
+    # TODO: Create a common base class for Call and Callback to avoid
+    # having arguments=None here
+    def __init__(self, name, retval, param_types, arguments=None):
         super().__init__(name=name)
         self.retval = retval
         self.param_types = as_tuple(param_types)
