@@ -17,8 +17,7 @@ def lower_petsc(iet, **kwargs):
     if not petsc_nodes:
         return iet, {}
 
-    if petsc_nodes:
-
+    else:
         # Collect all petsc solution fields
         targets = [i.expr.rhs.target for i in petsc_nodes]
 
