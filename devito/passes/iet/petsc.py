@@ -60,7 +60,10 @@ def lower_petsc(iet, **kwargs):
                         setup.extend(solver)
                         solver_setup = True
 
-                    matvec_callback_body_iters.append(iter[0])
+                    matvec_body = matvec_body_list._rebuild(body=[
+                        matvec_body_list.body, iter[0]])
+                    matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
+
                     main_mapper.update({iter[0]: None})
 
             matvec_callback, matvec_op = create_matvec_callback(
@@ -119,7 +122,7 @@ def core_petsc(target, objs, **kwargs):
     # so we can use any target.
 
     # MPI
-    call_mpi = Call('PetscCallMPI', [Call('MPI_Comm_size',
+    call_mpi = Call(petsc_call_mpi, [Call('MPI_Comm_size',
                                           arguments=[objs['comm'],
                                                      Byref(objs['size'])])])
 
@@ -276,4 +279,14 @@ def transform_efuncs(efuncs, struct):
 
 
 Null = Macro('NULL')
-Void = Macro('Void')
+Void = Macro('void')
+
+petsc_call = String('PetscCall')
+petsc_call_mpi = String('PetscCallMPI')
+petsc_function_begin_user = c.Line('PetscFunctionBeginUser;')
+
+linear_solver_mapper = {
+    'gmres': 'KSPGMRES',
+    'jacobi': 'PCJACOBI',
+    None: 'PCNONE'
+}
