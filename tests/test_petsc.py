@@ -1,5 +1,5 @@
 import numpy as np
-from devito import Grid, Function, Eq, Operator, configuration
+from devito import Grid, Function, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            MatVecAction, FindNodes, RHSLinearSystem,
                            PointerCast, retrieve_iteration_tree)
@@ -107,7 +107,8 @@ def test_petsc_solve():
 
     petsc = PETScSolve(eqn, f)
 
-    op = Operator(petsc, opt='noop')
+    with switchconfig(openmp=False):
+        op = Operator(petsc, opt='noop')
 
     callable_roots = [meta_call.root for meta_call in op._func_table.values()]
 
@@ -135,7 +136,7 @@ def test_petsc_solve():
     assert len(retrieve_iteration_tree(op)) == 1
 
     # TODO: Remove pragmas from PETSc callback functions
-    assert len(matvec_callback[0].parameters) == (3 if configuration['language'] != 'openmp' else 4)
+    assert len(matvec_callback[0].parameters) == 3
 
 
 def test_petsc_cast():
@@ -179,7 +180,8 @@ def test_no_automatic_cast():
 
     eqn = Eq(arr, f.laplace)
 
-    op = Operator(eqn, opt='noop')
+    with switchconfig(openmp=False):
+        op = Operator(eqn, opt='noop')
 
     assert len(op.body.casts) == 1
 
@@ -198,7 +200,9 @@ def test_LinearSolveExpr():
     # Check the target
     assert linsolveexpr.target == f
     # Check the solver parameters
-    assert linsolveexpr.solver_parameters == {'ksp_type': 'gmres', 'pc_type': 'jacobi'}
+    assert linsolveexpr.solver_parameters == \
+        {'ksp_type': 'gmres', 'pc_type': 'jacobi', 'ksp_rtol': 1e-07,
+         'ksp_atol': 1e-50, 'ksp_divtol': 10000.0, 'ksp_max_it': 10000}
 
 
 def test_dmda_create():
@@ -219,9 +223,10 @@ def test_dmda_create():
     petsc2 = PETScSolve(eqn2, f2)
     petsc3 = PETScSolve(eqn3, f3)
 
-    op1 = Operator(petsc1, opt='noop')
-    op2 = Operator(petsc2, opt='noop')
-    op3 = Operator(petsc3, opt='noop')
+    with switchconfig(openmp=False):
+        op1 = Operator(petsc1, opt='noop')
+        op2 = Operator(petsc2, opt='noop')
+        op3 = Operator(petsc3, opt='noop')
 
     assert 'PetscCall(DMDACreate1d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
         '2,1,2,NULL,&(da)));' in str(op1)
@@ -234,7 +239,8 @@ def test_dmda_create():
         ',1,1,1,1,6,NULL,NULL,NULL,&(da)));' in str(op3)
 
     # Check only one DMDA is created per grid
-    op4 = Operator(petsc2+petsc2, opt='noop')
+    with switchconfig(openmp=False):
+        op4 = Operator(petsc2+petsc2, opt='noop')
     assert str(op4).count('DMDACreate2d') == 1
 
 
@@ -246,7 +252,8 @@ def test_cinterface_petsc_struct():
     petsc = PETScSolve(eq, f)
 
     name = "foo"
-    op = Operator(petsc, name=name)
+    with switchconfig(openmp=False):
+        op = Operator(petsc, name=name)
 
     # Trigger the generation of a .c and a .h files
     ccode, hcode = op.cinterface(force=True)
