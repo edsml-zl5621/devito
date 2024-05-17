@@ -311,18 +311,14 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
         casts, BlankLine, body, vec_restore_array_y, vec_restore_array_x,
         dm_local_to_global_begin, dm_local_to_global_end, func_return])
 
-    matvec_callback = Callable('MyMatShellMult_'+str(target.name),
-                               matvec_body,
-                               retval=objs['err'],
-                               parameters=(solver_objs['Jac'],
-                                           solver_objs['X_global'],
-                                           solver_objs['Y_global']))
+    matvec_callback = Callable(
+        'MyMatShellMult_'+str(target.name), matvec_body, retval=objs['err'],
+        parameters=(solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global']))
 
     matvec_operation = Call(petsc_call, [
-        Call('MatShellSetOperation', arguments=[solver_objs['Jac'],
-                                                'MATOP_MULT',
-                                                Callback(matvec_callback.name,
-                                                         Void, Void)])])
+        Call('MatShellSetOperation', arguments=[
+            solver_objs['Jac'], 'MATOP_MULT', Callback(matvec_callback.name,
+                                                       Void, Void)])])
 
     return matvec_callback, matvec_operation
 
