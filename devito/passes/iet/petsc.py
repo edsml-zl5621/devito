@@ -321,11 +321,11 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
     return matvec_callback, matvec_operation
 
 
-def rebuild_expr_mapper(iet):
+def rebuild_expr_mapper(callable):
 
     return {expr: expr._rebuild(
         expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr)) for
-        expr in FindNodes(LinearSolverExpression).visit(iet)}
+        expr in FindNodes(LinearSolverExpression).visit(callable)}
 
 
 def transform_efuncs(efuncs, struct):
