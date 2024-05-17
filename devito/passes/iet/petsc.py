@@ -41,6 +41,7 @@ def lower_petsc(iet, **kwargs):
 
         setup = []
         efuncs = []
+
         for target in unique_targets:
 
             solver_objs = build_solver_objs(target)

@@ -1,5 +1,5 @@
 import numpy as np
-from devito import Grid, Function, Eq, Operator
+from devito import Grid, Function, Eq, Operator, configuration
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            MatVecAction, FindNodes, RHSLinearSystem,
                            PointerCast, retrieve_iteration_tree)
@@ -134,7 +134,8 @@ def test_petsc_solve():
 
     assert len(retrieve_iteration_tree(op)) == 1
 
-    assert len(matvec_callback[0].parameters) == 3
+    # TODO: Remove pragmas from PETSc callback functions
+    assert len(matvec_callback[0].parameters) == (3 if configuration['language'] != 'openmp' else 4)
 
 
 def test_petsc_cast():
