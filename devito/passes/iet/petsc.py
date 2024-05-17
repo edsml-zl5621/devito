@@ -2,10 +2,10 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Call, MatVecAction,
                            Transformer, FindSymbols, LinearSolverExpression,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
-                           Definition)
+                           Definition, BlankLine, PointerCast)
 from devito.types import (PetscMPIInt, PETScStruct, DMDALocalInfo, DM, Mat,
-                          Vec, KSP, PC, SNES, PetscErrorCode)
-from devito.symbolics import Byref, Macro, FieldFromPointer
+                          Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
+from devito.symbolics import Byref, Macro, FieldFromPointer, String, MacroArgument
 import cgen as c
 
 __all__ = ['lower_petsc']
@@ -46,7 +46,9 @@ def lower_petsc(iet, **kwargs):
 
             solver_objs = build_solver_objs(target)
 
-            matvec_callback_body_iters = []
+            # TODO: Make this an actual List where the body is the iteration loops
+            # combined
+            matvec_body_list = List()
 
             solver_setup = False
 
@@ -54,18 +56,22 @@ def lower_petsc(iet, **kwargs):
 
                 if matvec.expr.rhs.target == target:
                     if not solver_setup:
-                        solver = generate_solver_calls(solver_objs, objs, matvec)
+                        solver = generate_solver_calls(solver_objs, objs, matvec, target)
                         setup.extend(solver)
                         solver_setup = True
 
-                    matvec_callback_body_iters.append(iter[0])
+                    matvec_body = matvec_body_list._rebuild(body=[matvec_body_list.body, iter[0]])
+                    matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
+
                     main_mapper.update({iter[0]: None})
 
+            # from IPython import embed; embed()
             matvec_callback, matvec_op = create_matvec_callback(
-                target, matvec_callback_body_iters, solver_objs, objs, struct)
+                target, matvec_body_list, solver_objs, objs,
+                struct)
 
             setup.append(matvec_op)
-            setup.append(c.Line())
+            setup.append(BlankLine)
 
             efuncs.append(matvec_callback)
 
@@ -87,17 +93,17 @@ def lower_petsc(iet, **kwargs):
 
 
 def init_petsc(**kwargs):
-
+    
     # Initialize PETSc -> for now, assuming all solver options have to be
     # specifed via the parameters dict in PETScSolve
     # TODO: Are users going to be able to use PETSc command line arguments?
     # In firedrake, they have an options_prefix for each solver, enabling the use
     # of command line options
-    initialize = Call('PetscCall', [Call('PetscInitialize',
+    initialize = Call(petsc_call, [Call('PetscInitialize',
                                          arguments=[Null, Null,
                                                     Null, Null])])
 
-    return tuple([initialize])
+    return tuple([petsc_function_begin_user, initialize])
 
 
 def build_struct(iet):
@@ -121,16 +127,16 @@ def core_petsc(target, struct, objs, **kwargs):
 
     # Create DMDA
     dmda = create_dmda(target, objs)
-    dm_setup = Call('PetscCall', [Call('DMSetUp', arguments=[objs['da']])])
-    dm_app_ctx = Call('PetscCall', [Call('DMSetApplicationContext',
+    dm_setup = Call(petsc_call, [Call('DMSetUp', arguments=[objs['da']])])
+    dm_app_ctx = Call(petsc_call, [Call('DMSetApplicationContext',
                                          arguments=[objs['da'], struct])])
-    dm_mat_type = Call('PetscCall', [Call('DMSetMatType',
+    dm_mat_type = Call(petsc_call, [Call('DMSetMatType',
                                           arguments=[objs['da'], 'MATSHELL'])])
-    dm_local_info = Call('PetscCall', [Call('DMDAGetLocalInfo',
+    dm_local_info = Call(petsc_call, [Call('DMDAGetLocalInfo',
                                             arguments=[objs['da'], Byref(objs['info'])])])
 
-    return tuple([call_mpi, dmda, dm_setup, dm_app_ctx, dm_mat_type,
-                  dm_local_info, c.Line()])
+    return tuple([petsc_function_begin_user, call_mpi, dmda, dm_setup, dm_app_ctx, dm_mat_type,
+                  dm_local_info, BlankLine])
 
 
 def build_core_objects(target, **kwargs):
@@ -140,9 +146,9 @@ def build_core_objects(target, **kwargs):
     else:
         communicator = 'PETSC_COMM_SELF'
 
-    return {'da': DM(name='da'),
+    return {'da': DM(name='da', liveness='eager'),
             'size': PetscMPIInt(name='size'),
-            'info': DMDALocalInfo(name='info'),
+            'info': DMDALocalInfo(name='info', liveness='eager'),
             'comm': communicator,
             'err': PetscErrorCode(name='err')}
 
@@ -170,7 +176,7 @@ def create_dmda(target, objs):
 
     args += [Byref(objs['da'])]
 
-    dmda = Call('PetscCall', [Call(f'DMDACreate{len(target.space_dimensions)}d',
+    dmda = Call(petsc_call, [Call(f'DMDACreate{len(target.space_dimensions)}d',
                                    arguments=args)])
 
     return dmda
@@ -186,65 +192,121 @@ def build_solver_objs(target):
             'ksp': KSP(name='ksp_'+str(target.name)),
             'pc': PC(name='pc_'+str(target.name)),
             'snes': SNES(name='snes_'+str(target.name)),
-            'x': Vec(name='x_'+str(target.name)),
-            'y': Vec(name='y_'+str(target.name))}
+            'X_global': Vec(name='X_global_'+str(target.name)),
+            'Y_global': Vec(name='Y_global_'+str(target.name)),
+            'X_local': Vec(name='X_local_'+str(target.name), liveness='eager'),
+            'Y_local': Vec(name='Y_local_'+str(target.name), liveness='eager')
+            # 'X_flat': PETScArray(name='X_flat_'+str(target.name),
+            #                         dimensions=target.grid.dimensions,
+            #                         dtype=target.dtype, is_const=True),
+            # 'Y_flat': PETScArray(name='Y_flat_'+str(target.name),
+            #                         dimensions=target.grid.dimensions,
+            #                         dtype=target.dtype)
+            }
 
 
-def generate_solver_calls(solver_objs, objs, matvec):
+def generate_solver_calls(solver_objs, objs, matvec, target):
 
-    snes_create = Call('PetscCall', [Call('SNESCreate', arguments=[
+    solver_params = matvec.expr.rhs.solver_parameters
+
+    snes_create = Call(petsc_call, [Call('SNESCreate', arguments=[
         objs['comm'], Byref(solver_objs['snes'])])])
 
-    snes_set_dm = Call('PetscCall', [Call('SNESSetDM', arguments=[
+    snes_set_dm = Call(petsc_call, [Call('SNESSetDM', arguments=[
         solver_objs['snes'], objs['da']])])
 
-    create_matrix = Call('PetscCall', [Call('DMCreateMatrix', arguments=[
+    create_matrix = Call(petsc_call, [Call('DMCreateMatrix', arguments=[
         objs['da'], Byref(solver_objs['Jac'])])])
 
     # NOTE: Assumming all solves are linear for now.
-    snes_set_type = Call('PetscCall', [Call('SNESSetType', arguments=[
+    snes_set_type = Call(petsc_call, [Call('SNESSetType', arguments=[
         solver_objs['snes'], 'SNESKSPONLY'])])
 
-    global_x = Call('PetscCall', [Call('DMCreateGlobalVector', arguments=[
+    global_x = Call(petsc_call, [Call('DMCreateGlobalVector', arguments=[
         objs['da'], Byref(solver_objs['x_global'])])])
 
-    local_x = Call('PetscCall', [Call('DMCreateLocalVector', arguments=[
+    local_x = Call(petsc_call, [Call('DMCreateLocalVector', arguments=[
         objs['da'], Byref(solver_objs['x_local'])])])
 
-    global_b = Call('PetscCall', [Call('DMCreateGlobalVector', arguments=[
+    global_b = Call(petsc_call, [Call('DMCreateGlobalVector', arguments=[
         objs['da'], Byref(solver_objs['b_global'])])])
 
-    local_b = Call('PetscCall', [Call('DMCreateLocalVector', arguments=[
+    local_b = Call(petsc_call, [Call('DMCreateLocalVector', arguments=[
         objs['da'], Byref(solver_objs['b_local'])])])
 
-    snes_get_ksp = Call('PetscCall', [Call('SNESGetKSP', arguments=[
+    snes_get_ksp = Call(petsc_call, [Call('SNESGetKSP', arguments=[
         solver_objs['snes'], Byref(solver_objs['ksp'])])])
+    
+    vec_replace_array = Call(petsc_call, [Call('VecReplaceArray', arguments=[
+        solver_objs['x_local'], FieldFromPointer(target._C_field_data, target._C_symbol)])])
+    
+    ksp_set_tols = Call(petsc_call, [Call('KSPSetTolerances', arguments=[
+        solver_objs['ksp'], solver_params['ksp_rtol'], solver_params['ksp_atol'],
+        solver_params['ksp_divtol'], solver_params['ksp_max_it']])])
+    
+    ksp_set_type = Call(petsc_call, [Call('KSPSetType', arguments=[
+        solver_objs['ksp'], linear_solver_mapper[solver_params['ksp_type']]])])
+    
+    ksp_get_pc = Call(petsc_call, [Call('KSPGetPC', arguments=[
+        solver_objs['ksp'], Byref(solver_objs['pc'])])])
+    
+    pc_set_type = Call(petsc_call, [Call('PCSetType', arguments=[
+        solver_objs['pc'], linear_solver_mapper[solver_params['pc_type']]])])
+
+    ksp_set_from_ops = Call(petsc_call, [Call('KSPSetFromOptions', arguments=[
+        solver_objs['ksp']])])
 
     return tuple([snes_create, snes_set_dm, create_matrix, snes_set_type,
-                  global_x, local_x, global_b, local_b, snes_get_ksp])
+                  global_x, local_x, global_b, local_b, snes_get_ksp,
+                  vec_replace_array, ksp_set_tols, ksp_set_type, ksp_get_pc,
+                  pc_set_type, ksp_set_from_ops])
 
 
-def create_matvec_callback(target, matvec_callback_body_iters,
-                           solver_objs, objs, struct):
+def create_matvec_callback(target, body, solver_objs, objs, struct):
+    
+    petsc_arrays = FindSymbols('indexedbases').visit(body)
 
     defn_struct = Definition(struct)
 
-    get_context = Call('PetscCall', [Call('MatShellGetContext',
-                                          arguments=[solver_objs['Jac'],
-                                                     Byref(struct)])])
+    mat_get_dm = Call(petsc_call, [Call('MatGetDM', arguments=[
+        solver_objs['Jac'], Byref(objs['da'])])])
+    
+    dm_get_app_context = Call(petsc_call, [Call('DMGetApplicationContext', arguments=[
+        objs['da'], Byref(struct)])])
+    
+    dm_get_local_xvec = Call(petsc_call, [Call('DMGetLocalVector', arguments=[
+        objs['da'], Byref(solver_objs['X_local'])])])
+    
+    global_to_local_begin = Call(petsc_call, [Call('DMGlobalToLocalBegin', arguments=[
+        objs['da'], solver_objs['X_global'], 'INSERT_VALUES', solver_objs['X_local']])])
+    
+    global_to_local_end = Call(petsc_call, [Call('DMGlobalToLocalEnd', arguments=[
+        objs['da'], solver_objs['X_global'], 'INSERT_VALUES', solver_objs['X_local']])])
+    
+    dm_get_local_yvec = Call(petsc_call, [Call('DMGetLocalVector', arguments=[
+        objs['da'], Byref(solver_objs['Y_local'])])])
+    
+    dm_get_local_info = Call(petsc_call, [Call('DMDAGetLocalInfo', arguments=[
+        objs['da'], Byref(petsc_arrays[0].function.dmda_info)])])
 
-    body = List(body=[defn_struct,
-                      get_context,
-                      matvec_callback_body_iters])
+    casts = [PointerCast(i.function) for i in petsc_arrays]
+
+
+    body = List(body=[petsc_function_begin_user, defn_struct,
+                      mat_get_dm, dm_get_app_context,
+                      dm_get_local_xvec, global_to_local_begin,
+                      global_to_local_end, dm_get_local_yvec,
+                      dm_get_local_info, casts,
+                      body])
 
     matvec_callback = Callable('MyMatShellMult_'+str(target.name),
                                body,
                                retval=objs['err'],
                                parameters=(solver_objs['Jac'],
-                                           solver_objs['x'],
-                                           solver_objs['y']))
+                                           solver_objs['X_global'],
+                                           solver_objs['Y_global']))
 
-    matvec_operation = Call('PetscCall', [
+    matvec_operation = Call(petsc_call, [
         Call('MatShellSetOperation', arguments=[solver_objs['Jac'],
                                                 'MATOP_MULT',
                                                 Callback(matvec_callback.name,
@@ -274,4 +336,15 @@ def transform_efuncs(efuncs, struct):
 
 
 Null = Macro('NULL')
-Void = Macro('Void')
+Void = Macro('void')
+
+
+petsc_call = String('PetscCall')
+petsc_function_begin_user = c.Line('PetscFunctionBeginUser;')
+
+
+linear_solver_mapper = {
+    'gmres': 'KSPGMRES',
+    'jacobi': 'PCJACOBI',
+    None: 'PCNONE'
+}
