@@ -46,8 +46,6 @@ def lower_petsc(iet, **kwargs):
 
             solver_objs = build_solver_objs(target)
 
-            # TODO: Make this an actual List where the body is the iteration loops
-            # combined
             matvec_body_list = List()
 
             solver_setup = False
@@ -123,7 +121,6 @@ def core_petsc(target, struct, objs, **kwargs):
     call_mpi = Call(petsc_call_mpi, [Call('MPI_Comm_size',
                                           arguments=[objs['comm'],
                                                      Byref(objs['size'])])])
-
     # Create DMDA
     dmda = create_dmda(target, objs)
     dm_setup = Call(petsc_call, [
