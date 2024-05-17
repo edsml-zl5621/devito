@@ -150,7 +150,7 @@ class PETScArray(ArrayBasic, Differentiable):
             FieldFromComposite('g%sm' % d.name, self.dmda_info) for d in self.dimensions]
         # Reverse it since DMDA is setup backwards to Devito dimensions.
         return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
-    
+
     @property
     def dmda_info(self):
         # To access the local grid info via the DM in
@@ -248,10 +248,10 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     defaults = {
         'ksp_type': 'gmres',
         'pc_type': 'jacobi',
-        'ksp_rtol': 1e-7, # relative tolerance
-        'ksp_atol': 1e-50, # absolute tolerance
-        'ksp_divtol': 1e4, # divergence tolerance
-        'ksp_max_it': 10000 # maximum iterations
+        'ksp_rtol': 1e-7,  # Relative tolerance
+        'ksp_atol': 1e-50,  # Absolute tolerance
+        'ksp_divtol': 1e4,  # Divergence tolerance
+        'ksp_max_it': 10000  # Maximum iterations
     }
 
     def __new__(cls, expr, target=None, solver_parameters=None, **kwargs):
