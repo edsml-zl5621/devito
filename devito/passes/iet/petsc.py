@@ -129,11 +129,9 @@ def core_petsc(target, struct, objs, **kwargs):
         Call('DMSetApplicationContext', arguments=[objs['da'], struct])])
     dm_mat_type = Call(petsc_call, [
         Call('DMSetMatType', arguments=[objs['da'], 'MATSHELL'])])
-    dm_local_info = Call(petsc_call, [
-        Call('DMDAGetLocalInfo', arguments=[objs['da'], Byref(objs['info'])])])
 
     return tuple([petsc_function_begin_user, call_mpi, dmda, dm_setup,
-                  dm_app_ctx, dm_mat_type, dm_local_info, BlankLine])
+                  dm_app_ctx, dm_mat_type, BlankLine])
 
 
 def build_core_objects(target, **kwargs):
