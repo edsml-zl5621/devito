@@ -245,7 +245,6 @@ def test_LinearSolveExpr():
     # Check the target
     assert linsolveexpr.target == f
     # Check the solver parameters
-
     assert linsolveexpr.solver_parameters == \
         {'ksp_type': 'gmres', 'pc_type': 'jacobi', 'ksp_rtol': 1e-07,
          'ksp_atol': 1e-50, 'ksp_divtol': 10000.0, 'ksp_max_it': 10000}

@@ -227,6 +227,8 @@ def generate_solver_calls(solver_objs, objs, matvec):
 def create_matvec_callback(target, matvec_callback_body_iters,
                            solver_objs, objs, struct):
 
+    # Struct needs to be defined explicitly here since CompositeObjects
+    # do not have 'liveness'
     defn_struct = Definition(struct)
 
     get_context = Call('PetscCall', [Call('MatShellGetContext',
@@ -238,7 +240,7 @@ def create_matvec_callback(target, matvec_callback_body_iters,
                       matvec_callback_body_iters])
 
     matvec_callback = Callable('MyMatShellMult_'+str(target.name),
-                               body,
+                               matvec_body,
                                retval=objs['err'],
                                parameters=(solver_objs['Jac'],
                                            solver_objs['x'],
