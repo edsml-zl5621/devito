@@ -3,7 +3,7 @@ from devito.ir.iet import (FindNodes, Call, MatVecAction,
                            Transformer, FindSymbols, LinearSolverExpression,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
                            Definition, BlankLine, PointerCast)
-from devito.types import (PetscMPIInt, PETScStruct, DMDALocalInfo, DM, Mat,
+from devito.types import (PetscMPIInt, PETScStruct, DM, Mat,
                           Vec, KSP, PC, SNES, PetscErrorCode)
 from devito.symbolics import Byref, Macro, FieldFromPointer, String
 import cgen as c
@@ -145,7 +145,6 @@ def build_core_objects(target, **kwargs):
 
     return {'da': DM(name='da', liveness='eager'),
             'size': PetscMPIInt(name='size'),
-            'info': DMDALocalInfo(name='info', liveness='eager'),
             'comm': communicator,
             'err': PetscErrorCode(name='err')}
 
