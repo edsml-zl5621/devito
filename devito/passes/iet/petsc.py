@@ -2,13 +2,8 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Call, MatVecAction,
                            Transformer, FindSymbols, LinearSolverExpression,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
-<<<<<<< HEAD
                            Definition)
 from devito.types import (PetscMPIInt, PETScStruct, DMDALocalInfo, DM, Mat,
-=======
-                           Definition, BlankLine, PointerCast)
-from devito.types import (PetscMPIInt, PETScStruct, DM, Mat,
->>>>>>> 137c8b42a (compiler: Remove DMDAInfo from core objs in lower_petsc)
                           Vec, KSP, PC, SNES, PetscErrorCode)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 import cgen as c
