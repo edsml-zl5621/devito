@@ -146,7 +146,6 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @property
     def symbolic_shape(self):
-        # and then access the local no.of grid points via info.gmx, info.gmy, info.gmz
         field_from_composites = [
             FieldFromComposite('g%sm' % d.name, self.dmda_info) for d in self.dimensions]
         # Reverse it since DMDA is setup backwards to Devito dimensions.
@@ -156,6 +155,7 @@ class PETScArray(ArrayBasic, Differentiable):
     def dmda_info(self):
         # To access the local grid info via the DM in
         # PETSc you use DMDAGetLocalInfo(da, &info)
+        # and then access the local no.of grid points via info.gmx, info.gmy, info.gmz
         return DMDALocalInfo(name='info', liveness='eager')
 
     @cached_property
