@@ -2,8 +2,13 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Call, MatVecAction,
                            Transformer, FindSymbols, LinearSolverExpression,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
+<<<<<<< HEAD
                            Definition)
 from devito.types import (PetscMPIInt, PETScStruct, DMDALocalInfo, DM, Mat,
+=======
+                           Definition, BlankLine, PointerCast)
+from devito.types import (PetscMPIInt, PETScStruct, DM, Mat,
+>>>>>>> 137c8b42a (compiler: Remove DMDAInfo from core objs in lower_petsc)
                           Vec, KSP, PC, SNES, PetscErrorCode)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 import cgen as c
@@ -147,7 +152,6 @@ def build_core_objects(target, struct, **kwargs):
 
     return {'da': DM(name='da'),
             'size': PetscMPIInt(name='size'),
-            'info': DMDALocalInfo(name='info'),
             'comm': communicator,
             'struct': struct}
 
