@@ -125,7 +125,6 @@ def core_petsc(target, objs, **kwargs):
     call_mpi = Call(petsc_call_mpi, [Call('MPI_Comm_size',
                                           arguments=[objs['comm'],
                                                      Byref(objs['size'])])])
-
     # Create DMDA
     dmda = create_dmda(target, objs)
     dm_setup = Call('PetscCall', [Call('DMSetUp', arguments=[objs['da']])])
