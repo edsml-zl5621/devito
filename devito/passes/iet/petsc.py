@@ -52,25 +52,31 @@ def lower_petsc(iet, **kwargs):
 
             for iter, (matvec,) in matvec_mapper.items():
 
-                if matvec.expr.rhs.target == target:
-                    if not solver_setup:
-                        solver = generate_solver_calls(solver_objs, objs, matvec, target)
-                        setup.extend(solver)
-                        solver_setup = True
+                # Skip the MatVecAction if it is not associated with the target
+                # There will be more than one MatVecAction associated with the target
+                # e.g interior matvec + BC matvecs
+                if matvec.expr.rhs.target != target:
+                    continue
 
-                    matvec_body = matvec_body_list._rebuild(body=[
-                        matvec_body_list.body, iter[0]])
-                    matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
+                # Only need to generate solver setup once per target
+                if not solver_setup:
+                    solver = generate_solver_calls(solver_objs, objs, matvec, target)
+                    setup.extend(solver)
+                    solver_setup = True
 
-                    main_mapper.update({iter[0]: None})
+                matvec_body = matvec_body_list._rebuild(body=[
+                    matvec_body_list.body, iter[0]])
+                matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
 
+                main_mapper.update({iter[0]: None})
+
+            # Create the matvec callback and operation for each target
             matvec_callback, matvec_op = create_matvec_callback(
                 target, matvec_body_list, solver_objs, objs,
                 struct)
 
             setup.append(matvec_op)
             setup.append(BlankLine)
-
             efuncs.append(matvec_callback)
 
         # Remove the LinSolveExpr from iet and efuncs that were used to carry
@@ -81,7 +87,7 @@ def lower_petsc(iet, **kwargs):
         iet = Transformer(main_mapper).visit(iet)
         efuncs = [Transformer(efunc_mapper[efunc]).visit(efunc) for efunc in efuncs]
 
-        # Replace symbols appearing in each efunc with a pointer to the struct
+        # Replace symbols appearing in each efunc with a pointer to the PETScStruct
         efuncs = transform_efuncs(efuncs, struct)
 
         body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
@@ -100,7 +106,7 @@ def init_petsc(**kwargs):
     initialize = Call(petsc_call, [
         Call('PetscInitialize', arguments=[Null, Null, Null, Null])])
 
-    return tuple([petsc_function_begin_user, initialize])
+    return tuple([petsc_func_begin_user, initialize])
 
 
 def build_struct(iet):
@@ -130,7 +136,7 @@ def core_petsc(target, struct, objs, **kwargs):
     dm_mat_type = Call(petsc_call, [
         Call('DMSetMatType', arguments=[objs['da'], 'MATSHELL'])])
 
-    return tuple([petsc_function_begin_user, call_mpi, dmda, dm_setup,
+    return tuple([petsc_func_begin_user, call_mpi, dmda, dm_setup,
                   dm_app_ctx, dm_mat_type, BlankLine])
 
 
@@ -303,7 +309,7 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
     func_return = Call('PetscFunctionReturn', arguments=[0])
 
     matvec_body = List(body=[
-        petsc_function_begin_user, defn_struct, mat_get_dm, dm_get_app_context,
+        petsc_func_begin_user, defn_struct, mat_get_dm, dm_get_app_context,
         dm_get_local_xvec, global_to_local_begin, global_to_local_end,
         dm_get_local_yvec, vec_get_array_y, vec_get_array_x, dm_get_local_info,
         casts, BlankLine, body, vec_restore_array_y, vec_restore_array_x,
@@ -346,7 +352,8 @@ Void = Macro('void')
 
 petsc_call = String('PetscCall')
 petsc_call_mpi = String('PetscCallMPI')
-petsc_function_begin_user = c.Line('PetscFunctionBeginUser;')
+# TODO: Don't use c.Line here?
+petsc_func_begin_user = c.Line('PetscFunctionBeginUser;')
 
 linear_solver_mapper = {
     'gmres': 'KSPGMRES',
