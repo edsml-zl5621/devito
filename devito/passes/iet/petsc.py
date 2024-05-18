@@ -60,6 +60,7 @@ def lower_petsc(iet, **kwargs):
                         setup.extend(solver)
                         solver_setup = True
 
+                # Only need to generate solver setup once per target
                 if not solver_setup:
                     solver = generate_solver_calls(solver_objs, objs, matvec, target)
                     setup.extend(solver)
@@ -71,6 +72,7 @@ def lower_petsc(iet, **kwargs):
 
                 main_mapper.update({iter[0]: None})
 
+            # Create the matvec callback and operation for each target
             matvec_callback, matvec_op = create_matvec_callback(
                 target, matvec_callback_body_iters, solver_objs, objs, struct)
 
@@ -87,7 +89,7 @@ def lower_petsc(iet, **kwargs):
         iet = Transformer(main_mapper).visit(iet)
         efuncs = [Transformer(efunc_mapper[efunc]).visit(efunc) for efunc in efuncs]
 
-        # Replace symbols appearing in each efunc with a pointer to the struct
+        # Replace symbols appearing in each efunc with a pointer to the PETScStruct
         efuncs = transform_efuncs(efuncs, struct)
 
         body = iet.body._rebuild(body=(tuple(init_setup) + iet.body.body))
@@ -286,7 +288,7 @@ Void = Macro('void')
 
 petsc_call = String('PetscCall')
 petsc_call_mpi = String('PetscCallMPI')
-petsc_function_begin_user = c.Line('PetscFunctionBeginUser;')
+petsc_func_begin_user = c.Line('PetscFunctionBeginUser;')
 
 linear_solver_mapper = {
     'gmres': 'KSPGMRES',
