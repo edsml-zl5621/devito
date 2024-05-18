@@ -60,11 +60,16 @@ def lower_petsc(iet, **kwargs):
                         setup.extend(solver)
                         solver_setup = True
 
-                    matvec_body = matvec_body_list._rebuild(body=[
-                        matvec_body_list.body, iter[0]])
-                    matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
+                if not solver_setup:
+                    solver = generate_solver_calls(solver_objs, objs, matvec, target)
+                    setup.extend(solver)
+                    solver_setup = True
 
-                    main_mapper.update({iter[0]: None})
+                matvec_body = matvec_body_list._rebuild(body=[
+                    matvec_body_list.body, iter[0]])
+                matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
+
+                main_mapper.update({iter[0]: None})
 
             matvec_callback, matvec_op = create_matvec_callback(
                 target, matvec_callback_body_iters, solver_objs, objs, struct)
