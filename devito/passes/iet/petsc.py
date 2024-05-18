@@ -288,6 +288,7 @@ Void = Macro('void')
 
 petsc_call = String('PetscCall')
 petsc_call_mpi = String('PetscCallMPI')
+# TODO: Don't use c.Line here?
 petsc_func_begin_user = c.Line('PetscFunctionBeginUser;')
 
 linear_solver_mapper = {
