@@ -51,9 +51,9 @@ def lower_petsc(iet, **kwargs):
             solver_setup = False
 
             for iter, (matvec,) in matvec_mapper.items():
-                
+
                 # Skip the MatVecAction if it is not associated with the target
-                # There may be more than one MatVecAction associated with the target
+                # There will be more than one MatVecAction associated with the target
                 # e.g interior matvec + BC matvecs
                 if matvec.expr.rhs.target != target:
                     continue
