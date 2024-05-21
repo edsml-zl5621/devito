@@ -238,7 +238,7 @@ def guard(clusters):
                 if cd._factor is not None:
                     k = d
                 else:
-                    dims = pull_dims(cd.condition)
+                    dims = pull_dims(cd.condition, flag=False)
                     k = max(dims, default=d, key=lambda i: c.ispace.index(i))
 
                 # Pull `cd` from any expr
@@ -419,8 +419,10 @@ class Communications(Queue):
 
             key = lambda i: i in prefix[:-1] or i in hs.loc_indices
             ispace = c.ispace.project(key)
+            # HaloTOuch are not parallel
+            properties = c.properties.sequentialize()
 
-            halo_touch = c.rebuild(exprs=expr, ispace=ispace)
+            halo_touch = c.rebuild(exprs=expr, ispace=ispace, properties=properties)
 
             processed.append(halo_touch)
             seen.update({halo_touch, c})

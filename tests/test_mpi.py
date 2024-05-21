@@ -2165,7 +2165,7 @@ class TestOperatorAdvanced(object):
             op.apply()
             f.data[:, :] = fo.data[:, :]
 
-        assert (np.isclose(norm(f), 17.24904, atol=1e-4, rtol=0))
+        assert (np.isclose(norm(f), 17.86754, atol=1e-4, rtol=0))
 
     @pytest.mark.parallel(mode=1)
     def test_haloupdate_issue_1613(self, mode):
@@ -2334,9 +2334,9 @@ class TestOperatorAdvanced(object):
         op(time_M=2)
 
         # Expected norms computed "manually" from sequential runs
-        assert np.isclose(norm(ux), 6253.4349, rtol=1.e-4)
-        assert np.isclose(norm(uxx), 80001.0304, rtol=1.e-4)
-        assert np.isclose(norm(uxy), 61427.853, rtol=1.e-4)
+        assert np.isclose(norm(ux), 6042.554, rtol=1.e-4)
+        assert np.isclose(norm(uxx), 64632.75, rtol=1.e-4)
+        assert np.isclose(norm(uxy), 59737.77, rtol=1.e-4)
 
     @pytest.mark.parallel(mode=2)
     def test_op_new_dist(self, mode):
