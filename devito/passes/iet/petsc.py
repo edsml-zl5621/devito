@@ -4,7 +4,7 @@ from devito.ir.iet import (FindNodes, Call, MatVecAction,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
                            Definition, BlankLine, PointerCast)
 from devito.types import (PetscMPIInt, PETScStruct, DM, Mat,
-                          Vec, KSP, PC, SNES, PetscErrorCode)
+                          Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 import cgen as c
 
@@ -259,11 +259,15 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
 
 def create_matvec_callback(target, body, solver_objs, objs, struct):
 
-    petsc_arrays = FindSymbols('indexedbases').visit(body)
-    # There will only be one PETScArray that is written to within this body,
-    # and it is created within PETScSolve
-    petsc_arr_write = FindSymbols('writes').visit(body)
+    # There will be 2 PETScArrays within the body
+    petsc_arrays = [i.function for i in FindSymbols('indexedbases').visit(body)
+                    if isinstance(i.function, PETScArray)]
 
+    # There will only be one PETScArray that is written to within this body and
+    # one PETScArray which corresponds to the 'seed' vector
+    petsc_arr_write, = FindSymbols('writes').visit(body)
+    petsc_arr_seed, = [i for i in petsc_arrays if i.function != petsc_arr_write.function]
+    
     # Struct needs to be defined explicitly here since CompositeObjects
     # do not have 'liveness'
     defn_struct = Definition(struct)
@@ -287,7 +291,7 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
         objs['da'], Byref(solver_objs['Y_local'])])])
 
     vec_get_array_y = Call(petsc_call, [Call('VecGetArray', arguments=[
-        solver_objs['Y_local'], Byref(petsc_arr_write[0])])])
+        solver_objs['Y_local'], Byref(petsc_arr_write.function)])])
 
     vec_get_array_x = Call(petsc_call, [Call('VecGetArray', arguments=[
         solver_objs['X_local'], Byref(petsc_arrays[0])])])
@@ -301,7 +305,7 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
         solver_objs['Y_local'], Byref(petsc_arr_write[0])])])
 
     vec_restore_array_x = Call(petsc_call, [Call('VecRestoreArray', arguments=[
-        solver_objs['X_local'], Byref(petsc_arrays[0])])])
+        solver_objs['X_local'], Byref(petsc_arr_seed)])])
 
     dm_local_to_global_begin = Call(petsc_call, [Call('DMLocalToGlobalBegin', arguments=[
         objs['da'], solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']])])
