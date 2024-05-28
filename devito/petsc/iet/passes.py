@@ -1,14 +1,14 @@
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (FindNodes, Call, MatVecAction,
-                           Transformer, FindSymbols, LinearSolverExpression,
+from devito.ir.iet import (FindNodes, Call,
+                           Transformer, FindSymbols,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
                            Definition, BlankLine, PointerCast)
-from devito.types import (PetscMPIInt, PETScStruct, DM, Mat,
-                          Vec, KSP, PC, SNES, PetscErrorCode)
+from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
+                                Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
+from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
+from devito.petsc.utils import linear_solver_mapper
 import cgen as c
-
-__all__ = ['lower_petsc']
 
 
 @iet_pass
@@ -53,8 +53,8 @@ def lower_petsc(iet, **kwargs):
             for iter, (matvec,) in matvec_mapper.items():
 
                 # Skip the MatVecAction if it is not associated with the target
-                # There will be more than one MatVecAction associated with the target
-                # e.g interior matvec + BC matvecs
+                # There will most likely be more than one MatVecAction
+                # associated with the target e.g interior matvec + BC matvecs
                 if matvec.expr.rhs.target != target:
                     continue
 
@@ -64,10 +64,13 @@ def lower_petsc(iet, **kwargs):
                     setup.extend(solver)
                     solver_setup = True
 
+                # Make the body of the matrix-vector callback for this target
                 matvec_body = matvec_body_list._rebuild(body=[
                     matvec_body_list.body, iter[0]])
                 matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
 
+                # Remove the iteration loop from the main kernel encapsulating
+                # the matvec equations since they are moved to the callback
                 main_mapper.update({iter[0]: None})
 
             # Create the matvec callback and operation for each target
@@ -259,10 +262,14 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
 
 def create_matvec_callback(target, body, solver_objs, objs, struct):
 
-    petsc_arrays = FindSymbols('indexedbases').visit(body)
-    # There will only be one PETScArray that is written to within this body,
-    # and it is created within PETScSolve
-    petsc_arr_write = FindSymbols('writes').visit(body)
+    # There will be 2 PETScArrays within the body
+    petsc_arrays = [i.function for i in FindSymbols('indexedbases').visit(body)
+                    if isinstance(i.function, PETScArray)]
+
+    # There will only be one PETScArray that is written to within this body and
+    # one PETScArray which corresponds to the 'seed' vector
+    petsc_arr_write, = FindSymbols('writes').visit(body)
+    petsc_arr_seed, = [i for i in petsc_arrays if i.function != petsc_arr_write.function]
 
     # Struct needs to be defined explicitly here since CompositeObjects
     # do not have 'liveness'
@@ -287,7 +294,7 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
         objs['da'], Byref(solver_objs['Y_local'])])])
 
     vec_get_array_y = Call(petsc_call, [Call('VecGetArray', arguments=[
-        solver_objs['Y_local'], Byref(petsc_arr_write[0])])])
+        solver_objs['Y_local'], Byref(petsc_arr_write.function)])])
 
     vec_get_array_x = Call(petsc_call, [Call('VecGetArray', arguments=[
         solver_objs['X_local'], Byref(petsc_arrays[0])])])
@@ -298,10 +305,10 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
     casts = [PointerCast(i.function) for i in petsc_arrays]
 
     vec_restore_array_y = Call(petsc_call, [Call('VecRestoreArray', arguments=[
-        solver_objs['Y_local'], Byref(petsc_arr_write[0])])])
+        solver_objs['Y_local'], Byref(petsc_arr_write)])])
 
     vec_restore_array_x = Call(petsc_call, [Call('VecRestoreArray', arguments=[
-        solver_objs['X_local'], Byref(petsc_arrays[0])])])
+        solver_objs['X_local'], Byref(petsc_arr_seed)])])
 
     dm_local_to_global_begin = Call(petsc_call, [Call('DMLocalToGlobalBegin', arguments=[
         objs['da'], solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']])])
@@ -325,7 +332,7 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
     matvec_operation = Call(petsc_call, [
         Call('MatShellSetOperation', arguments=[
             solver_objs['Jac'], 'MATOP_MULT', Callback(matvec_callback.name,
-                                                       Void, Void)])])
+                                                       void, void)])])
 
     return matvec_callback, matvec_operation
 
@@ -351,15 +358,9 @@ def transform_efuncs(efuncs, struct):
 
 
 Null = Macro('NULL')
-Void = 'void'
+void = 'void'
 
 petsc_call = 'PetscCall'
 petsc_call_mpi = 'PetscCallMPI'
 # TODO: Don't use c.Line here?
 petsc_func_begin_user = c.Line('PetscFunctionBeginUser;')
-
-linear_solver_mapper = {
-    'gmres': 'KSPGMRES',
-    'jacobi': 'PCJACOBI',
-    None: 'PCNONE'
-}

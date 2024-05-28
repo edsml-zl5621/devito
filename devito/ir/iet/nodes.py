@@ -10,7 +10,7 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpMatVec, OpRHS
+from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, WithLock, PrefetchUpdate, detect_io)
@@ -28,8 +28,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'MatVecAction', 'RHSLinearSystem',
-           'LinearSolverExpression']
+           'CallableBody', 'Transfer', 'Callback']
 
 # First-class IET nodes
 
@@ -483,31 +482,6 @@ class Increment(AugmentedExpression):
 
     def __init__(self, expr, pragmas=None):
         super().__init__(expr, pragmas=pragmas, operation=OpInc)
-
-
-class LinearSolverExpression(Expression):
-
-    """
-    Base class for general expressions required by a
-    matrix-free linear solve of the form Ax=b.
-    """
-    pass
-
-
-class MatVecAction(LinearSolverExpression):
-
-    def __init__(self, expr, pragmas=None, operation=OpMatVec,
-                 target=None, solver_parameters=None):
-        super().__init__(expr, pragmas=pragmas, operation=operation,
-                         target=target, solver_parameters=solver_parameters)
-
-
-class RHSLinearSystem(LinearSolverExpression):
-
-    def __init__(self, expr, pragmas=None, operation=OpRHS,
-                 target=None, solver_parameters=None):
-        super().__init__(expr, pragmas=pragmas, operation=operation,
-                         target=target, solver_parameters=solver_parameters)
 
 
 class Iteration(Node):
