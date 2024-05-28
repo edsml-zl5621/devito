@@ -5,7 +5,7 @@ from devito.ir.iet import (FindNodes, Call, MatVecAction,
                            Definition, BlankLine, PointerCast)
 from devito.types import (PetscMPIInt, PETScStruct, DM, Mat,
                           Vec, KSP, PC, SNES, PetscErrorCode)
-from devito.symbolics import Byref, Macro, FieldFromPointer, String
+from devito.symbolics import Byref, Macro, FieldFromPointer
 import cgen as c
 
 __all__ = ['lower_petsc']
@@ -260,6 +260,9 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
 def create_matvec_callback(target, body, solver_objs, objs, struct):
 
     petsc_arrays = FindSymbols('indexedbases').visit(body)
+    # There will only be one PETScArray that is written to within this body,
+    # and it is created within PETScSolve
+    petsc_arr_write = FindSymbols('writes').visit(body)
 
     # Struct needs to be defined explicitly here since CompositeObjects
     # do not have 'liveness'
@@ -284,10 +287,10 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
         objs['da'], Byref(solver_objs['Y_local'])])])
 
     vec_get_array_y = Call(petsc_call, [Call('VecGetArray', arguments=[
-        solver_objs['Y_local'], Byref(petsc_arrays[0])])])
+        solver_objs['Y_local'], Byref(petsc_arr_write[0])])])
 
-    vec_get_array_x = Call(petsc_call, [Call('VecGetArrayRead', arguments=[
-        solver_objs['X_local'], Byref(petsc_arrays[1])])])
+    vec_get_array_x = Call(petsc_call, [Call('VecGetArray', arguments=[
+        solver_objs['X_local'], Byref(petsc_arrays[0])])])
 
     dm_get_local_info = Call(petsc_call, [Call('DMDAGetLocalInfo', arguments=[
         objs['da'], Byref(petsc_arrays[0].function.dmda_info)])])
@@ -295,10 +298,10 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
     casts = [PointerCast(i.function) for i in petsc_arrays]
 
     vec_restore_array_y = Call(petsc_call, [Call('VecRestoreArray', arguments=[
-        solver_objs['Y_local'], Byref(petsc_arrays[0])])])
+        solver_objs['Y_local'], Byref(petsc_arr_write[0])])])
 
     vec_restore_array_x = Call(petsc_call, [Call('VecRestoreArray', arguments=[
-        solver_objs['X_local'], Byref(petsc_arrays[1])])])
+        solver_objs['X_local'], Byref(petsc_arrays[0])])])
 
     dm_local_to_global_begin = Call(petsc_call, [Call('DMLocalToGlobalBegin', arguments=[
         objs['da'], solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']])])
@@ -348,10 +351,10 @@ def transform_efuncs(efuncs, struct):
 
 
 Null = Macro('NULL')
-Void = Macro('void')
+Void = 'void'
 
-petsc_call = String('PetscCall')
-petsc_call_mpi = String('PetscCallMPI')
+petsc_call = 'PetscCall'
+petsc_call_mpi = 'PetscCallMPI'
 # TODO: Don't use c.Line here?
 petsc_func_begin_user = c.Line('PetscFunctionBeginUser;')
 
