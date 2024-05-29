@@ -4,7 +4,7 @@ from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            MatVecAction, FindNodes, RHSLinearSystem,
                            PointerCast, retrieve_iteration_tree)
 from devito.passes.iet.languages.C import CDataManager
-from devito.types import (DM, Mat, Vec, PetscMPIInt, KSP,
+from devito.petsc import (DM, Mat, Vec, PetscMPIInt, KSP,
                           PC, KSPConvergedReason, PETScArray, PETScSolve,
                           LinearSolveExpr, PETScStruct)
 import os

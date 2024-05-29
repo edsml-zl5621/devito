@@ -4,7 +4,7 @@ from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, 
                            Section, HaloSpot, ExpressionBundle, MatVecAction,
                            RHSLinearSystem)
 from devito.tools import timed_pass
-from devito.types import LinearSolveExpr
+from devito.petsc import LinearSolveExpr
 from devito.ir.equations import OpMatVec, OpRHS
 
 __all__ = ['iet_build']
