@@ -3,7 +3,11 @@ from devito.ir.iet import (FindNodes, Call,
                            Transformer, FindSymbols,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
                            Definition, BlankLine, PointerCast)
+<<<<<<< HEAD
 from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
+=======
+from devito.petsc import (PetscMPIInt, PETScStruct, DM, Mat,
+>>>>>>> b22824875 (fix circular imports)
                           Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 import cgen as c
