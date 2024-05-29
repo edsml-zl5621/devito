@@ -5,3 +5,10 @@ from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
 # These operations correspond to subclasses of Eq utilised within PETScSolve.
 iet_mapper = {OpMatVec: MatVecAction,
               OpRHS: RHSLinearSystem}
+
+
+linear_solver_mapper = {
+    'gmres': 'KSPGMRES',
+    'jacobi': 'PCJACOBI',
+    None: 'PCNONE'
+}
