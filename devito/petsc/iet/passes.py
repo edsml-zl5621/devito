@@ -1,49 +1,49 @@
-from collections import OrderedDict
 import cgen as c
 
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (FindNodes, Call,
-                           Transformer, FindSymbols,
-                           MapNodes, Iteration, Callable, Callback, List, Uxreplace,
-                           Definition, BlankLine, PointerCast, filter_iterations,
-                           retrieve_iteration_tree)
+from devito.ir.iet import (FindNodes, Transformer,
+                           MapNodes, Iteration, List, BlankLine,
+                           filter_iterations, retrieve_iteration_tree,
+                           Callable, CallableBody, DummyExpr, Call)
 from devito.symbolics import Byref, Macro, FieldFromPointer
-from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
-                                Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
-from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
-from devito.petsc.utils import (solver_mapper, petsc_call, petsc_call_mpi,
-                                core_metadata)
+from devito.tools import filter_ordered
+from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec,
+                                GlobalVec, KSP, PC, SNES, PetscErrorCode, DummyArg)
+from devito.petsc.iet.nodes import InjectSolveDummy
+from devito.petsc.utils import solver_mapper, core_metadata
+from devito.petsc.iet.routines import PETScCallbackBuilder
+from devito.petsc.iet.utils import petsc_call, petsc_call_mpi, petsc_struct
 
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
 
     # Check if PETScSolve was used
-    petsc_nodes = FindNodes(MatVecAction).visit(iet)
+    petsc_nodes = FindNodes(InjectSolveDummy).visit(iet)
 
     if not petsc_nodes:
         return iet, {}
 
-    # Collect all petsc solution fields
     unique_targets = list({i.expr.rhs.target for i in petsc_nodes})
     init = init_petsc(**kwargs)
 
     # Assumption is that all targets have the same grid so can use any target here
     objs = build_core_objects(unique_targets[-1], **kwargs)
-    objs['struct'] = build_petsc_struct(iet)
 
     # Create core PETSc calls (not specific to each PETScSolve)
     core = make_core_petsc_calls(objs, **kwargs)
 
-    # Create matvec mapper from the spatial iteration loops (exclude time loop if present)
+    # Create injectsolve mapper from the spatial iteration loops
+    # (exclude time loop if present)
     spatial_body = []
     for tree in retrieve_iteration_tree(iet):
         root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
         spatial_body.append(root)
-    matvec_mapper = MapNodes(Iteration, MatVecAction,
-                             'groupby').visit(List(body=spatial_body))
+    injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
+                                  'groupby').visit(List(body=spatial_body))
 
     setup = []
+    subs = {}
 
     # Create a different DMDA for each target with a unique space order
     unique_dmdas = create_dmda_objs(unique_targets)
@@ -51,52 +51,48 @@ def lower_petsc(iet, **kwargs):
     for dmda in unique_dmdas.values():
         setup.extend(create_dmda_calls(dmda, objs))
 
-    subs = {}
-    efuncs = OrderedDict()
+    builder = PETScCallbackBuilder(**kwargs)
 
     # Create the PETSc calls which are specific to each target
     for target in unique_targets:
         solver_objs = build_solver_objs(target)
 
-        # Generate solver setup for target
-        for iter, (matvec,) in matvec_mapper.items():
-            # Skip the MatVecAction if it is not associated with the target
-            # There will most likely be more than one MatVecAction
-            # associated with the target e.g interior matvec + BC matvecs
-            if matvec.expr.rhs.target != target:
+        # Generate the solver setup for target. This is required only
+        # once per target
+        for (injectsolve,) in injectsolve_mapper.values():
+            # Skip if not associated with the target
+            if injectsolve.expr.rhs.target != target:
                 continue
-            solver = generate_solver_calls(solver_objs, objs, matvec, target)
-            setup.extend(solver)
+            solver_setup = generate_solver_setup(solver_objs, objs, injectsolve, target)
+            setup.extend(solver_setup)
             break
 
-        # Create the body of the matrix-vector callback for target
-        matvec_body_list = []
-        for iter, (matvec,) in matvec_mapper.items():
-            if matvec.expr.rhs.target != target:
+        # Generate all PETSc callback functions for the target via recusive compilation
+        for iter, (injectsolve,) in injectsolve_mapper.items():
+            if injectsolve.expr.rhs.target != target:
                 continue
-            matvec_body_list.append(iter[0])
-            # Remove the iteration loop from the main kernel encapsulating
-            # the matvec equations since they are moved into the callback
-            subs.update({iter[0]: None})
+            matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
+                                                            objs, solver_objs)
+            setup.extend([matvec_op, formfunc_op])
+            subs.update({iter[0]: List(body=runsolve)})
+            break
 
-        # Create the matvec callback and operation for each target
-        matvec_callback, matvec_op = create_matvec_callback(
-            target, List(body=matvec_body_list), solver_objs, objs
-        )
+    # Generate callback to populate main struct object
+    struct_main = petsc_struct('ctx', filter_ordered(builder.struct_params))
+    struct_callback = generate_struct_callback(struct_main)
+    call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
+    calls_set_app_ctx = [petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
+                         for i in unique_dmdas]
+    setup.extend([BlankLine, call_struct_callback] + calls_set_app_ctx)
 
-        setup.extend([matvec_op, BlankLine])
-        efuncs[matvec_callback.name] = matvec_callback
-
-    # Remove the LinSolveExpr's from iet and efuncs
-    subs.update(rebuild_expr_mapper(iet))
     iet = Transformer(subs).visit(iet)
-    efuncs = transform_efuncs(efuncs, objs['struct'])
 
-    body = iet.body._rebuild(init=init, body=core+tuple(setup)+iet.body.body)
+    body = iet.body._rebuild(
+        init=init, body=core+tuple(setup)+(BlankLine,)+iet.body.body
+    )
     iet = iet._rebuild(body=body)
-
     metadata = core_metadata()
-    metadata.update({'efuncs': tuple(efuncs.values())})
+    metadata.update({'efuncs': tuple(builder.efuncs.values())+(struct_callback,)})
 
     return iet, metadata
 
@@ -110,17 +106,6 @@ def init_petsc(**kwargs):
     initialize = petsc_call('PetscInitialize', [Null, Null, Null, Null])
 
     return petsc_func_begin_user, initialize
-
-
-def build_petsc_struct(iet):
-    # Place all context data required by the shell routines
-    # into a PETScStruct
-    usr_ctx = []
-    basics = FindSymbols('basics').visit(iet)
-    avoid = FindSymbols('dimensions|indexedbases').visit(iet)
-    usr_ctx.extend(data for data in basics if data not in avoid)
-
-    return PETScStruct('ctx', usr_ctx)
 
 
 def make_core_petsc_calls(objs, **kwargs):
@@ -155,10 +140,9 @@ def create_dmda_objs(unique_targets):
 def create_dmda_calls(dmda, objs):
     dmda_create = create_dmda(dmda, objs)
     dm_setup = petsc_call('DMSetUp', [dmda])
-    dm_app_ctx = petsc_call('DMSetApplicationContext', [dmda, objs['struct']])
     dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
-
-    return dmda_create, dm_setup, dm_app_ctx, dm_mat_type, BlankLine
+    dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
+    return dmda_create, dm_setup, dm_mat_type, dm_get_local_info, BlankLine
 
 
 def create_dmda(dmda, objs):
@@ -199,24 +183,25 @@ def build_solver_objs(target):
     name = target.name
     return {
         'Jac': Mat(name='J_%s' % name),
-        'x_global': Vec(name='x_global_%s' % name),
-        'x_local': Vec(name='x_local_%s' % name, liveness='eager'),
-        'b_global': Vec(name='b_global_%s' % name),
-        'b_local': Vec(name='b_local_%s' % name, liveness='eager'),
+        'x_global': GlobalVec(name='x_global_%s' % name),
+        'x_local': LocalVec(name='x_local_%s' % name, liveness='eager'),
+        'b_global': GlobalVec(name='b_global_%s' % name),
+        'b_local': LocalVec(name='b_local_%s' % name),
         'ksp': KSP(name='ksp_%s' % name),
         'pc': PC(name='pc_%s' % name),
         'snes': SNES(name='snes_%s' % name),
-        'X_global': Vec(name='X_global_%s' % name),
-        'Y_global': Vec(name='Y_global_%s' % name),
-        'X_local': Vec(name='X_local_%s' % name, liveness='eager'),
-        'Y_local': Vec(name='Y_local_%s' % name, liveness='eager')
+        'X_global': GlobalVec(name='X_global_%s' % name),
+        'Y_global': GlobalVec(name='Y_global_%s' % name),
+        'X_local': LocalVec(name='X_local_%s' % name, liveness='eager'),
+        'Y_local': LocalVec(name='Y_local_%s' % name, liveness='eager'),
+        'dummy': DummyArg(name='dummy_%s' % name)
     }
 
 
-def generate_solver_calls(solver_objs, objs, matvec, target):
+def generate_solver_setup(solver_objs, objs, injectsolve, target):
     dmda = objs['da_so_%s' % target.space_order]
 
-    solver_params = matvec.expr.rhs.solver_parameters
+    solver_params = injectsolve.expr.rhs.solver_parameters
 
     snes_create = petsc_call('SNESCreate', [objs['comm'], Byref(solver_objs['snes'])])
 
@@ -226,6 +211,11 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
 
     # NOTE: Assumming all solves are linear for now.
     snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
+
+    snes_set_jac = petsc_call(
+        'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
+                            solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
+    )
 
     global_x = petsc_call('DMCreateGlobalVector',
                           [dmda, Byref(solver_objs['x_global'])])
@@ -259,9 +249,8 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
 
     ksp_get_pc = petsc_call('KSPGetPC', [solver_objs['ksp'], Byref(solver_objs['pc'])])
 
-    pc_set_type = petsc_call(
-        'PCSetType', [solver_objs['pc'], solver_mapper[solver_params['pc_type']]]
-    )
+    # Even though the default will be jacobi, set to PCNONE for now
+    pc_set_type = petsc_call('PCSetType', [solver_objs['pc'], 'PCNONE'])
 
     ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
@@ -269,6 +258,7 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
         snes_create,
         snes_set_dm,
         create_matrix,
+        snes_set_jac,
         snes_set_type,
         global_x,
         local_x,
@@ -284,131 +274,41 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
     )
 
 
-def create_matvec_callback(target, body, solver_objs, objs):
-    dmda = objs['da_so_%s' % target.space_order]
-
-    # There will be 2 PETScArrays within the body
-    petsc_arrays = [i for i in FindSymbols('indexedbases').visit(body)
-                    if isinstance(i.function, PETScArray)]
-
-    # There will only be one PETScArray that is written to within this body and
-    # one PETScArray which corresponds to the 'seed' vector
-    petsc_arr_write, = FindSymbols('writes').visit(body)
-    petsc_arr_seed, = [i.function for i in petsc_arrays
-                       if i.function != petsc_arr_write.function]
-
-    define_arrays = [Definition(i.function) for i in petsc_arrays]
-
-    # Struct needs to be defined explicitly here since CompositeObjects
-    # do not have 'liveness'
-    define_struct = Definition(objs['struct'])
-
-    mat_get_dm = petsc_call('MatGetDM', [solver_objs['Jac'], Byref(dmda)])
-
-    dm_get_app_context = petsc_call(
-        'DMGetApplicationContext', [dmda, Byref(objs['struct']._C_symbol)]
+def generate_struct_callback(struct):
+    body = [DummyExpr(FieldFromPointer(i._C_symbol, struct),
+                      i._C_symbol) for i in struct.fields]
+    struct_callback_body = CallableBody(
+        List(body=body), init=tuple([petsc_func_begin_user]),
+        retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
     )
-
-    dm_get_local_xvec = petsc_call(
-        'DMGetLocalVector', [dmda, Byref(solver_objs['X_local'])]
+    struct_callback = Callable(
+        'PopulateMatContext', struct_callback_body, PetscErrorCode(name='err'),
+        parameters=[struct]
     )
-
-    global_to_local_begin = petsc_call(
-        'DMGlobalToLocalBegin', [dmda, solver_objs['X_global'],
-                                 'INSERT_VALUES', solver_objs['X_local']]
-    )
-
-    global_to_local_end = petsc_call('DMGlobalToLocalEnd', [
-        dmda, solver_objs['X_global'], 'INSERT_VALUES', solver_objs['X_local']
-    ])
-
-    dm_get_local_yvec = petsc_call(
-        'DMGetLocalVector', [dmda, Byref(solver_objs['Y_local'])]
-    )
-
-    vec_get_array_y = petsc_call(
-        'VecGetArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)]
-    )
-
-    vec_get_array_x = petsc_call(
-        'VecGetArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)]
-    )
-
-    dm_get_local_info = petsc_call(
-        'DMDAGetLocalInfo', [dmda, Byref(petsc_arr_seed.function.dmda_info)]
-    )
-
-    casts = [PointerCast(i.function) for i in petsc_arrays]
-
-    vec_restore_array_y = petsc_call(
-        'VecRestoreArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)]
-    )
-
-    vec_restore_array_x = petsc_call(
-        'VecRestoreArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)]
-    )
-
-    dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
-        dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
-    ])
-
-    dm_local_to_global_end = petsc_call('DMLocalToGlobalEnd', [
-        dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
-    ])
-
-    func_return = Call('PetscFunctionReturn', arguments=[0])
-
-    matvec_body = List(body=[
-        petsc_func_begin_user,
-        define_arrays,
-        define_struct,
-        mat_get_dm,
-        dm_get_app_context,
-        dm_get_local_xvec,
-        global_to_local_begin,
-        global_to_local_end,
-        dm_get_local_yvec,
-        vec_get_array_y,
-        vec_get_array_x,
-        dm_get_local_info,
-        casts,
-        BlankLine,
-        body,
-        vec_restore_array_y,
-        vec_restore_array_x,
-        dm_local_to_global_begin,
-        dm_local_to_global_end,
-        func_return])
-
-    matvec_callback = Callable(
-        'MyMatShellMult_%s' % target.name, matvec_body, retval=objs['err'],
-        parameters=(solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global'])
-    )
-
-    matvec_operation = petsc_call(
-        'MatShellSetOperation', [solver_objs['Jac'], 'MATOP_MULT',
-                                 Callback(matvec_callback.name, void, void)]
-    )
-
-    return matvec_callback, matvec_operation
+    return struct_callback
 
 
-def rebuild_expr_mapper(callable):
-    # This mapper removes LinSolveExpr instances from the callable
-    # These expressions were previously used in lower_petc to carry metadata,
-    # such as solver_parameters
-    nodes = FindNodes(LinearSolverExpression).visit(callable)
-    return {expr: expr._rebuild(
-        expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr)) for expr in nodes}
+@iet_pass
+def sort_frees(iet):
+    frees = iet.body.frees
 
+    if not frees:
+        return iet, {}
 
-def transform_efuncs(efuncs, struct):
-    subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
-    for efunc in efuncs.values():
-        transformed_efunc = Transformer(rebuild_expr_mapper(efunc)).visit(efunc)
-        transformed_efunc = Uxreplace(subs).visit(transformed_efunc)
-        efuncs[efunc.name] = transformed_efunc
-    return efuncs
+    destroys = ["VecDestroy", "MatDestroy", "SNESDestroy", "DMDestroy"]
+    priority = {k: i for i, k in enumerate(destroys, start=1)}
+
+    def key(i):
+        for destroy, prio in priority.items():
+            if destroy in str(i):
+                return prio
+        return float('inf')
+
+    frees = sorted(frees, key=key)
+
+    body = iet.body._rebuild(frees=frees)
+    iet = iet._rebuild(body=body)
+    return iet, {}
 
 
 Null = Macro('NULL')

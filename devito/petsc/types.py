@@ -233,6 +233,53 @@ class RHSEq(Eq):
     pass
 
 
+def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
+    # TODO: Add check for time dimensions and utilise implicit dimensions.
+
+    # TODO: Current assumption is rhs is part of pde that remains
+    # constant at each timestep. Need to insert function to extract this from eq.
+
+    y_matvec, x_matvec, b_tmp = [
+        PETScArray(name=f'{prefix}_{target.name}',
+                   dtype=target.dtype,
+                   dimensions=target.dimensions,
+                   shape=target.shape, liveness='eager',
+                   halo=target.halo)
+        for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
+
+    # TODO: Extend to rearrange equation for implicit time stepping.
+
+    matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.lhs.subs(target, x_matvec),
+                            target=target, solver_parameters=solver_parameters),
+                            subdomain=eq.subdomain)
+
+    # Part of pde that remains constant at each timestep
+    rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
+                solver_parameters=solver_parameters), subdomain=eq.subdomain)
+
+    if not bcs:
+        return [matvecaction, rhs]
+
+    else:
+        bcs_for_matvec = []
+        for bc in bcs:
+            # TODO: Insert code to distiguish between essential and natural
+            # boundary conditions since these are treated differently within
+            # the solver
+            # NOTE: May eventually remove the essential bcs from the solve
+            # (and move to rhs) but for now, they are included since this
+            # is not trivial to implement when using DMDA
+            # NOTE: Below is temporary -> Just using this as a palceholder for
+            # the actual BC implementation for the matvec callback
+            bcs_for_matvec.append(MatVecEq(
+                y_matvec, LinearSolveExpr(bc.lhs.subs(target, x_matvec),
+                                          target=target,
+                                          solver_parameters=solver_parameters),
+                subdomain=bc.subdomain))
+
+        return [matvecaction] + bcs_for_matvec + [rhs]
+
+
 class LinearSolveExpr(sympy.Function, Reconstructable):
 
     __rargs__ = ('expr',)

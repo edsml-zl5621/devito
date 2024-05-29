@@ -29,7 +29,6 @@ FROM ${petscinstall}copybase as builder
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-##################  Install devito ############################################
 # Copy Devito
 ADD . /app/devito
 
@@ -87,6 +86,12 @@ RUN groupadd -g ${GROUP_ID} app && \
     chown -R app:app $APP_HOME
 
 COPY --from=builder --chown=app:app /app /app
+
+# petsc 
+COPY --from=petsc_builder --chown=app:app /home/petsc/petsc /home/petsc/petsc
+
+ENV PETSC_ARCH="devito_build"
+ENV PETSC_DIR=/"home/petsc/petsc"
 
 ADD --chown=app:app docker/run-jupyter.sh /jupyter
 ADD --chown=app:app docker/run-tests.sh /tests
