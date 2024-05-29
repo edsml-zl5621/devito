@@ -15,7 +15,6 @@ from .constant import *  # noqa
 
 # Some more internal types which depend on some of the types above
 from .parallel import *  # noqa
-from .petsc import *  # noqa
 
 # Needed only outside Devito
 from .grid import *  # noqa
