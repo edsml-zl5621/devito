@@ -4,7 +4,6 @@ from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, 
                            Section, HaloSpot, ExpressionBundle)
 from devito.tools import timed_pass
 from devito.petsc.types import LinearSolveExpr
-# from devito.ir.equations import OpMatVec, OpRHS
 from devito.petsc.utils import iet_mapper
 
 __all__ = ['iet_build']
@@ -61,9 +60,3 @@ def iet_build(stree):
         queues.setdefault(i.parent, []).append(body)
 
     assert False
-
-
-# # Mapping special Eq operations to their corresponding IET Expression subclass types.
-# # These operations correspond to subclasses of Eq utilised within PETScSolve.
-# linsolve_mapper = {OpMatVec: MatVecAction,
-#                    OpRHS: RHSLinearSystem}

@@ -14,10 +14,6 @@ from devito.symbolics import FieldFromComposite
 from devito.types.basic import IndexedBase
 
 
-# __all__ = ['DM', 'Mat', 'Vec', 'PetscMPIInt', 'KSP', 'PC', 'KSPConvergedReason',
-#            'DMDALocalInfo', 'PETScArray', 'MatVecEq', 'RHSEq', 'LinearSolveExpr',
-#            'PETScSolve', 'PETScStruct', 'SNES', 'PetscErrorCode']
-
 __all__ = ['PETScSolve']
 
 
@@ -245,6 +241,8 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
             # NOTE: May eventually remove the essential bcs from the solve
             # (and move to rhs) but for now, they are included since this
             # is not trivial to implement when using DMDA
+            # NOTE: Below is temporary -> Just using this as a palceholder for
+            # the actual BC implementation for the matvec callback
             bcs_for_matvec.append(MatVecEq(
                 y_matvec, LinearSolveExpr(bc.lhs.subs(target, x_matvec),
                                           target=target,
