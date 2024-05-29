@@ -14,10 +14,6 @@ from devito.symbolics import FieldFromComposite
 from devito.types.basic import IndexedBase
 
 
-# __all__ = ['DM', 'Mat', 'Vec', 'PetscMPIInt', 'KSP', 'PC', 'KSPConvergedReason',
-#            'DMDALocalInfo', 'PETScArray', 'MatVecEq', 'RHSEq', 'LinearSolveExpr',
-#            'PETScSolve', 'PETScStruct', 'SNES', 'PetscErrorCode']
-
 __all__ = ['PETScSolve']
 
 

@@ -4,7 +4,7 @@ from devito.ir.iet import (FindNodes, Call,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
                            Definition, BlankLine, PointerCast)
 from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
-                          Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
+                                Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 import cgen as c
 from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
@@ -266,7 +266,7 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
     # one PETScArray which corresponds to the 'seed' vector
     petsc_arr_write, = FindSymbols('writes').visit(body)
     petsc_arr_seed, = [i for i in petsc_arrays if i.function != petsc_arr_write.function]
-    
+
     # Struct needs to be defined explicitly here since CompositeObjects
     # do not have 'liveness'
     defn_struct = Definition(struct)
