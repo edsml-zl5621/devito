@@ -14,6 +14,9 @@ from devito.symbolics import FieldFromComposite
 from devito.types.basic import IndexedBase
 
 
+__all__ = ['PETScSolve']
+
+
 class DM(LocalObject):
     """
     PETSc Data Management object (DM).
