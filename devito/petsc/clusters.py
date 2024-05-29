@@ -1,7 +1,5 @@
 from devito.tools import timed_pass
-from devito.petsc import LinearSolveExpr
-
-__all__ = ['petsc_lift']
+from devito.petsc.types import LinearSolveExpr
 
 
 @timed_pass()

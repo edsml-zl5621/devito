@@ -1,13 +1,14 @@
 import numpy as np
 from devito import Grid, Function, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
-                           MatVecAction, FindNodes, RHSLinearSystem,
+                           FindNodes,
                            PointerCast, retrieve_iteration_tree)
 from devito.passes.iet.languages.C import CDataManager
-from devito.petsc import (DM, Mat, Vec, PetscMPIInt, KSP,
-                          PC, KSPConvergedReason, PETScArray, PETScSolve,
-                          LinearSolveExpr, PETScStruct)
+from devito.petsc.types import (DM, Mat, Vec, PetscMPIInt, KSP,
+                                PC, KSPConvergedReason, PETScArray, PETScSolve,
+                                LinearSolveExpr, PETScStruct)
 import os
+from devito.petsc.nodes import MatVecAction, RHSLinearSystem
 
 
 def test_petsc_local_object():

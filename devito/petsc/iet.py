@@ -1,14 +1,13 @@
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (FindNodes, Call, MatVecAction,
-                           Transformer, FindSymbols, LinearSolverExpression,
+from devito.ir.iet import (FindNodes, Call,
+                           Transformer, FindSymbols,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
                            Definition, BlankLine, PointerCast)
 from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
                           Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 import cgen as c
-
-__all__ = ['lower_petsc']
+from devito.petsc.nodes import MatVecAction, RHSLinearSystem, LinearSolverExpression
 
 
 @iet_pass
