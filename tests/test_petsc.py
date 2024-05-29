@@ -8,7 +8,7 @@ from devito.petsc.types import (DM, Mat, Vec, PetscMPIInt, KSP,
                                 PC, KSPConvergedReason, PETScArray, PETScSolve,
                                 LinearSolveExpr, PETScStruct)
 import os
-from devito.petsc.nodes import MatVecAction, RHSLinearSystem
+from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
 
 
 def test_petsc_local_object():
