@@ -1,5 +1,7 @@
 import numpy as np
 import os
+import pytest
+
 from conftest import skipif
 from devito import Grid, Function, TimeFunction, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
@@ -7,17 +9,10 @@ from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            PointerCast, retrieve_iteration_tree)
 from devito.passes.iet.languages.C import CDataManager
 from devito.petsc.types import (DM, Mat, Vec, PetscMPIInt, KSP,
-<<<<<<< HEAD
                                 PC, KSPConvergedReason, PETScArray,
                                 LinearSolveExpr, PETScStruct)
-from devito.petsc.solve import PETScSolve, separate_eqn
+from devito.petsc.solve import PETScSolve, separate_eqn, centre_stencil
 from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
-=======
-                                PC, KSPConvergedReason, PETScArray, PETScSolve,
-                                LinearSolveExpr, PETScStruct)
-import os
-from devito.petsc.nodes import MatVecAction, RHSLinearSystem
->>>>>>> 8911a782e (fix circular imports)
 
 
 @skipif('petsc')
