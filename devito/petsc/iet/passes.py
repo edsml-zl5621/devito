@@ -6,9 +6,9 @@ from devito.ir.iet import (FindNodes, Call,
 from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
                                 Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
-import cgen as c
 from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
 from devito.petsc.utils import linear_solver_mapper
+import cgen as c
 
 
 @iet_pass
