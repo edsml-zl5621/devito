@@ -1,5 +1,6 @@
+from functools import cached_property
+
 import numpy as np
-from cached_property import cached_property
 
 from devito.finite_differences import Weights, generate_indices
 from devito.finite_differences.tools import numeric_weights
@@ -8,7 +9,7 @@ from devito.tools import filter_ordered, as_tuple
 __all__ = ['Coefficient', 'Substitutions', 'default_rules']
 
 
-class Coefficient(object):
+class Coefficient:
     """
     Prepare custom coefficients to pass to a Substitutions object.
 
@@ -117,7 +118,7 @@ class Coefficient(object):
         return
 
 
-class Substitutions(object):
+class Substitutions:
     """
     Devito class to convert Coefficient objects into replacent rules
     to be applied when constructing a Devito Eq.

@@ -1,8 +1,7 @@
 from collections import ChainMap
 from itertools import product
-from functools import singledispatch
+from functools import singledispatch, cached_property
 
-from cached_property import cached_property
 import numpy as np
 import sympy
 from sympy.core.add import _addsort
@@ -894,7 +893,7 @@ class EvalDerivative(DifferentiableOp, sympy.Add):
         return self.func(*args, **kwargs)
 
 
-class diffify(object):
+class diffify:
 
     """
     Helper class based on single dispatch to reconstruct all nodes in a sympy

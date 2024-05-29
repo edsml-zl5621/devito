@@ -1,6 +1,7 @@
+from functools import cached_property
+
 import numpy as np
 import pytest
-from cached_property import cached_property
 
 from sympy import Mul  # noqa
 from sympy.core.mul import _mulsort
@@ -355,7 +356,7 @@ def test_time_dependent_split(opt):
     assert np.allclose(v.data[1, 1:-1, 1:-1], 1.0)
 
 
-class TestLifting(object):
+class TestLifting:
 
     @pytest.mark.parametrize('exprs,expected', [
         # none (different distance)
@@ -472,7 +473,7 @@ class TestLifting(object):
         assert trees[1].dimensions == [time]
 
 
-class TestAliases(object):
+class TestAliases:
 
     @pytest.mark.parametrize('exprs,expected', [
         # none (different distance)
@@ -2660,7 +2661,7 @@ class TestAliases(object):
         assert np.all(src.data == 8)
 
 
-class TestIsoAcoustic(object):
+class TestIsoAcoustic:
 
     def run_acoustic_forward(self, opt=None):
         shape = (50, 50, 50)
@@ -2714,7 +2715,7 @@ class TestIsoAcoustic(object):
         assert np.allclose(rec0.data, rec1.data, atol=10e-5)
 
 
-class TestTTI(object):
+class TestTTI:
 
     @cached_property
     def model(self):
@@ -2837,7 +2838,7 @@ class TestTTI(object):
         assert len([i for i in FindSymbols().visit(op) if i.is_Array]) == exp_arrays
 
 
-class TestTTIv2(object):
+class TestTTIv2:
 
     @switchconfig(profiling='advanced')
     @pytest.mark.parametrize('space_order,expected', [

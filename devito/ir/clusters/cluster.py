@@ -1,7 +1,7 @@
 from itertools import chain
+from functools import cached_property
 
 import numpy as np
-from cached_property import cached_property
 
 from devito.ir.equations import ClusterizedEq
 from devito.ir.support import (PARALLEL, PARALLEL_IF_PVT, BaseGuardBoundNext,
@@ -18,7 +18,7 @@ from devito.types import WeakFence, CriticalRegion
 __all__ = ["Cluster", "ClusterGroup"]
 
 
-class Cluster(object):
+class Cluster:
 
     """
     A Cluster is an ordered sequence of expressions in an IterationSpace.

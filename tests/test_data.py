@@ -3,14 +3,15 @@ import numpy as np
 
 from devito import (Grid, Function, TimeFunction, SparseTimeFunction, Dimension, # noqa
                     Eq, Operator, ALLOC_GUARD, ALLOC_ALIGNED, configuration,
-                    switchconfig)
+                    switchconfig, SparseFunction, PrecomputedSparseFunction,
+                    PrecomputedSparseTimeFunction)
 from devito.data import LEFT, RIGHT, Decomposition, loc_data_idx, convert_index
 from devito.tools import as_tuple
 from devito.types import Scalar
 from devito.data.allocators import ExternalAllocator
 
 
-class TestDataBasic(object):
+class TestDataBasic:
 
     def test_simple_indexing(self):
         """Test data packing/unpacking via basic indexing."""
@@ -208,7 +209,7 @@ class TestDataBasic(object):
         assert np.all(sf.data[1:-1, 0] == np.arange(8))
 
 
-class TestLocDataIDX(object):
+class TestLocDataIDX:
     """
     Test the support function loc_data_idx.
     """
@@ -229,7 +230,7 @@ class TestLocDataIDX(object):
         assert result == expected
 
 
-class TestMetaData(object):
+class TestMetaData:
 
     """
     Test correctness of metadata describing size and offset of the various
@@ -333,7 +334,7 @@ class TestMetaData(object):
         assert u.shape_allocated == (2, 11, 6)
 
 
-class TestDecomposition(object):
+class TestDecomposition:
 
     """
     Notes
@@ -485,7 +486,7 @@ class TestDecomposition(object):
         assert d.reshape((1, 3, 10, 11, 14)) == Decomposition([[0], [1], [], [2, 3]], 2)
 
 
-class TestDataDistributed(object):
+class TestDataDistributed:
 
     """
     Test Data indexing and manipulation when distributed over a set of MPI processes.
@@ -1383,7 +1384,7 @@ class TestDataDistributed(object):
             assert np.all(result[3] == [[3, 2, 1, 0]])
 
 
-class TestDataGather(object):
+class TestDataGather:
 
     @pytest.mark.parallel(mode=4)
     @pytest.mark.parametrize('rank', [0, 1, 2, 3])
@@ -1484,6 +1485,32 @@ class TestDataGather(object):
             assert np.all(ans == tdata)
         else:
             assert ans == np.array(None)
+
+    @pytest.mark.parallel(mode=[4, 6])
+    @pytest.mark.parametrize('sfunc', [SparseFunction,
+                                       SparseTimeFunction,
+                                       PrecomputedSparseFunction,
+                                       PrecomputedSparseTimeFunction])
+    @pytest.mark.parametrize('target_rank', [0, 2])
+    def test_gather_sparse(self, mode, sfunc, target_rank):
+        grid = Grid((11, 11))
+        myrank = grid._distributor.comm.Get_rank()
+        nt = 10
+        coords = [[0, 0], [0, .25], [0, .75], [0, 1]]
+        s = sfunc(name='s', grid=grid, npoint=4, r=4, nt=nt, coordinates=coords)
+
+        np.random.seed(1234)
+        try:
+            a = np.random.rand(s.nt, s.npoint_global)
+        except AttributeError:
+            a = np.random.rand(s.npoint_global,)
+
+        s.data[:] = a
+        out = s.data_gather(rank=target_rank)
+        if myrank == target_rank:
+            assert np.allclose(out, a)
+        else:
+            assert not out
 
 
 def test_scalar_arg_substitution():

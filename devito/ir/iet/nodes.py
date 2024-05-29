@@ -2,7 +2,7 @@
 
 import abc
 import inspect
-from cached_property import cached_property
+from functools import cached_property
 from collections import OrderedDict, namedtuple
 from collections.abc import Iterable
 
@@ -155,7 +155,7 @@ class Node(Signer):
         return (str(self.ccode),)
 
 
-class ExprStmt(object):
+class ExprStmt:
 
     """
     A mixin for Nodes that represent C expression statements, which are expressions
@@ -1290,7 +1290,7 @@ class Pragma(Node):
         return as_tuple(self.callback(*self.arguments))
 
 
-class Transfer(object):
+class Transfer:
 
     """
     An interface for Nodes that represent host-device data transfers.

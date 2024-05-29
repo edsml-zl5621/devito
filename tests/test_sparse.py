@@ -14,7 +14,7 @@ _sptypes = [SparseFunction, SparseTimeFunction,
             PrecomputedSparseFunction, PrecomputedSparseTimeFunction]
 
 
-class TestMatrixSparseTimeFunction(object):
+class TestMatrixSparseTimeFunction:
 
     def _precompute_linear_interpolation(self, points, grid, origin):
         """ Sample precompute function that, given point and grid information
@@ -401,7 +401,7 @@ class TestMatrixSparseTimeFunction(object):
             assert sf.data[0, 0] == -3.0  # 1 * (1 * 1) * 1 + (-1) * (2 * 2) * 1
 
 
-class TestSparseFunction(object):
+class TestSparseFunction:
 
     @pytest.mark.parametrize('sptype', _sptypes)
     def test_rebuild(self, sptype):
@@ -423,8 +423,7 @@ class TestSparseFunction(object):
         # Check new subfunction
         for subf in sp2._sub_functions:
             if getattr(sp2, subf) is not None:
-                assert getattr(sp2, subf).name.startswith("sr_")
-                assert np.all(getattr(sp2, subf).data == 0)
+                assert getattr(sp2, subf) == getattr(sp, subf)
 
         # Rebuild with different name as an alias
         sp2 = sp._rebuild(name="sr2", alias=True)

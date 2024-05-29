@@ -1,5 +1,5 @@
+from functools import cached_property
 from scipy import interpolate
-from cached_property import cached_property
 import numpy as np
 try:
     import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ __all__ = ['PointSource', 'Receiver', 'Shot', 'WaveletSource',
            'RickerSource', 'GaborSource', 'DGaussSource', 'TimeAxis']
 
 
-class TimeAxis(object):
+class TimeAxis:
     """
     Data object to store the TimeAxis. Exactly three of the four key arguments
     must be prescribed. Because of remainder values, it is not possible to create

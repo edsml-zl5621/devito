@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 from ctypes import c_int, c_void_p, sizeof
 from itertools import groupby, product
+from functools import cached_property
+
 from math import ceil, pow
 from sympy import factorint
 
 import atexit
 
-from cached_property import cached_property
 import numpy as np
 from cgen import Struct, Value
 
@@ -48,7 +49,7 @@ except ImportError as e:
         def __getattr__(self, name):
             return None
 
-    class MPI(object, metaclass=NoneMetaclass):
+    class MPI(metaclass=NoneMetaclass):
         init_error = e
 
         @classmethod
@@ -479,6 +480,20 @@ class SparseDistributor(AbstractDistributor):
         else:
             raise TypeError('Need `npoint` int or tuple argument')
         return tuple(glb_npoint)
+
+    @cached_property
+    def all_ranges(self):
+        """The global ranges of all MPI ranks."""
+        ret = []
+        for i in self.decomposition[0]:
+            # i might be empty if there is less receivers than rank such as for a
+            # point source
+            try:
+                ret.append(EnrichedTuple(range(min(i), max(i) + 1),
+                                         getters=self.dimensions))
+            except ValueError:
+                ret.append(EnrichedTuple(range(0, 0), getters=self.dimensions))
+        return tuple(ret)
 
     @property
     def distributor(self):

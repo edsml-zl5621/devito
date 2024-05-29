@@ -1,7 +1,7 @@
 from collections import OrderedDict, defaultdict, namedtuple
 from itertools import combinations
+from functools import cached_property
 
-from cached_property import cached_property
 import numpy as np
 
 from devito.ir import (Cluster, Forward, GuardBound, Interval, IntervalGroup,
@@ -317,7 +317,7 @@ class Buffering(Queue):
         return init + processed
 
 
-class Buffer(object):
+class Buffer:
 
     """
     A buffer with metadata attached.
@@ -660,7 +660,7 @@ class Buffer(object):
         return Map(v % self.xd.symbolic_size, v)
 
 
-class AccessValue(object):
+class AccessValue:
 
     """
     A simple data structure tracking the accesses performed by a given Function

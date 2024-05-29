@@ -2,7 +2,7 @@
 
 from subprocess import PIPE, Popen, DEVNULL, run
 
-from cached_property import cached_property
+from functools import cached_property
 import cpuinfo
 import ctypes
 import numpy as np
@@ -595,7 +595,7 @@ def get_platform():
     return CPU64
 
 
-class Platform(object):
+class Platform:
 
     registry = {}
     """

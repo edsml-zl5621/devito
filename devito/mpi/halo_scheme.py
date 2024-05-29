@@ -1,8 +1,8 @@
 from collections import OrderedDict, namedtuple, defaultdict
 from itertools import product
 from operator import attrgetter
+from functools import cached_property
 
-from cached_property import cached_property
 from sympy import Max, Min
 import sympy
 
@@ -35,7 +35,7 @@ Halo = namedtuple('Halo', 'dim side')
 OMapper = namedtuple('OMapper', 'core owned')
 
 
-class HaloScheme(object):
+class HaloScheme:
 
     """
     A HaloScheme describes a set of halo exchanges through a mapper:
