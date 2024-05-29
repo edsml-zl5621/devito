@@ -1,14 +1,15 @@
 import numpy as np
 import os
 from conftest import skipif
-from devito import Grid, Function, Eq, Operator, switchconfig
+from devito import Grid, Function, TimeFunction, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            FindNodes,
                            PointerCast, retrieve_iteration_tree)
 from devito.passes.iet.languages.C import CDataManager
 from devito.petsc.types import (DM, Mat, Vec, PetscMPIInt, KSP,
-                                PC, KSPConvergedReason, PETScArray, PETScSolve,
+                                PC, KSPConvergedReason, PETScArray,
                                 LinearSolveExpr, PETScStruct)
+from devito.petsc.solve import PETScSolve, separate_eqn
 from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
 
 
@@ -319,3 +320,45 @@ def test_cinterface_petsc_struct():
     assert any(isinstance(i, PETScStruct) for i in op.parameters)
     assert 'struct MatContext\n{' not in ccode
     assert 'struct MatContext\n{' in hcode
+
+
+@skipif('petsc')
+def test_separate_eqn():
+    """
+    Test the separate_eqn function.
+
+    This function is called within PETScSolve to decompose the equation
+    into the form F(x) = b. This is necessary to utilise the SNES
+    interface in PETSc.
+    """
+    grid = Grid((2, 2))
+
+    f1 = Function(name='f1', grid=grid, space_order=2)
+    g1 = Function(name='g1', grid=grid, space_order=2)
+    eq1 = Eq(f1.laplace, g1)
+    b1, F1 = separate_eqn(eq1, f1)
+    assert str(b1) == 'g1(x, y)'
+    assert str(F1) == 'Derivative(f1(x, y), (x, 2)) + Derivative(f1(x, y), (y, 2))'
+
+    f2 = TimeFunction(name='f2', grid=grid, space_order=2)
+    g2 = TimeFunction(name='g2', grid=grid, space_order=2)
+    eq2 = Eq(f2.dt, f2.laplace + g2)
+    b2, F2 = separate_eqn(eq2, f2.forward)
+    assert str(b2) == 'g2(t, x, y) + Derivative(f2(t, x, y), (x, 2))' + \
+        ' + Derivative(f2(t, x, y), (y, 2)) + f2(t, x, y)/dt'
+    assert str(F2) == 'f2(t + dt, x, y)/dt'
+
+    # Implicit Time Stepping
+    eqn3 = Eq(f2.dt, f2.forward.laplace + g2)
+    b3, F3 = separate_eqn(eqn3, f2.forward)
+    assert str(b3) == 'g2(t, x, y) + f2(t, x, y)/dt'
+    assert str(F3) == '-Derivative(f2(t + dt, x, y), (x, 2)) - ' + \
+        'Derivative(f2(t + dt, x, y), (y, 2)) + f2(t + dt, x, y)/dt'
+
+    # Semi-implicit Time Stepping
+    eqn4 = Eq(f2.dt, f2.forward.laplace + f2.laplace + g2)
+    b4, F4 = separate_eqn(eqn4, f2.forward)
+    assert str(b4) == 'g2(t, x, y) + Derivative(f2(t, x, y), (x, 2))' + \
+        ' + Derivative(f2(t, x, y), (y, 2)) + f2(t, x, y)/dt'
+    assert str(F4) == '-Derivative(f2(t + dt, x, y), (x, 2)) -' + \
+        ' Derivative(f2(t + dt, x, y), (y, 2)) + f2(t + dt, x, y)/dt'
