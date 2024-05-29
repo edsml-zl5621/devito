@@ -10,7 +10,7 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpMatVec, OpRHS
+from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, WithLock, PrefetchUpdate, detect_io)
@@ -28,7 +28,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'MatVecAction', 'RHSLinearSystem']
+           'CallableBody', 'Transfer', 'Callback']
 
 # First-class IET nodes
 
