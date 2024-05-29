@@ -236,18 +236,6 @@ class RHSEq(Eq):
     pass
 
 
-class MockEq(Eq):
-    """
-    Represents a mock/placeholder equation to ensure distinct iteration loops.
-
-    For example, the mat-vec action iteration loop is to be isolated from the
-    expression loop used to build the RHS of the linear system. This separation
-    facilitates the utilisation of the mat-vec iteration loop in callback functions
-    created at the IET level.
-    """
-    pass
-
-
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
@@ -348,31 +336,21 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     func = Reconstructable._rebuild
 
 
-def petsc_lift(clusters):
-    """
-    Lift the iteration space associated with each PETSc equation.
-    TODO: Potentially only need to lift the PETSc equations required
-    by the callback functions.
-    """
-    processed = []
-    for c in clusters:
-
-        ispace = c.ispace
-        if isinstance(c.exprs[0].rhs, LinearSolveExpr):
-            ispace = c.ispace.lift(c.exprs[0].rhs.target.dimensions)
-
-        processed.append(c.rebuild(ispace=ispace))
-
-    return processed
-
-
 class PETScStruct(CompositeObject):
 
+<<<<<<< HEAD:devito/petsc/types.py
     __rargs__ = ('name', 'usr_ctx')
 
     def __init__(self, name, usr_ctx):
         pfields = [(i._C_name, dtype_to_ctype(i.dtype))
                    for i in usr_ctx if isinstance(i, Symbol)]
+=======
+    __rargs__ = ('name', 'usr_ctx',)
+
+    def __init__(self, name, usr_ctx):
+        pfields = [(i._C_name,
+                    dtype_to_ctype(i.dtype)) for i in usr_ctx if isinstance(i, Symbol)]
+>>>>>>> dedc02610 (compiler: Add core petsc calls to lower_petsc):devito/types/petsc.py
         self._usr_ctx = usr_ctx
         super().__init__(name, 'MatContext', pfields)
 
