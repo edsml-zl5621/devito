@@ -140,6 +140,38 @@ def test_petsc_solve():
     assert len(matvec_callback[0].parameters) == 3
 
 
+def test_multiple_petsc_solves():
+    """
+    Test multiple PETScSolves.
+    """
+    grid = Grid((2, 2))
+
+    f1 = Function(name='f1', grid=grid, space_order=2)
+    g1 = Function(name='g1', grid=grid, space_order=2)
+
+    f2 = Function(name='f2', grid=grid, space_order=2)
+    g2 = Function(name='g2', grid=grid, space_order=2)
+
+    eqn1 = Eq(f1.laplace, g1)
+    eqn2 = Eq(f2.laplace, g2)
+
+    petsc1 = PETScSolve(eqn1, f1)
+    petsc2 = PETScSolve(eqn2, f2)
+
+    with switchconfig(openmp=False):
+        op = Operator(petsc1+petsc2, opt='noop')
+
+    callable_roots = [meta_call.root for meta_call in op._func_table.values()]
+
+    assert len(callable_roots) == 2
+
+    structs = [i for i in op.parameters if isinstance(i, PETScStruct)]
+
+    # Only create 1 struct per Grid/DMDA
+    assert len(structs) == 1
+    assert len(structs[0].fields) == 6
+
+
 def test_petsc_cast():
     """
     Test casting of PETScArray.
