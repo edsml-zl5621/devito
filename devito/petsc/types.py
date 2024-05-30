@@ -1,11 +1,11 @@
 import sympy
+from functools import cached_property
 import numpy as np
 
 from devito.tools import CustomDtype
 from devito.types import LocalObject, Eq, CompositeObject
 from devito.types.utils import DimensionTuple
 from devito.types.array import ArrayBasic
-from functools import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction, Symbol
 from devito.finite_differences.tools import fd_weights_registry
@@ -209,7 +209,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
     # TODO: Current assumption is rhs is part of pde that remains
-    # constant at each time-step. Need to insert function to extract this from eq.
+    # constant at each timestep. Need to insert function to extract this from eq.
 
     y_matvec, x_matvec, b_tmp = [
         PETScArray(name=f'{prefix}_{target.name}',
@@ -225,12 +225,12 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                             target=target, solver_parameters=solver_parameters),
                             subdomain=eq.subdomain)
 
-    # Part of pde that remains constant at each time-step
+    # Part of pde that remains constant at each timestep
     rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
                 solver_parameters=solver_parameters), subdomain=eq.subdomain)
 
     if not bcs:
-        return [matvecaction] + [rhs]
+        return [matvecaction, rhs]
 
     else:
         bcs_for_matvec = []
@@ -326,7 +326,7 @@ def petsc_lift(clusters):
 
 class PETScStruct(CompositeObject):
 
-    __rargs__ = ('name', 'usr_ctx',)
+    __rargs__ = ('name', 'usr_ctx')
 
     def __init__(self, name, usr_ctx):
         pfields = [(i._C_name,
