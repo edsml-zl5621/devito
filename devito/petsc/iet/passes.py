@@ -261,13 +261,14 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
 def create_matvec_callback(target, body, solver_objs, objs, struct):
 
     # There will be 2 PETScArrays within the body
-    petsc_arrays = [i.function for i in FindSymbols('indexedbases').visit(body)
+    petsc_arrays = [i for i in FindSymbols('indexedbases').visit(body)
                     if isinstance(i.function, PETScArray)]
 
     # There will only be one PETScArray that is written to within this body and
     # one PETScArray which corresponds to the 'seed' vector
     petsc_arr_write, = FindSymbols('writes').visit(body)
-    petsc_arr_seed, = [i for i in petsc_arrays if i.function != petsc_arr_write.function]
+    petsc_arr_seed, = [i.function for i in petsc_arrays
+                       if i.function != petsc_arr_write.function]
 
     # Struct needs to be defined explicitly here since CompositeObjects
     # do not have 'liveness'
@@ -292,21 +293,21 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
         'DMGetLocalVector', [objs['da'], Byref(solver_objs['Y_local'])])
 
     vec_get_array_y = petsc_call(
-        'VecGetArray', [solver_objs['Y_local'], Byref(petsc_arr_write.function)])
+        'VecGetArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)])
 
     vec_get_array_x = petsc_call(
-        'VecGetArray', [solver_objs['X_local'], Byref(petsc_arrays[0])])
+        'VecGetArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)])
 
     dm_get_local_info = petsc_call('DMDAGetLocalInfo', [
-        objs['da'], Byref(petsc_arrays[0].function.dmda_info)])
+        objs['da'], Byref(petsc_arr_seed.function.dmda_info)])
 
     casts = [PointerCast(i.function) for i in petsc_arrays]
 
     vec_restore_array_y = petsc_call(
-        'VecRestoreArray', [solver_objs['Y_local'], Byref(petsc_arr_write)])
+        'VecRestoreArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)])
 
     vec_restore_array_x = petsc_call(
-        'VecRestoreArray', [solver_objs['X_local'], Byref(petsc_arr_seed)])
+        'VecRestoreArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)])
 
     dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
         objs['da'], solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']])
