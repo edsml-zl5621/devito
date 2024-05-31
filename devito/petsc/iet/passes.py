@@ -10,8 +10,7 @@ from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
                                 Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
-from devito.petsc.utils import (solver_mapper, core_metadata,
-                                petsc_call, petsc_call_mpi)
+from devito.petsc.utils import (solver_mapper, petsc_call, petsc_call_mpi)
 
 
 @iet_pass
@@ -56,7 +55,7 @@ def lower_petsc(iet, **kwargs):
             solver = generate_solver_calls(solver_objs, objs, matvec, target)
             setup.extend(solver)
             break
-        
+
         # Create the body of the matrix-vector callback for target
         for iter, (matvec,) in matvec_mapper.items():
             if matvec.expr.rhs.target != target:
@@ -84,9 +83,6 @@ def lower_petsc(iet, **kwargs):
 
     body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
     iet = iet._rebuild(body=body)
-
-    # metadata = core_metadata()
-    # metadata.update({'efuncs': efuncs})s
 
     return iet, {'efuncs': tuple(efuncs.values())}
 
@@ -367,8 +363,9 @@ def rebuild_expr_mapper(callable):
 def transform_efuncs(efuncs, struct):
     subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
     for efunc in efuncs.values():
-        efuncs[efunc.name] = Transformer(rebuild_expr_mapper(efunc)).visit(efunc)
-        efuncs[efunc.name] = Uxreplace(subs).visit(efunc)
+        transformed_efunc = Transformer(rebuild_expr_mapper(efunc)).visit(efunc)
+        transformed_efunc = Uxreplace(subs).visit(transformed_efunc)
+        efuncs[efunc.name] = transformed_efunc
     return efuncs
 
 
