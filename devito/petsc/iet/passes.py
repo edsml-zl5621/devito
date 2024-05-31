@@ -7,7 +7,7 @@ from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
                                 Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
-from devito.petsc.utils import (linear_solver_mapper, core_metadata,
+from devito.petsc.utils import (solver_mapper, core_metadata,
                                 petsc_call, petsc_call_mpi)
 import cgen as c
 
@@ -164,7 +164,7 @@ def create_dmda(target, objs):
     # MPI communicator
     args = [objs['comm']]
 
-    # Type of ghost nodes 
+    # Type of ghost nodes
     args.extend(['DM_BOUNDARY_GHOSTED' for _ in range(len(target.space_dimensions))])
 
     # Stencil type
@@ -214,42 +214,49 @@ def build_solver_objs(target):
 def generate_solver_calls(solver_objs, objs, matvec, target):
 
     solver_params = matvec.expr.rhs.solver_parameters
-    
+
     snes_create = petsc_call('SNESCreate', [objs['comm'], Byref(solver_objs['snes'])])
-    
+
     snes_set_dm = petsc_call('SNESSetDM', [solver_objs['snes'], objs['da']])
 
     create_matrix = petsc_call('DMCreateMatrix', [objs['da'], Byref(solver_objs['Jac'])])
 
     # NOTE: Assumming all solves are linear for now.
     snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
-    
-    global_x = petsc_call('DMCreateGlobalVector', [objs['da'], Byref(solver_objs['x_global'])])
 
-    local_x = petsc_call('DMCreateLocalVector', [objs['da'], Byref(solver_objs['x_local'])])
-    
-    global_b = petsc_call('DMCreateGlobalVector', [objs['da'], Byref(solver_objs['b_global'])])
-    
-    local_b = petsc_call('DMCreateLocalVector', [objs['da'], Byref(solver_objs['b_local'])])
-    
-    snes_get_ksp = petsc_call('SNESGetKSP', [solver_objs['snes'], Byref(solver_objs['ksp'])])
-    
+    global_x = petsc_call('DMCreateGlobalVector',
+                          [objs['da'], Byref(solver_objs['x_global'])])
+
+    local_x = petsc_call('DMCreateLocalVector',
+                         [objs['da'], Byref(solver_objs['x_local'])])
+
+    global_b = petsc_call('DMCreateGlobalVector',
+                          [objs['da'], Byref(solver_objs['b_global'])])
+
+    local_b = petsc_call('DMCreateLocalVector',
+                         [objs['da'], Byref(solver_objs['b_local'])])
+
+    snes_get_ksp = petsc_call('SNESGetKSP',
+                              [solver_objs['snes'], Byref(solver_objs['ksp'])])
+
     vec_replace_array = petsc_call(
-        'VecReplaceArray',
-        [solver_objs['x_local'], FieldFromPointer(target._C_field_data, target._C_symbol)])
-    
-    ksp_set_tols = petsc_call('KSPSetTolerances', [
-        solver_objs['ksp'], solver_params['ksp_rtol'], solver_params['ksp_atol'],
-        solver_params['ksp_divtol'], solver_params['ksp_max_it']])
-    
-    ksp_set_type = petsc_call('KSPSetType', [
-        solver_objs['ksp'], linear_solver_mapper[solver_params['ksp_type']]])
-    
-    ksp_get_pc = petsc_call('KSPGetPC', [solver_objs['ksp'], Byref(solver_objs['pc'])])
-    
-    pc_set_type = petsc_call('PCSetType', [
-        solver_objs['pc'], linear_solver_mapper[solver_params['pc_type']]])
-    
+        'VecReplaceArray', [solver_objs['x_local'],
+                            FieldFromPointer(target._C_field_data, target._C_symbol)])
+
+    ksp_set_tols = petsc_call(
+        'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
+                             solver_params['ksp_atol'], solver_params['ksp_divtol'],
+                             solver_params['ksp_max_it']])
+
+    ksp_set_type = petsc_call(
+        'KSPSetType', [solver_objs['ksp'], solver_mapper[solver_params['ksp_type']]])
+
+    ksp_get_pc = petsc_call('KSPGetPC',
+                            [solver_objs['ksp'], Byref(solver_objs['pc'])])
+
+    pc_set_type = petsc_call('PCSetType',
+                             [solver_objs['pc'], solver_mapper[solver_params['pc_type']]])
+
     ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
     return (
@@ -285,34 +292,42 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
     # Struct needs to be defined explicitly here since CompositeObjects
     # do not have 'liveness'
     defn_struct = Definition(struct)
-    
+
     mat_get_dm = petsc_call('MatGetDM', [solver_objs['Jac'], Byref(objs['da'])])
-    
-    dm_get_app_context = petsc_call('DMGetApplicationContext', [objs['da'], Byref(struct._C_symbol)])
-    
-    dm_get_local_xvec = petsc_call('DMGetLocalVector', [objs['da'], Byref(solver_objs['X_local'])])
-    
-    global_to_local_begin = petsc_call('DMGlobalToLocalBegin', [
-        objs['da'], solver_objs['X_global'], 'INSERT_VALUES', solver_objs['X_local']])
-    
+
+    dm_get_app_context = petsc_call(
+        'DMGetApplicationContext', [objs['da'], Byref(struct._C_symbol)])
+
+    dm_get_local_xvec = petsc_call(
+        'DMGetLocalVector', [objs['da'], Byref(solver_objs['X_local'])])
+
+    global_to_local_begin = petsc_call(
+        'DMGlobalToLocalBegin', [objs['da'], solver_objs['X_global'],
+                                 'INSERT_VALUES', solver_objs['X_local']])
+
     global_to_local_end = petsc_call('DMGlobalToLocalEnd', [
         objs['da'], solver_objs['X_global'], 'INSERT_VALUES', solver_objs['X_local']])
-    
-    dm_get_local_yvec = petsc_call('DMGetLocalVector', [objs['da'], Byref(solver_objs['Y_local'])])
-    
-    vec_get_array_y = petsc_call('VecGetArray', [solver_objs['Y_local'], Byref(petsc_arr_write.function)])
-    
-    vec_get_array_x = petsc_call('VecGetArray', [solver_objs['X_local'], Byref(petsc_arrays[0])])
-    
+
+    dm_get_local_yvec = petsc_call(
+        'DMGetLocalVector', [objs['da'], Byref(solver_objs['Y_local'])])
+
+    vec_get_array_y = petsc_call(
+        'VecGetArray', [solver_objs['Y_local'], Byref(petsc_arr_write.function)])
+
+    vec_get_array_x = petsc_call(
+        'VecGetArray', [solver_objs['X_local'], Byref(petsc_arrays[0])])
+
     dm_get_local_info = petsc_call('DMDAGetLocalInfo', [
         objs['da'], Byref(petsc_arrays[0].function.dmda_info)])
 
     casts = [PointerCast(i.function) for i in petsc_arrays]
-    
-    vec_restore_array_y = petsc_call('VecRestoreArray', [solver_objs['Y_local'], Byref(petsc_arr_write)])
 
-    vec_restore_array_x = petsc_call('VecRestoreArray', [solver_objs['X_local'], Byref(petsc_arr_seed)])
-    
+    vec_restore_array_y = petsc_call(
+        'VecRestoreArray', [solver_objs['Y_local'], Byref(petsc_arr_write)])
+
+    vec_restore_array_x = petsc_call(
+        'VecRestoreArray', [solver_objs['X_local'], Byref(petsc_arr_seed)])
+
     dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
         objs['da'], solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']])
 
@@ -343,12 +358,12 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
         func_return])
 
     matvec_callback = Callable(
-        'MyMatShellMult_'+str(target.name), matvec_body, retval=objs['err'],
+        'MyMatShellMult_%s' % target.name, matvec_body, retval=objs['err'],
         parameters=(solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global']))
 
-    matvec_operation = petsc_call('MatShellSetOperation', [
-            solver_objs['Jac'], 'MATOP_MULT', Callback(matvec_callback.name,
-                                                       void, void)])
+    matvec_operation = petsc_call(
+        'MatShellSetOperation', [solver_objs['Jac'], 'MATOP_MULT',
+                                 Callback(matvec_callback.name, void, void)])
 
     return matvec_callback, matvec_operation
 
@@ -361,14 +376,12 @@ def rebuild_expr_mapper(callable):
 
 
 def transform_efuncs(efuncs, struct):
-
     efuncs_new = []
     for efunc in efuncs:
         new_body = efunc.body
         for i in struct.usr_ctx:
             new_body = Uxreplace({i: FieldFromPointer(i, struct)}).visit(new_body)
-        efunc_with_new_body = efunc._rebuild(body=new_body)
-        efuncs_new.append(efunc_with_new_body)
+        efuncs_new.append(efunc._rebuild(body=new_body))
 
     return efuncs_new
 

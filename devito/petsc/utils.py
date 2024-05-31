@@ -11,11 +11,12 @@ iet_mapper = {OpMatVec: MatVecAction,
               OpRHS: RHSLinearSystem}
 
 
-linear_solver_mapper = {
+solver_mapper = {
     'gmres': 'KSPGMRES',
     'jacobi': 'PCJACOBI',
     None: 'PCNONE'
 }
+
 
 @memoized_func
 def get_petsc_dir():
@@ -69,4 +70,3 @@ def petsc_call(specific_call, call_args):
 def petsc_call_mpi(specific_call, call_args):
     general_call = 'PetscCallMPI'
     return Call(general_call, [Call(specific_call, arguments=call_args)])
-
