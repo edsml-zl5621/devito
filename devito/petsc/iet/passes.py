@@ -10,8 +10,7 @@ from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
                                 Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
-from devito.petsc.utils import (solver_mapper, core_metadata,
-                                petsc_call, petsc_call_mpi)
+from devito.petsc.utils import (solver_mapper, petsc_call, petsc_call_mpi)
 
 
 @iet_pass
@@ -25,14 +24,9 @@ def lower_petsc(iet, **kwargs):
 
     # Collect all petsc solution fields
     unique_targets = list(set([i.expr.rhs.target for i in petsc_nodes]))
-
     init = init_petsc(**kwargs)
-
-    # Create context data struct
-    struct = build_struct(iet)
-
+    struct = build_petsc_struct(iet)
     objs = build_core_objects(unique_targets[-1], **kwargs)
-
     # Create core PETSc calls (not specific to each PETScSolve)
     core = make_core_petsc_calls(unique_targets[-1], struct, objs, **kwargs)
 
@@ -56,7 +50,7 @@ def lower_petsc(iet, **kwargs):
             solver = generate_solver_calls(solver_objs, objs, matvec, target)
             setup.extend(solver)
             break
-        
+
         # Create the body of the matrix-vector callback for target
         for iter, (matvec,) in matvec_mapper.items():
             if matvec.expr.rhs.target != target:
@@ -76,17 +70,13 @@ def lower_petsc(iet, **kwargs):
         setup.extend([matvec_op, BlankLine])
         efuncs[matvec_callback.name] = matvec_callback
 
-    # Remove the LinSolveExpr's from iet and efuncs that were used to carry
-    # metadata e.g solver_parameters
+    # Remove the LinSolveExpr's from iet and efuncs
     subs.update(rebuild_expr_mapper(iet))
     iet = Transformer(subs).visit(iet)
     efuncs = transform_efuncs(efuncs, struct)
 
     body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
     iet = iet._rebuild(body=body)
-
-    # metadata = core_metadata()
-    # metadata.update({'efuncs': efuncs})s
 
     return iet, {'efuncs': tuple(efuncs.values())}
 
@@ -103,7 +93,7 @@ def init_petsc(**kwargs):
     return tuple([petsc_func_begin_user, initialize])
 
 
-def build_struct(iet):
+def build_petsc_struct(iet):
     # Place all context data required by the shell routines
     # into a PETScStruct
     usr_ctx = []
@@ -359,16 +349,20 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
 
 
 def rebuild_expr_mapper(callable):
+    # This mapper removes LinSolveExpr instances from the callable
+    # These expressions were previously used in lower_petc to carry metadata,
+    # such as solver_parameters
+    nodes = FindNodes(LinearSolverExpression).visit(callable)
     return {expr: expr._rebuild(
-        expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr)) for
-        expr in FindNodes(LinearSolverExpression).visit(callable)}
+        expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr)) for expr in nodes}
 
 
 def transform_efuncs(efuncs, struct):
     subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
     for efunc in efuncs.values():
-        efuncs[efunc.name] = Transformer(rebuild_expr_mapper(efunc)).visit(efunc)
-        efuncs[efunc.name] = Uxreplace(subs).visit(efunc)
+        transformed_efunc = Transformer(rebuild_expr_mapper(efunc)).visit(efunc)
+        transformed_efunc = Uxreplace(subs).visit(transformed_efunc)
+        efuncs[efunc.name] = transformed_efunc
     return efuncs
 
 

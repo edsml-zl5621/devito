@@ -149,7 +149,7 @@ class PETScArray(ArrayBasic, Differentiable):
         # Reverse it since DMDA is setup backwards to Devito dimensions.
         return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
 
-    @property
+    @cached_property
     def dmda_info(self):
         # To access the local grid info via the DM in
         # PETSc you use DMDAGetLocalInfo(da, &info)
@@ -329,7 +329,7 @@ class PETScStruct(CompositeObject):
     __rargs__ = ('name', 'usr_ctx')
 
     def __init__(self, name, usr_ctx):
-        pfields = [(i._C_name, dtype_to_ctype(i.dtype)) 
+        pfields = [(i._C_name, dtype_to_ctype(i.dtype))
                    for i in usr_ctx if isinstance(i, Symbol)]
         self._usr_ctx = usr_ctx
         super().__init__(name, 'MatContext', pfields)
