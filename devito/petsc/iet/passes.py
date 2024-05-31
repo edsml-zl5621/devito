@@ -1,3 +1,6 @@
+from collections import OrderedDict
+import cgen as c
+
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Call,
                            Transformer, FindSymbols,
@@ -9,7 +12,6 @@ from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
 from devito.petsc.utils import (solver_mapper, core_metadata,
                                 petsc_call, petsc_call_mpi)
-import cgen as c
 
 
 @iet_pass
@@ -38,7 +40,7 @@ def lower_petsc(iet, **kwargs):
 
     subs = {}
     setup = []
-    efuncs = []
+    efuncs = OrderedDict()
 
     for target in unique_targets:
         solver_objs = build_solver_objs(target)
@@ -72,27 +74,21 @@ def lower_petsc(iet, **kwargs):
             struct)
 
         setup.extend([matvec_op, BlankLine])
-        efuncs.append(matvec_callback)
+        efuncs[matvec_callback.name] = matvec_callback
 
-    # Remove the LinSolveExpr from iet and efuncs that were used to carry
+    # Remove the LinSolveExpr's from iet and efuncs that were used to carry
     # metadata e.g solver_parameters
     subs.update(rebuild_expr_mapper(iet))
-    for efunc in efuncs:
-        subs.update({efunc: rebuild_expr_mapper(efunc)})
-
     iet = Transformer(subs).visit(iet)
-    efuncs = [Transformer(subs[efunc]).visit(efunc) for efunc in efuncs]
-
-    # Replace symbols appearing in each efunc with a pointer to the PETScStruct
-    efuncs = uxreplace_efuncs(efuncs, struct)
+    efuncs = transform_efuncs(efuncs, struct)
 
     body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
     iet = iet._rebuild(body=body)
 
     # metadata = core_metadata()
-    # metadata.update({'efuncs': efuncs})
+    # metadata.update({'efuncs': efuncs})s
 
-    return iet, {'efuncs': efuncs}
+    return iet, {'efuncs': tuple(efuncs.values())}
 
 
 def init_petsc(**kwargs):
@@ -368,14 +364,12 @@ def rebuild_expr_mapper(callable):
         expr in FindNodes(LinearSolverExpression).visit(callable)}
 
 
-def uxreplace_efuncs(efuncs, struct):
-    efuncs_new = []
-    for efunc in efuncs:
-        new_body = efunc.body
-        for i in struct.usr_ctx:
-            new_body = Uxreplace({i: FieldFromPointer(i, struct)}).visit(new_body)
-        efuncs_new.append(efunc._rebuild(body=new_body))
-    return efuncs_new
+def transform_efuncs(efuncs, struct):
+    subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
+    for efunc in efuncs.values():
+        efuncs[efunc.name] = Transformer(rebuild_expr_mapper(efunc)).visit(efunc)
+        efuncs[efunc.name] = Uxreplace(subs).visit(efunc)
+    return efuncs
 
 
 Null = Macro('NULL')
