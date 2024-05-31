@@ -114,7 +114,6 @@ class Graph:
 
         # Apply `func`
         efuncs = dict(self.efuncs)
-
         for i in dag.topological_sort():
             efunc, metadata = func(efuncs[i], **kwargs)
 
