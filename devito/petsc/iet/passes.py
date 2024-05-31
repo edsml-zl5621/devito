@@ -37,34 +37,31 @@ def lower_petsc(iet, **kwargs):
     matvec_mapper = MapNodes(Iteration, MatVecAction, 'groupby').visit(iet)
 
     subs = {}
-
     setup = []
     efuncs = []
 
     for target in unique_targets:
         solver_objs = build_solver_objs(target)
         matvec_body_list = List()
-        solver_setup = False
 
+        # Generate solver setup for target
         for iter, (matvec,) in matvec_mapper.items():
-
             # Skip the MatVecAction if it is not associated with the target
             # There will most likely be more than one MatVecAction
             # associated with the target e.g interior matvec + BC matvecs
             if matvec.expr.rhs.target != target:
                 continue
-
-            # Only need to generate solver setup once per target
-            if not solver_setup:
-                solver = generate_solver_calls(solver_objs, objs, matvec, target)
-                setup.extend(solver)
-                solver_setup = True
-
-            # Make the body of the matrix-vector callback for this target
-            matvec_body = matvec_body_list._rebuild(body=[
-                matvec_body_list.body, iter[0]])
+            solver = generate_solver_calls(solver_objs, objs, matvec, target)
+            setup.extend(solver)
+            break
+        
+        # Create the body of the matrix-vector callback for target
+        for iter, (matvec,) in matvec_mapper.items():
+            if matvec.expr.rhs.target != target:
+                continue
+            matvec_body = matvec_body_list._rebuild(
+                body=[matvec_body_list.body, iter[0]])
             matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
-
             # Remove the iteration loop from the main kernel encapsulating
             # the matvec equations since they are moved to the callback
             subs.update({iter[0]: None})
@@ -114,7 +111,6 @@ def build_struct(iet):
     # Place all context data required by the shell routines
     # into a PETScStruct
     usr_ctx = []
-
     basics = FindSymbols('basics').visit(iet)
     avoid = FindSymbols('dimensions|indexedbases').visit(iet)
     usr_ctx.extend(data for data in basics if data not in avoid)
@@ -128,7 +124,6 @@ def make_core_petsc_calls(target, struct, objs, **kwargs):
 
     # Create DMDA
     dmda = create_dmda(target, objs)
-
     dm_setup = petsc_call('DMSetUp', [objs['da']])
     dm_app_ctx = petsc_call('DMSetApplicationContext', [objs['da'], struct])
     dm_mat_type = petsc_call('DMSetMatType', [objs['da'], 'MATSHELL'])
@@ -368,7 +363,6 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
 
 
 def rebuild_expr_mapper(callable):
-
     return {expr: expr._rebuild(
         expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr)) for
         expr in FindNodes(LinearSolverExpression).visit(callable)}
