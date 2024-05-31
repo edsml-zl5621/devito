@@ -52,6 +52,10 @@ def lower_petsc(iet, **kwargs):
         setup.extend(create_dmda_calls(dmda, objs))
 
     subs = {}
+<<<<<<< HEAD
+=======
+    setup = []
+>>>>>>> 2ee1e29cf (compiler: Add transform_efuncs to lower_petsc)
     efuncs = OrderedDict()
 
     # Create the PETSc calls which are specific to each target
@@ -87,6 +91,7 @@ def lower_petsc(iet, **kwargs):
         setup.extend([matvec_op, BlankLine])
         efuncs[matvec_callback.name] = matvec_callback
 
+<<<<<<< HEAD
     # Remove the LinSolveExpr's from iet and efuncs
     subs.update(rebuild_expr_mapper(iet))
     iet = Transformer(subs).visit(iet)
@@ -99,6 +104,21 @@ def lower_petsc(iet, **kwargs):
     metadata.update({'efuncs': tuple(efuncs.values())})
 
     return iet, metadata
+=======
+    # Remove the LinSolveExpr's from iet and efuncs that were used to carry
+    # metadata e.g solver_parameters
+    subs.update(rebuild_expr_mapper(iet))
+    iet = Transformer(subs).visit(iet)
+    efuncs = transform_efuncs(efuncs, struct)
+
+    body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
+    iet = iet._rebuild(body=body)
+
+    # metadata = core_metadata()
+    # metadata.update({'efuncs': efuncs})s
+
+    return iet, {'efuncs': tuple(efuncs.values())}
+>>>>>>> 2ee1e29cf (compiler: Add transform_efuncs to lower_petsc)
 
 
 def init_petsc(**kwargs):
@@ -405,9 +425,14 @@ def rebuild_expr_mapper(callable):
 def transform_efuncs(efuncs, struct):
     subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
     for efunc in efuncs.values():
+<<<<<<< HEAD
         transformed_efunc = Transformer(rebuild_expr_mapper(efunc)).visit(efunc)
         transformed_efunc = Uxreplace(subs).visit(transformed_efunc)
         efuncs[efunc.name] = transformed_efunc
+=======
+        efuncs[efunc.name] = Transformer(rebuild_expr_mapper(efunc)).visit(efunc)
+        efuncs[efunc.name] = Uxreplace(subs).visit(efunc)
+>>>>>>> 2ee1e29cf (compiler: Add transform_efuncs to lower_petsc)
     return efuncs
 
 
