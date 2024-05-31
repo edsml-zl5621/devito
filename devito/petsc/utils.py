@@ -48,7 +48,6 @@ def core_metadata():
     # Include directories
     global_include = os.path.join(petsc_dir, 'include')
     config_specific_include = os.path.join(petsc_dir, f'{petsc_arch}', 'include')
-
     include_dirs = (global_include, config_specific_include)
 
     # Lib directories

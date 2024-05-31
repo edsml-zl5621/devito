@@ -329,8 +329,8 @@ class PETScStruct(CompositeObject):
     __rargs__ = ('name', 'usr_ctx')
 
     def __init__(self, name, usr_ctx):
-        pfields = [(i._C_name,
-                    dtype_to_ctype(i.dtype)) for i in usr_ctx if isinstance(i, Symbol)]
+        pfields = [(i._C_name, dtype_to_ctype(i.dtype)) 
+                   for i in usr_ctx if isinstance(i, Symbol)]
         self._usr_ctx = usr_ctx
         super().__init__(name, 'MatContext', pfields)
 
