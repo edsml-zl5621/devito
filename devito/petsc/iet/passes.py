@@ -350,8 +350,8 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
 
 def rebuild_expr_mapper(callable):
     # This mapper removes LinSolveExpr instances from the callable
-    # These expressions were used in lower_petc to carry metadata 
-    # for the solver, such as solver parameters but can now be dropped
+    # These expressions were previously used in lower_petc to carry metadata,
+    # such as solver_parameters
     nodes = FindNodes(LinearSolverExpression).visit(callable)
     return {expr: expr._rebuild(
         expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr)) for expr in nodes}
