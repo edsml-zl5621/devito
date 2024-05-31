@@ -21,83 +21,80 @@ def lower_petsc(iet, **kwargs):
     if not petsc_nodes:
         return iet, {}
 
-    else:
-        # Collect all petsc solution fields
-        unique_targets = list(set([i.expr.rhs.target for i in petsc_nodes]))
+    # Collect all petsc solution fields
+    unique_targets = list(set([i.expr.rhs.target for i in petsc_nodes]))
 
-        # Initalize PETSc
-        init = init_petsc(**kwargs)
+    init = init_petsc(**kwargs)
 
-        # Create context data struct
-        struct = build_struct(iet)
+    # Create context data struct
+    struct = build_struct(iet)
 
-        objs = build_core_objects(unique_targets[-1], **kwargs)
+    objs = build_core_objects(unique_targets[-1], **kwargs)
 
-        # Create core PETSc calls (not specific to each PETScSolve)
-        core = core_petsc(unique_targets[-1], struct, objs, **kwargs)
+    # Create core PETSc calls (not specific to each PETScSolve)
+    core = make_core_petsc_calls(unique_targets[-1], struct, objs, **kwargs)
 
-        matvec_mapper = MapNodes(Iteration, MatVecAction, 'groupby').visit(iet)
+    matvec_mapper = MapNodes(Iteration, MatVecAction, 'groupby').visit(iet)
 
-        main_mapper = {}
+    subs = {}
 
-        setup = []
-        efuncs = []
+    setup = []
+    efuncs = []
 
-        for target in unique_targets:
-            solver_objs = build_solver_objs(target)
-            matvec_body_list = List()
-            solver_setup = False
+    for target in unique_targets:
+        solver_objs = build_solver_objs(target)
+        matvec_body_list = List()
+        solver_setup = False
 
-            for iter, (matvec,) in matvec_mapper.items():
+        for iter, (matvec,) in matvec_mapper.items():
 
-                # Skip the MatVecAction if it is not associated with the target
-                # There will most likely be more than one MatVecAction
-                # associated with the target e.g interior matvec + BC matvecs
-                if matvec.expr.rhs.target != target:
-                    continue
+            # Skip the MatVecAction if it is not associated with the target
+            # There will most likely be more than one MatVecAction
+            # associated with the target e.g interior matvec + BC matvecs
+            if matvec.expr.rhs.target != target:
+                continue
 
-                # Only need to generate solver setup once per target
-                if not solver_setup:
-                    solver = generate_solver_calls(solver_objs, objs, matvec, target)
-                    setup.extend(solver)
-                    solver_setup = True
+            # Only need to generate solver setup once per target
+            if not solver_setup:
+                solver = generate_solver_calls(solver_objs, objs, matvec, target)
+                setup.extend(solver)
+                solver_setup = True
 
-                # Make the body of the matrix-vector callback for this target
-                matvec_body = matvec_body_list._rebuild(body=[
-                    matvec_body_list.body, iter[0]])
-                matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
+            # Make the body of the matrix-vector callback for this target
+            matvec_body = matvec_body_list._rebuild(body=[
+                matvec_body_list.body, iter[0]])
+            matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
 
-                # Remove the iteration loop from the main kernel encapsulating
-                # the matvec equations since they are moved to the callback
-                main_mapper.update({iter[0]: None})
+            # Remove the iteration loop from the main kernel encapsulating
+            # the matvec equations since they are moved to the callback
+            subs.update({iter[0]: None})
 
-            # Create the matvec callback and operation for each target
-            matvec_callback, matvec_op = create_matvec_callback(
-                target, matvec_body_list, solver_objs, objs,
-                struct)
+        # Create the matvec callback and operation for each target
+        matvec_callback, matvec_op = create_matvec_callback(
+            target, matvec_body_list, solver_objs, objs,
+            struct)
 
-            setup.append(matvec_op)
-            setup.append(BlankLine)
-            efuncs.append(matvec_callback)
+        setup.extend([matvec_op, BlankLine])
+        efuncs.append(matvec_callback)
 
-        # Remove the LinSolveExpr from iet and efuncs that were used to carry
-        # metadata e.g solver_parameters
-        main_mapper.update(rebuild_expr_mapper(iet))
-        efunc_mapper = {efunc: rebuild_expr_mapper(efunc) for efunc in efuncs}
+    # Remove the LinSolveExpr from iet and efuncs that were used to carry
+    # metadata e.g solver_parameters
+    subs.update(rebuild_expr_mapper(iet))
+    efunc_mapper = {efunc: rebuild_expr_mapper(efunc) for efunc in efuncs}
 
-        iet = Transformer(main_mapper).visit(iet)
-        efuncs = [Transformer(efunc_mapper[efunc]).visit(efunc) for efunc in efuncs]
+    iet = Transformer(subs).visit(iet)
+    efuncs = [Transformer(efunc_mapper[efunc]).visit(efunc) for efunc in efuncs]
 
-        # Replace symbols appearing in each efunc with a pointer to the PETScStruct
-        efuncs = transform_efuncs(efuncs, struct)
+    # Replace symbols appearing in each efunc with a pointer to the PETScStruct
+    efuncs = transform_efuncs(efuncs, struct)
 
-        body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
-        iet = iet._rebuild(body=body)
+    body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
+    iet = iet._rebuild(body=body)
 
-        # metadata = core_metadata()
-        # metadata.update({'efuncs': efuncs})
+    # metadata = core_metadata()
+    # metadata.update({'efuncs': efuncs})
 
-        return iet, {'efuncs': efuncs}
+    return iet, {'efuncs': efuncs}
 
 
 def init_petsc(**kwargs):
@@ -124,8 +121,7 @@ def build_struct(iet):
     return PETScStruct('ctx', usr_ctx)
 
 
-def core_petsc(target, struct, objs, **kwargs):
-
+def make_core_petsc_calls(target, struct, objs, **kwargs):
     # MPI
     call_mpi = petsc_call_mpi('MPI_Comm_size', [objs['comm'], Byref(objs['size'])])
 
@@ -154,10 +150,12 @@ def build_core_objects(target, **kwargs):
     else:
         communicator = 'PETSC_COMM_SELF'
 
-    return {'da': DM(name='da', liveness='eager'),
-            'size': PetscMPIInt(name='size'),
-            'comm': communicator,
-            'err': PetscErrorCode(name='err')}
+    return {
+        'da': DM(name='da', liveness='eager'),
+        'size': PetscMPIInt(name='size'),
+        'comm': communicator,
+        'err': PetscErrorCode(name='err')
+    }
 
 
 def create_dmda(target, objs):
