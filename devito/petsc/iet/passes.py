@@ -24,14 +24,9 @@ def lower_petsc(iet, **kwargs):
 
     # Collect all petsc solution fields
     unique_targets = list(set([i.expr.rhs.target for i in petsc_nodes]))
-
     init = init_petsc(**kwargs)
-
-    # Create context data struct
-    struct = build_struct(iet)
-
+    struct = build_petsc_struct(iet)
     objs = build_core_objects(unique_targets[-1], **kwargs)
-
     # Create core PETSc calls (not specific to each PETScSolve)
     core = make_core_petsc_calls(unique_targets[-1], struct, objs, **kwargs)
 
@@ -75,8 +70,7 @@ def lower_petsc(iet, **kwargs):
         setup.extend([matvec_op, BlankLine])
         efuncs[matvec_callback.name] = matvec_callback
 
-    # Remove the LinSolveExpr's from iet and efuncs that were used to carry
-    # metadata e.g solver_parameters
+    # Remove the LinSolveExpr's from iet and efuncs
     subs.update(rebuild_expr_mapper(iet))
     iet = Transformer(subs).visit(iet)
     efuncs = transform_efuncs(efuncs, struct)
@@ -99,7 +93,7 @@ def init_petsc(**kwargs):
     return tuple([petsc_func_begin_user, initialize])
 
 
-def build_struct(iet):
+def build_petsc_struct(iet):
     # Place all context data required by the shell routines
     # into a PETScStruct
     usr_ctx = []
@@ -355,9 +349,12 @@ def create_matvec_callback(target, body, solver_objs, objs, struct):
 
 
 def rebuild_expr_mapper(callable):
+    # This mapper removes LinSolveExpr instances from the callable
+    # These expressions were used in lower_petc to carry metadata 
+    # for the solver, such as solver parameters but can now be dropped
+    nodes = FindNodes(LinearSolverExpression).visit(callable)
     return {expr: expr._rebuild(
-        expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr)) for
-        expr in FindNodes(LinearSolverExpression).visit(callable)}
+        expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr)) for expr in nodes}
 
 
 def transform_efuncs(efuncs, struct):

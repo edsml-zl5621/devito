@@ -4,7 +4,7 @@ from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, 
                            Section, HaloSpot, ExpressionBundle)
 from devito.tools import timed_pass
 from devito.petsc.types import LinearSolveExpr
-from devito.petsc.utils import iet_mapper
+from devito.petsc.utils import petsc_iet_mapper
 
 __all__ = ['iet_build']
 
@@ -27,7 +27,7 @@ def iet_build(stree):
                 if e.is_Increment:
                     exprs.append(Increment(e))
                 elif isinstance(e.rhs, LinearSolveExpr):
-                    exprs.append(iet_mapper[e.operation](e, operation=e.operation))
+                    exprs.append(petsc_iet_mapper[e.operation](e, operation=e.operation))
                 else:
                     exprs.append(Expression(e, operation=e.operation))
             body = ExpressionBundle(i.ispace, i.ops, i.traffic, body=exprs)
