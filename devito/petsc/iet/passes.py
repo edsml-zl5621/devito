@@ -80,13 +80,14 @@ def lower_petsc(iet, **kwargs):
     # Remove the LinSolveExpr from iet and efuncs that were used to carry
     # metadata e.g solver_parameters
     subs.update(rebuild_expr_mapper(iet))
-    efunc_mapper = {efunc: rebuild_expr_mapper(efunc) for efunc in efuncs}
+    for efunc in efuncs:
+        subs.update({efunc: rebuild_expr_mapper(efunc)})
 
     iet = Transformer(subs).visit(iet)
-    efuncs = [Transformer(efunc_mapper[efunc]).visit(efunc) for efunc in efuncs]
+    efuncs = [Transformer(subs[efunc]).visit(efunc) for efunc in efuncs]
 
     # Replace symbols appearing in each efunc with a pointer to the PETScStruct
-    efuncs = transform_efuncs(efuncs, struct)
+    efuncs = uxreplace_efuncs(efuncs, struct)
 
     body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
     iet = iet._rebuild(body=body)
@@ -373,14 +374,13 @@ def rebuild_expr_mapper(callable):
         expr in FindNodes(LinearSolverExpression).visit(callable)}
 
 
-def transform_efuncs(efuncs, struct):
+def uxreplace_efuncs(efuncs, struct):
     efuncs_new = []
     for efunc in efuncs:
         new_body = efunc.body
         for i in struct.usr_ctx:
             new_body = Uxreplace({i: FieldFromPointer(i, struct)}).visit(new_body)
         efuncs_new.append(efunc._rebuild(body=new_body))
-
     return efuncs_new
 
 
