@@ -47,8 +47,8 @@ jobs:
         git clone -b release https://gitlab.com/petsc/petsc.git petsc
         cd petsc
         git pull
-        ./configure --with-fortran-bindings=0
-        make PETSC_DIR=$HOME/petsc/petsc PETSC_ARCH=arch-linux-c all
+        ./configure --with-fortran-bindings=0 PETSC_ARCH=arch-linux-c
+        make PETSC_DIR=$HOME/petsc/petsc
         export PETSC_DIR=$HOME/petsc/petsc
         export PETSC_ARCH=arch-linux-c
 
