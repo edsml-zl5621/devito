@@ -1,0 +1,71 @@
+name: CI-petsc
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  # Trigger the workflow on push or pull request,
+  # but only for the master branch
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test-petsc:
+    name: pytest-petsc
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9']
+
+    env:
+      DEVITO_LANGUAGE: "C"
+      DEVITO_ARCH: "gcc-9"
+      CC: "gcc-9"
+      CXX: "g++-9"
+
+    steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Checkout devito
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update && sudo apt-get install mpich -y
+
+    - name: Download and install PETSc
+      run: |
+        mkdir -p $HOME/petsc
+        cd $HOME/petsc
+        git clone -b release https://gitlab.com/petsc/petsc.git petsc
+        cd petsc
+        git pull
+        ./configure --with-fortran-bindings=0
+        make PETSC_DIR=$HOME/petsc/petsc PETSC_ARCH=arch-linux-c all
+        export PETSC_DIR=$HOME/petsc/petsc
+        export PETSC_ARCH=arch-linux-c
+
+    - name: Install Python dependencies
+      run: |
+        pip3 install --upgrade pip
+        pip3 install -e .[extras,mpi,tests]
+
+    - name: Test with pytest
+      run: |
+        export PETSC_DIR=$HOME/petsc/petsc
+        export PETSC_ARCH=arch-linux-c
+        python3 scripts/clear_devito_cache.py
+        python3 -m pytest tests/test_petsc.py
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        name: pytest-petsc
