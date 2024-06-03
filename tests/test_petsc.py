@@ -1,4 +1,6 @@
 import numpy as np
+import os
+from conftest import skipif
 from devito import Grid, Function, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            FindNodes,
@@ -7,10 +9,10 @@ from devito.passes.iet.languages.C import CDataManager
 from devito.petsc.types import (DM, Mat, Vec, PetscMPIInt, KSP,
                                 PC, KSPConvergedReason, PETScArray, PETScSolve,
                                 LinearSolveExpr, PETScStruct)
-import os
 from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
 
 
+@skipif('petsc')
 def test_petsc_local_object():
     """
     Test C++ support for PETSc LocalObjects.
@@ -38,6 +40,7 @@ def test_petsc_local_object():
     assert 'KSPConvergedReason reason;' in str(iet)
 
 
+@skipif('petsc')
 def test_petsc_functions():
     """
     Test C++ support for PETScArrays.
@@ -70,6 +73,7 @@ def test_petsc_functions():
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
 
 
+@skipif('petsc')
 def test_petsc_subs():
     """
     Test support for PETScArrays in substitutions.
@@ -95,6 +99,7 @@ def test_petsc_subs():
         ' + arr(x, y - h_y)/h_y**2 + arr(x, y + h_y)/h_y**2'
 
 
+@skipif('petsc')
 def test_petsc_solve():
     """
     Test PETScSolve.
@@ -140,6 +145,7 @@ def test_petsc_solve():
     assert len(matvec_callback[0].parameters) == 3
 
 
+@skipif('petsc')
 def test_multiple_petsc_solves():
     """
     Test multiple PETScSolves.
@@ -172,6 +178,7 @@ def test_multiple_petsc_solves():
     assert len(structs[0].fields) == 6
 
 
+@skipif('petsc')
 def test_petsc_cast():
     """
     Test casting of PETScArray.
@@ -199,6 +206,7 @@ def test_petsc_cast():
         '(PetscScalar (*)[info.gym][info.gxm]) arr2_vec;'
 
 
+@skipif('petsc')
 def test_no_automatic_cast():
     """
     Verify that the compiler does not automatically generate casts for PETScArrays.
@@ -219,6 +227,7 @@ def test_no_automatic_cast():
     assert len(op.body.casts) == 1
 
 
+@skipif('petsc')
 def test_LinearSolveExpr():
 
     grid = Grid((2, 2))
@@ -238,6 +247,7 @@ def test_LinearSolveExpr():
          'ksp_atol': 1e-50, 'ksp_divtol': 10000.0, 'ksp_max_it': 10000}
 
 
+@skipif('petsc')
 def test_dmda_create():
 
     grid1 = Grid((2))
@@ -277,6 +287,7 @@ def test_dmda_create():
     assert str(op4).count('DMDACreate2d') == 1
 
 
+@skipif('petsc')
 def test_cinterface_petsc_struct():
 
     grid = Grid(shape=(11, 11))
