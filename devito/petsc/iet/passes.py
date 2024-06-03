@@ -85,8 +85,6 @@ def lower_petsc(iet, **kwargs):
     return iet, metadata
 
 
-
-
 def init_petsc(**kwargs):
 
     # Initialize PETSc -> for now, assuming all solver options have to be
