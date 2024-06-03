@@ -25,6 +25,8 @@ jobs:
     env:
       DEVITO_LANGUAGE: "C"
       DEVITO_ARCH: "gcc-9"
+      CC: "gcc-9"
+      CXX: "g++-9"
 
     steps:
     - uses: actions/setup-python@v5
@@ -46,7 +48,7 @@ jobs:
         cd petsc
         git pull
         ./configure --with-fortran-bindings=0 PETSC_ARCH=arch-linux-c
-        make all
+        make
 
     - name: Install Python dependencies
       run: |
