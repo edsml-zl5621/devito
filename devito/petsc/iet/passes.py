@@ -10,7 +10,8 @@ from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
                                 Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
-from devito.petsc.utils import (solver_mapper, petsc_call, petsc_call_mpi)
+from devito.petsc.utils import (solver_mapper, petsc_call, petsc_call_mpi,
+                                core_metadata)
 
 
 @iet_pass
@@ -78,7 +79,12 @@ def lower_petsc(iet, **kwargs):
     body = iet.body._rebuild(init=init, body=core + tuple(setup) + iet.body.body)
     iet = iet._rebuild(body=body)
 
-    return iet, {'efuncs': tuple(efuncs.values())}
+    metadata = core_metadata()
+    metadata.update({'efuncs': tuple(efuncs.values())})
+
+    return iet, metadata
+
+
 
 
 def init_petsc(**kwargs):
