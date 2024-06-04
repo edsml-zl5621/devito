@@ -46,8 +46,8 @@ jobs:
         cd petsc
         git pull
         ./configure --with-fortran-bindings=0 PETSC_ARCH=arch-linux-c
-        make
-        grep BLASLAPACK_LIB $PETSC_ARCH/lib/petsc/conf/petscvariables
+        make all
+        grep BLASLAPACK_LIB $HOME/petsc/petsc/arch-linux-c/lib/petsc/conf/petscvariables
 
     - name: Install Python dependencies
       run: |
