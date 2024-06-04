@@ -37,6 +37,10 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update && sudo apt-get install mpich -y
+        BLAS_VERSION=$(ldconfig -p | grep libblas.so | awk '{print $NF}')
+        LAPACK_VERSION=$(ldconfig -p | grep liblapack.so | awk '{print $NF}')
+        echo "BLAS version: $BLAS_VERSION"
+        echo "LAPACK version: $LAPACK_VERSION"
 
     - name: Download and install PETSc
       run: |
