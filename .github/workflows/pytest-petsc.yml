@@ -37,10 +37,6 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update && sudo apt-get install mpich -y
-        BLAS_VERSION=$(ldconfig -p | grep libblas.so | awk '{print $NF}')
-        LAPACK_VERSION=$(ldconfig -p | grep liblapack.so | awk '{print $NF}')
-        echo "BLAS version: $BLAS_VERSION"
-        echo "LAPACK version: $LAPACK_VERSION"
 
     - name: Download and install PETSc
       run: |
@@ -49,12 +45,14 @@ jobs:
         git clone -b release https://gitlab.com/petsc/petsc.git petsc
         cd petsc
         git pull
-        ./configure --with-fortran-bindings=0 PETSC_ARCH=arch-linux-c
+        ./configure --with-fortran-bindings=0 --download-openblas PETSC_ARCH=arch-linux-c
         make
 
     - name: Install Python dependencies
       run: |
         pip3 install --upgrade pip
+        pip3 install --no-binary numpy numpy
+        python -c "import numpy; numpy.show_config()"
         pip3 install -e .[extras,mpi,tests]
 
     - name: Test with pytest
