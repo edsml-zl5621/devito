@@ -32,7 +32,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt-get update && sudo apt-get install mpich -y
+        sudo apt-get update && sudo apt-get install mpich libopenblas-serial-dev -y
 
     - name: Download and install PETSc
       run: |
@@ -41,7 +41,7 @@ jobs:
         git clone -b release https://gitlab.com/petsc/petsc.git petsc
         cd petsc
         git pull
-        ./configure --with-fortran-bindings=0 PETSC_ARCH=arch-linux-c
+        ./configure --with-fortran-bindings=0 --with-openblas=1 PETSC_ARCH=arch-linux-c || (cat configure.log && /bin/false)
         make all
         grep BLASLAPACK_LIB $HOME/petsc/petsc/arch-linux-c/lib/petsc/conf/petscvariables
 
