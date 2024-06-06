@@ -41,9 +41,9 @@ jobs:
         git clone -b release https://gitlab.com/petsc/petsc.git petsc
         cd petsc
         git pull
-        ./configure --with-fortran-bindings=0 --with-openblas-include=$(pkgconf --variable=includedir openblas) --with-openblas-lib=$(pkgconf --variable=libdir openblas)/libopenblas.so
+        ./configure --with-fortran-bindings=0 --with-openblas-include=$(pkgconf --variable=includedir openblas) --with-openblas-lib=$(pkgconf --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build
         make all
-        grep BLASLAPACK_LIB $HOME/petsc/petsc/arch-linux-c/lib/petsc/conf/petscvariables
+        grep BLASLAPACK_LIB $HOME/petsc/petsc/devito_build/lib/petsc/conf/petscvariables
 
     - name: Install Python dependencies
       run: |
@@ -55,7 +55,7 @@ jobs:
     - name: Test with pytest
       run: |
         export PETSC_DIR=$HOME/petsc/petsc
-        export PETSC_ARCH=arch-linux-c
+        export PETSC_ARCH=devito_build
         python3 scripts/clear_devito_cache.py
         python3 -m pytest tests/test_petsc.py
 
