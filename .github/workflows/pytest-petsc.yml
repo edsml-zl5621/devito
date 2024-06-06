@@ -32,7 +32,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt-get update && sudo apt-get install mpich libopenblas-serial-dev -y
+        sudo apt-get update && sudo apt-get install mpich pkgconf libopenblas-serial-dev -y
 
     - name: Download and install PETSc
       run: |
