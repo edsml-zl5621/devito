@@ -45,6 +45,19 @@ jobs:
         make all
         grep BLASLAPACK_LIB $HOME/petsc/petsc/arch-linux-c/lib/petsc/conf/petscvariables
 
+    - name: Install Python dependencies
+      run: |
+        pip3 install --upgrade pip
+        pip3 install --no-binary numpy numpy
+        python -c "import numpy; numpy.show_config()"
+        pip3 install -e .[extras,mpi,tests]
+
+    - name: Test with pytest
+      run: |
+        export PETSC_DIR=$HOME/petsc/petsc
+        export PETSC_ARCH=arch-linux-c
+        python3 scripts/clear_devito_cache.py
+        python3 -m pytest tests/test_petsc.py
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
