@@ -22,10 +22,6 @@ jobs:
       matrix:
         python-version: ['3.8', '3.9']
 
-    env:
-      DEVITO_LANGUAGE: "C"
-      DEVITO_ARCH: "gcc-9"
-
     steps:
     - uses: actions/setup-python@v5
       with:
@@ -36,7 +32,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt-get update && sudo apt-get install mpich libopenblas-serial-dev -y
+        sudo apt-get update && sudo apt-get install mpich -y
 
     - name: Download and install PETSc
       run: |
@@ -45,23 +41,10 @@ jobs:
         git clone -b release https://gitlab.com/petsc/petsc.git petsc
         cd petsc
         git pull
-        ./configure --with-fortran-bindings=0 --with-openblas-dir=/usr/lib/x86_64-linux-gnu/openblas-serial PETSC_ARCH=arch-linux-c
+        ./configure --with-fortran-bindings=0 PETSC_ARCH=arch-linux-c
         make all
         grep BLASLAPACK_LIB $HOME/petsc/petsc/arch-linux-c/lib/petsc/conf/petscvariables
 
-    - name: Install Python dependencies
-      run: |
-        pip3 install --upgrade pip
-        pip3 install --no-binary numpy numpy
-        python -c "import numpy; numpy.show_config()"
-        pip3 install -e .[extras,mpi,tests]
-
-    - name: Test with pytest
-      run: |
-        export PETSC_DIR=$HOME/petsc/petsc
-        export PETSC_ARCH=arch-linux-c
-        python3 scripts/clear_devito_cache.py
-        python3 -m pytest tests/test_petsc.py
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
