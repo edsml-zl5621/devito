@@ -41,7 +41,7 @@ jobs:
         git clone -b release https://gitlab.com/petsc/petsc.git petsc
         cd petsc
         git pull
-        ./configure --with-fortran-bindings=0 --with-openblas=1 PETSC_ARCH=arch-linux-c || (cat configure.log && /bin/false)
+        ./configure --with-fortran-bindings=0 --with-blaslapack-dir=/usr/lib/x86_64-linux-gnu PETSC_ARCH=arch-linux-c
         make all
         grep BLASLAPACK_LIB $HOME/petsc/petsc/arch-linux-c/lib/petsc/conf/petscvariables
 
