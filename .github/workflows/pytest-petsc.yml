@@ -1,4 +1,4 @@
-name: CI-petsc-
+name: CI-petsc
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,7 +16,7 @@ on:
 
 jobs:
   test-petsc:
-    name: pytest-petsc-docker
+    name: pytest-petsc
     runs-on: ubuntu-22.04
     strategy:
       matrix:
