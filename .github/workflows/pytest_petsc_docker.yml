@@ -67,7 +67,7 @@ jobs:
     - name: Build docker image
       if: contains(matrix.name, 'docker')
       run: |
-          docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=zoeleibowitz/zoeleibowitz:petsc6
+          docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=zoeleibowitz/zoeleibowitz:petsc
 
     - name: Set run prefix
       run: |
