@@ -33,7 +33,7 @@ def skipif(items, whole_module=False):
     accepted = set()
     accepted.update({'device', 'device-C', 'device-openmp', 'device-openacc',
                      'device-aomp', 'cpu64-icc', 'cpu64-icx', 'cpu64-nvc', 'cpu64-arm',
-                     'cpu64-icpx', 'chkpnt'})
+                     'cpu64-icpx', 'chkpnt', 'petsc'})
     accepted.update({'nodevice'})
     unknown = sorted(set(items) - accepted)
     if unknown:
@@ -86,6 +86,9 @@ def skipif(items, whole_module=False):
         # Skip if pyrevolve not installed
         if i == 'chkpnt' and Revolver is NoopRevolver:
             skipit = "pyrevolve not installed"
+            break
+        if i == 'petsc' and not os.environ.get('PETSC_DIR'):
+            skipit = "PETSc not installed"
             break
 
     if skipit is False:

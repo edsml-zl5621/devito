@@ -25,6 +25,7 @@ RUN apt-get install -y libgl1-mesa-glx
 # Install numpy from source
 RUN python3 -m venv /venv && \
     /venv/bin/pip install --no-cache-dir --upgrade pip && \
+    # Avoids using pre-built binaries (wheels) and instead compiles NumPy from its source code
     /venv/bin/pip install --no-cache-dir --no-binary numpy numpy && \
     rm -rf ~/.cache/pip
 
