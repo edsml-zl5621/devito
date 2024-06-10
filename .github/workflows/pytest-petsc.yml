@@ -1,4 +1,4 @@
-name: CI-petsc
+name: CI-petsc-docker
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,51 +15,88 @@ on:
       - master
 
 jobs:
-  test-petsc:
-    name: pytest-petsc
-    runs-on: ubuntu-22.04
+  pytest:
+    name: ${{ matrix.name }}-${{ matrix.set }}
+    runs-on: "${{ matrix.os }}"
+
+    env:
+      DEVITO_ARCH: "${{ matrix.arch }}"
+      DEVITO_LANGUAGE: ${{ matrix.language }}
+
     strategy:
+      # Prevent all build to stop if a single one fails
+      fail-fast: false
+
       matrix:
-        python-version: ['3.8', '3.9']
+        name: [
+           pytest-docker-py38,
+           pytest-docker-py39
+        ]
+        include:
+        - name: pytest-docker-py38
+          python-version: '3.8'
+          os: ubuntu-latest
+          arch: "gcc"
+          language: "C"
+          sympy: "1.12"
+
+        - name: pytest-docker-py39
+          python-version: '3.9'
+          os: ubuntu-latest
+          arch: "gcc"
+          language: "C"
+          sympy: "1.12"
+
+        - name: pytest-docker-py312
+          python-version: '3.12'
+          os: ubuntu-latest
+          arch: "gcc"
+          language: "C"
+          sympy: "1.12"
 
     steps:
-    - uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-
     - name: Checkout devito
       uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update && sudo apt-get install mpich pkgconf libopenblas-serial-dev -y
+    - name: Set up Python ${{ matrix.python-version }}
+      if: "!contains(matrix.name, 'docker')"
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
 
-    - name: Download and install PETSc
+    - name: Build docker image
       run: |
-        mkdir -p $HOME/petsc
-        cd $HOME/petsc
-        git clone -b release https://gitlab.com/petsc/petsc.git petsc
-        cd petsc
-        git pull
-        ./configure --with-fortran-bindings=0 --with-openblas-include=$(pkgconf --variable=includedir openblas) --with-openblas-lib=$(pkgconf --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build
-        make all
+          docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=zoeleibowitz/zoeleibowitz:petsc
 
-    - name: Install Python dependencies
+    - name: Set run prefix
       run: |
-        pip3 install --upgrade pip
-        pip3 install --no-binary numpy numpy
-        python -c "import numpy; numpy.show_config()"
-        pip3 install -e .[extras,mpi,tests]
+          echo "RUN_CMD=docker run --rm -t -e CODECOV_TOKEN=${{ secrets.CODECOV_TOKEN }} --name testrun devito_img"  >> $GITHUB_ENV
+          fi
+      id: set-run
+
+    - name: Set tests
+      run : |
+          echo "TESTS=tests/test_petsc.py" >> $GITHUB_ENV
+          fi
+      id: set-tests
+    
+    - name: Set pip flags for latest python (3.12)
+      run: |
+          if [ "${{ matrix.python-version }}" == '3.12' ]; then
+              echo "PIPFLAGS='--break-system-packages'" >> $GITHUB_ENV
+          fi
+
+    - name: Check configuration
+      run: |
+        ${{ env.RUN_CMD }} python3 -c "from devito import configuration; print(''.join(['%s: %s \n' % (k, v) for (k, v) in configuration.items()]))"
 
     - name: Test with pytest
       run: |
-        export PETSC_DIR=$HOME/petsc/petsc
-        export PETSC_ARCH=devito_build
-        python3 scripts/clear_devito_cache.py
-        python3 -m pytest tests/test_petsc.py
+        ${{ env.RUN_CMD }} pytest -k "${{ matrix.test-set }}" -m "not parallel" --cov --cov-config=.coveragerc --cov-report=xml ${{ env.TESTS }}
 
     - name: Upload coverage to Codecov
+      if: "!contains(matrix.name, 'docker')"
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        name: pytest-petsc
+        name: ${{ matrix.name }}
