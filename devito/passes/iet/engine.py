@@ -128,6 +128,7 @@ class Graph:
                 compiler.add_include_dirs(as_tuple(metadata.get('include_dirs')))
                 compiler.add_libraries(as_tuple(metadata.get('libs')))
                 compiler.add_library_dirs(as_tuple(metadata.get('lib_dirs')))
+                compiler.add_ldflags(as_tuple(metadata.get('ldflags')))
             except KeyError:
                 pass
 
