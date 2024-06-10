@@ -57,7 +57,8 @@ def core_metadata():
         'includes': ('petscksp.h', 'petscsnes.h', 'petscdmda.h'),
         'include_dirs': include_dirs,
         'libs': ('petsc'),
-        'lib_dirs': lib_dir
+        'lib_dirs': lib_dir,
+        'ldflags': ('-Wl,-rpath,%s' % lib_dir)
     }
 
 
