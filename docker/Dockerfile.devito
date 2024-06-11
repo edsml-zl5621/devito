@@ -22,8 +22,29 @@ RUN apt-get update && apt-get install -y git && \
     ./configure --with-fortran-bindings=0 --with-mpi-dir=/opt/openmpi --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
     make all
 
+<<<<<<< HEAD
 ARG petscinstall=""
 FROM ${petscinstall}copybase as builder
+=======
+RUN if [ "$petsc" = "true" ]; then \
+        base="petsc" && \
+        apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf mpich && \
+        python3 -m venv /venv && \
+        /venv/bin/pip install --no-cache-dir --upgrade pip && \
+        /venv/bin/pip install --no-cache-dir --no-binary numpy numpy && \
+        rm -rf ~/.cache/pip && \
+        mkdir -p /home/petsc && \
+        cd /home/petsc && \
+        git clone -b release https://gitlab.com/petsc/petsc.git petsc && \
+        cd petsc && \
+        git pull && \
+        ./configure --with-fortran-bindings=0 --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
+        make all ; \
+    fi
+
+##################  Install devito ############################################
+FROM $base as builder
+>>>>>>> 9080e5877 (workflows: test moving envs for petsc)
 
 # User/Group Ids
 ARG USER_ID=1000
