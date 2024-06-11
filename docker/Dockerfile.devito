@@ -30,6 +30,9 @@ RUN if [ "$petsc" = "true" ]; then \
         export PETSC_DIR="/home/petsc/petsc" ; \
     fi
 
+ENV PETSC_ARCH="devito_build"
+ENV PETSC_DIR="/home/petsc/petsc"
+
 ##################  Install devito ############################################
 FROM $base as builder
 
