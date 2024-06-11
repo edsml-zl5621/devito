@@ -87,8 +87,8 @@ def skipif(items, whole_module=False):
         if i == 'chkpnt' and Revolver is NoopRevolver:
             skipit = "pyrevolve not installed"
             break
-        if i == 'petsc' and not os.environ['PETSC_ARCH']:
-            skipit = "PETSC_ARCH is either not set or empty"
+        if i == 'petsc' and not os.environ.get('PETSC_ARCH'):
+            skipit = "PETSC_ARCH is not set"
             break
 
     if skipit is False:
