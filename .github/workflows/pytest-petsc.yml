@@ -32,7 +32,6 @@ jobs:
            pytest-docker-py38,
            pytest-docker-py39
         ]
-        set: [base, adjoint]
         include:
         - name: pytest-docker-py38
           python-version: '3.8'
@@ -47,12 +46,13 @@ jobs:
           arch: "gcc"
           language: "C"
           sympy: "1.12"
-          
-        - set: base
-          test-set: 'not adjoint'
 
-        - set: adjoint
-          test-set: 'adjoint'
+        - name: pytest-docker-py312
+          python-version: '3.12'
+          os: ubuntu-latest
+          arch: "gcc"
+          language: "C"
+          sympy: "1.12"
 
     steps:
     - name: Checkout devito
@@ -65,30 +65,18 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Build docker image
-      if: contains(matrix.name, 'docker')
       run: |
           docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=zoeleibowitz/zoeleibowitz:petsc
 
     - name: Set run prefix
       run: |
-          if [[ "${{ matrix.name }}" =~ "docker" ]]; then
-              echo "RUN_CMD=docker run --rm -t -e CODECOV_TOKEN=${{ secrets.CODECOV_TOKEN }} --name testrun devito_img"  >> $GITHUB_ENV
-          else
-              echo "RUN_CMD=" >> $GITHUB_ENV
+          echo "RUN_CMD=docker run --rm -t -e CODECOV_TOKEN=${{ secrets.CODECOV_TOKEN }} --name testrun devito_img"  >> $GITHUB_ENV
           fi
       id: set-run
 
-    - name: Install ${{ matrix.arch }} compiler
-      if: "runner.os == 'linux' && !contains(matrix.name, 'docker') && matrix.arch !='custom' "
+    - name: Set tests
       run : |
-        sudo apt-get install -y ${{ matrix.arch }}
-
-    - name: Set tests (reduced number for OSX)
-      run : |
-          if [ "${{ runner.os }}" == 'macOS' ]; then
-              echo "TESTS=tests/test_operator.py" >> $GITHUB_ENV
-          else
-              echo "TESTS=tests/" >> $GITHUB_ENV
+          echo "TESTS=tests/test_petsc.py" >> $GITHUB_ENV
           fi
       id: set-tests
     
@@ -97,13 +85,6 @@ jobs:
           if [ "${{ matrix.python-version }}" == '3.12' ]; then
               echo "PIPFLAGS='--break-system-packages'" >> $GITHUB_ENV
           fi
-
-    - name: Install dependencies
-      if: "!contains(matrix.name, 'docker')"
-      run: |
-        pip install ${{ env.PIPFLAGS }} --upgrade pip
-        pip install ${{ env.PIPFLAGS }} -e .[tests]
-        pip install ${{ env.PIPFLAGS }} sympy==${{matrix.sympy}}
 
     - name: Check configuration
       run: |
