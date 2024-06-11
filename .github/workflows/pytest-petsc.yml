@@ -30,7 +30,8 @@ jobs:
       matrix:
         name: [
            pytest-docker-py38,
-           pytest-docker-py39
+           pytest-docker-py39,
+           pytest-docker-py312
         ]
         include:
         - name: pytest-docker-py38
