@@ -7,12 +7,11 @@ ARG base=devitocodes/bases:cpu-gcc
 ARG petsc=""
 
 ##################  Install PETSc ############################################
-FROM $base as petsc 
+FROM $base as petsc_builder 
 
 ARG petsc
 
 RUN if [ "$petsc" = "true" ]; then \
-        base="petsc" && \
         apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf mpich && \
         python3 -m venv /venv && \
         /venv/bin/pip install --no-cache-dir --upgrade pip && \
@@ -25,9 +24,6 @@ RUN if [ "$petsc" = "true" ]; then \
         git pull && \
         ./configure --with-fortran-bindings=0 --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
         make all ; \
-
-        export PETSC_ARCH="devito_build" && \
-        export PETSC_DIR="/home/petsc/petsc" ; \
     fi
 
 ENV PETSC_ARCH="devito_build"
@@ -95,8 +91,7 @@ RUN groupadd -g ${GROUP_ID} app && \
 
 COPY --from=builder --chown=app:app /app /app
 
-# petsc 
-COPY --from=petsc --chown=app:app /home/petsc/petsc /home/petsc/petsc
+COPY --from=petsc_builder --chown=app:app /home/petsc /home/petsc
 
 ADD --chown=app:app docker/run-jupyter.sh /jupyter
 ADD --chown=app:app docker/run-tests.sh /tests

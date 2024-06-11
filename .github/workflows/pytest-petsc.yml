@@ -29,10 +29,10 @@ jobs:
 
       matrix:
         name: [
-           pytest-docker-py39-gcc-omp
+           pytest-docker-py39-gcc-noomp
         ]
         include:
-        - name: pytest-docker-py39-gcc-omp
+        - name: pytest-docker-py39-gcc-noomp
           python-version: '3.9'
           os: ubuntu-latest
           arch: "gcc"
