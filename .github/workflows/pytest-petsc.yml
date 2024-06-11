@@ -65,7 +65,6 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Build docker image
-      if: contains(matrix.name, 'docker')
       run: |
           docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=zoeleibowitz/zoeleibowitz:petsc
 
