@@ -29,27 +29,11 @@ jobs:
 
       matrix:
         name: [
-           pytest-docker-py38,
-           pytest-docker-py39,
-           pytest-docker-py312
+           pytest-docker-py310
         ]
         include:
-        - name: pytest-docker-py38
-          python-version: '3.8'
-          os: ubuntu-latest
-          arch: "gcc"
-          language: "C"
-          sympy: "1.12"
-
-        - name: pytest-docker-py39
-          python-version: '3.9'
-          os: ubuntu-latest
-          arch: "gcc"
-          language: "C"
-          sympy: "1.12"
-
-        - name: pytest-docker-py312
-          python-version: '3.12'
+        - name: pytest-docker-py310
+          python-version: '3.10'
           os: ubuntu-latest
           arch: "gcc"
           language: "C"
@@ -59,12 +43,6 @@ jobs:
     - name: Checkout devito
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      if: "!contains(matrix.name, 'docker')"
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-
     - name: Build docker image
       run: |
           docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=zoeleibowitz/zoeleibowitz:petsc
@@ -72,20 +50,12 @@ jobs:
     - name: Set run prefix
       run: |
           echo "RUN_CMD=docker run --rm -t -e CODECOV_TOKEN=${{ secrets.CODECOV_TOKEN }} --name testrun devito_img"  >> $GITHUB_ENV
-          fi
       id: set-run
 
     - name: Set tests
       run : |
           echo "TESTS=tests/test_petsc.py" >> $GITHUB_ENV
-          fi
       id: set-tests
-    
-    - name: Set pip flags for latest python (3.12)
-      run: |
-          if [ "${{ matrix.python-version }}" == '3.12' ]; then
-              echo "PIPFLAGS='--break-system-packages'" >> $GITHUB_ENV
-          fi
 
     - name: Check configuration
       run: |
