@@ -8,6 +8,13 @@ ARG petscinstall=""
 
 FROM $base as copybase
 
+# User/Group Ids
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Copy Devito
+ADD . /app/devito
+
 ##################  Install PETSc ############################################
 FROM copybase as petsccopybase
 
@@ -24,13 +31,6 @@ RUN apt-get update && apt-get install -y git && \
 
 ARG petscinstall=""
 FROM ${petscinstall}copybase as builder
-
-# User/Group Ids
-ARG USER_ID=1000
-ARG GROUP_ID=1000
-
-# Copy Devito
-ADD . /app/devito
 
 # Update if outdated
 RUN apt-get update
