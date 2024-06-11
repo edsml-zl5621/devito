@@ -26,9 +26,6 @@ RUN if [ "$petsc" = "true" ]; then \
         make all ; \
     fi
 
-ENV PETSC_ARCH="devito_build"
-ENV PETSC_DIR="/home/petsc/petsc"
-
 ##################  Install devito ############################################
 FROM $base as builder
 
@@ -91,7 +88,13 @@ RUN groupadd -g ${GROUP_ID} app && \
 
 COPY --from=builder --chown=app:app /app /app
 
-COPY --from=petsc_builder --chown=app:app /home/petsc /home/petsc
+# Copy PETSc files only if petsc=true
+RUN if [ "$petsc" = "true" ]; then \
+        mkdir -p /app/petsc && \
+        cp -r /home/petsc /app/petsc; \
+        export PETSC_ARCH=devito_build && \
+        export PETSC_DIR=/home/petsc/petsc; \
+    fi
 
 ADD --chown=app:app docker/run-jupyter.sh /jupyter
 ADD --chown=app:app docker/run-tests.sh /tests
