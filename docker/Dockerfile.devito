@@ -4,14 +4,39 @@
 
 # Base image with compilers
 ARG base=devitocodes/bases:cpu-gcc
+ARG petsc=""
 
+##################  Install PETSc ############################################
+FROM $base as petsc 
+
+ARG petsc
+
+RUN if [ "$petsc" = "true" ]; then \
+        base="petsc" && \
+        apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf mpich && \
+        python3 -m venv /venv && \
+        /venv/bin/pip install --no-cache-dir --upgrade pip && \
+        /venv/bin/pip install --no-cache-dir --no-binary numpy numpy && \
+        rm -rf ~/.cache/pip && \
+        mkdir -p /home/petsc && \
+        cd /home/petsc && \
+        git clone -b release https://gitlab.com/petsc/petsc.git petsc && \
+        cd petsc && \
+        git pull && \
+        ./configure --with-fortran-bindings=0 --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
+        make all ; \
+        export PETSC_ARCH=devito_build && \
+        export PETSC_DIR=/home/petsc/petsc ; \
+    fi
+
+
+##################  Install devito ############################################
 FROM $base as builder
 
 # User/Group Ids
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-##################  Install devito ############################################
 # Copy Devito
 ADD . /app/devito
 

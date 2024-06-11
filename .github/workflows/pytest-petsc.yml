@@ -29,11 +29,11 @@ jobs:
 
       matrix:
         name: [
-           pytest-docker-py310
+           pytest-docker-py39-gcc-omp
         ]
         include:
-        - name: pytest-docker-py310
-          python-version: '3.10'
+        - name: pytest-docker-py39-gcc-omp
+          python-version: '3.9'
           os: ubuntu-latest
           arch: "gcc"
           language: "C"
@@ -45,7 +45,7 @@ jobs:
 
     - name: Build docker image
       run: |
-          docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=zoeleibowitz/zoeleibowitz:petsc
+          docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=devitocodes/bases:cpu-${{ matrix.arch }} --build-arg petsc=true
 
     - name: Set run prefix
       run: |
