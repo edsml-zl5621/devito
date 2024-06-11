@@ -29,7 +29,6 @@ FROM ${petscinstall}copybase as builder
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-##################  Install devito ############################################
 # Copy Devito
 ADD . /app/devito
 
