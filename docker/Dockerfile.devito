@@ -12,6 +12,7 @@ FROM $base as petsc
 ARG petsc
 
 RUN if [ "$petsc" = "true" ]; then \
+        base="petsc" && \
         apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf mpich && \
         python3 -m venv /venv && \
         /venv/bin/pip install --no-cache-dir --upgrade pip && \
@@ -30,7 +31,7 @@ RUN if [ "$petsc" = "true" ]; then \
 
 
 ##################  Install devito ############################################
-FROM ${petsc=="true" and "petsc" or base} as builder
+FROM $base as builder
 
 # User/Group Ids
 ARG USER_ID=1000
