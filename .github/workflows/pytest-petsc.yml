@@ -1,4 +1,4 @@
-name: CI-petsc-docker
+name: CI-petsc
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
