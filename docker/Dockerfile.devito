@@ -6,6 +6,13 @@
 ARG base=devitocodes/bases:cpu-gcc
 ARG petsc=""
 
+# User/Group Ids
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Copy Devito
+ADD . /app/devito
+
 ##################  Install PETSc ############################################
 FROM $base as petsc 
 
@@ -27,18 +34,14 @@ RUN if [ "$petsc" = "true" ]; then \
         make all ; \
         export PETSC_ARCH=devito_build && \
         export PETSC_DIR=/home/petsc/petsc ; \
+
+        mkdir -p /app/petsc && \
+        cp -r /home/petsc /app/; \
     fi
 
 
 ##################  Install devito ############################################
 FROM $base as builder
-
-# User/Group Ids
-ARG USER_ID=1000
-ARG GROUP_ID=1000
-
-# Copy Devito
-ADD . /app/devito
 
 # Update if outdated
 RUN apt-get update
@@ -91,7 +94,6 @@ RUN groupadd -g ${GROUP_ID} app && \
     chown -R app:app $APP_HOME
 
 COPY --from=builder --chown=app:app /app /app
-COPY --from=petsc --chown=app:app /home/petsc /home/petsc
 
 ADD --chown=app:app docker/run-jupyter.sh /jupyter
 ADD --chown=app:app docker/run-tests.sh /tests
