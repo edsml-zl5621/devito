@@ -91,6 +91,7 @@ RUN groupadd -g ${GROUP_ID} app && \
     chown -R app:app $APP_HOME
 
 COPY --from=builder --chown=app:app /app /app
+COPY --from=petsc --chown=app:app /home/petsc /home/petsc
 
 ADD --chown=app:app docker/run-jupyter.sh /jupyter
 ADD --chown=app:app docker/run-tests.sh /tests
