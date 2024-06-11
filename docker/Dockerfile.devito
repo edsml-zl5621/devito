@@ -25,10 +25,10 @@ RUN if [ "$petsc" = "true" ]; then \
         git pull && \
         ./configure --with-fortran-bindings=0 --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
         make all ; \
-        export PETSC_ARCH=devito_build && \
-        export PETSC_DIR=/home/petsc/petsc ; \
-    fi
 
+        export PETSC_ARCH="devito_build" && \
+        export PETSC_DIR="/home/petsc/petsc" ; \
+    fi
 
 ##################  Install devito ############################################
 FROM $base as builder
@@ -91,7 +91,9 @@ RUN groupadd -g ${GROUP_ID} app && \
     chown -R app:app $APP_HOME
 
 COPY --from=builder --chown=app:app /app /app
-COPY --from=petsc --chown=app:app /home/petsc /home/petsc
+
+# petsc 
+COPY --from=petsc --chown=app:app /home/petsc/petsc /home/petsc/petsc
 
 ADD --chown=app:app docker/run-jupyter.sh /jupyter
 ADD --chown=app:app docker/run-tests.sh /tests
