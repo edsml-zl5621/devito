@@ -29,7 +29,7 @@ jobs:
 
       matrix:
         name: [
-           pytest-docker-py39-gcc-omp
+           pytest-docker-py39-gcc-noomp
         ]
         include:
         - name: pytest-docker-py39-gcc-noomp
