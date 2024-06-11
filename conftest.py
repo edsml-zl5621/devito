@@ -88,7 +88,7 @@ def skipif(items, whole_module=False):
             skipit = "pyrevolve not installed"
             break
         if i == 'petsc' and not os.environ.get('PETSC_ARCH'):
-            skipit = "PETSc environment variables are not set"
+            skipit = "PETSC_ARCH is not set"
             break
 
     if skipit is False:
