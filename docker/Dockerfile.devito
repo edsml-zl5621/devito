@@ -25,13 +25,7 @@ RUN if [ "$petsc" = "true" ]; then \
         git pull && \
         ./configure --with-fortran-bindings=0 --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
         make all ; \
-
-        export PETSC_ARCH="devito_build" && \
-        export PETSC_DIR="/home/petsc/petsc" ; \
     fi
-
-ENV PETSC_ARCH="devito_build"
-ENV PETSC_DIR="/home/petsc/petsc"
 
 ##################  Install devito ############################################
 FROM $base as builder
@@ -84,6 +78,9 @@ ARG GROUP_ID=1000
 # Set the home directory to our app user's home.
 ENV HOME=/app
 ENV APP_HOME=/app
+
+ENV PETSC_ARCH="devito_build"
+ENV PETSC_DIR="/home/petsc/petsc"
 
 # Create the home directory for the new app user.
 # Create an app user so our program doesn't run as root.
