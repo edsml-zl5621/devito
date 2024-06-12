@@ -26,6 +26,7 @@ RUN if [ "$petsc" = "true" ]; then \
         make all ; \
     else \
         mkdir -p /home/petsc/petsc; \
+    fi
 
 
 ##################  Install devito ############################################
