@@ -87,9 +87,15 @@ def skipif(items, whole_module=False):
         if i == 'chkpnt' and Revolver is NoopRevolver:
             skipit = "pyrevolve not installed"
             break
-        if i == 'petsc' and not os.environ.get('PETSC_ARCH'):
-            skipit = "PETSC_ARCH is not set"
-            break
+        if i == 'petsc':
+            petsc_dir = os.environ.get('PETSC_DIR', "")
+            petsc_arch = os.environ.get('PETSC_ARCH', "")
+
+            petsc_installed = os.path.join(petsc_dir, petsc_arch,
+                                           'include', 'petscconf.h')
+            if not os.path.isfile(petsc_installed):
+                skipit = "PETSc is not installed"
+                break
 
     if skipit is False:
         return pytest.mark.skipif(False, reason='')
