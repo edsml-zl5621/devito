@@ -91,9 +91,10 @@ COPY --from=builder --chown=app:app /app /app
 RUN if [ "$petsc" = "true" ]; then \
         mkdir -p /app/petsc && \
         cp -r /home/petsc /app/petsc; \
-        export PETSC_ARCH=devito_build && \
-        export PETSC_DIR=/home/petsc/petsc; \
     fi
+
+ENV PETSC_ARCH=devito_build
+ENV PETSC_DIR=/home/petsc/petsc
 
 ADD --chown=app:app docker/run-jupyter.sh /jupyter
 ADD --chown=app:app docker/run-tests.sh /tests
