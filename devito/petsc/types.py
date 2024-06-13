@@ -130,11 +130,11 @@ class PETScArray(ArrayBasic, Differentiable):
     def coefficients(self):
         """Form of the coefficients of the function."""
         return self._coefficients
-    
+
     @property
     def shape(self):
         return self._shape
-    
+
     @cached_property
     def _shape_with_inhalo(self):
         """
@@ -149,7 +149,7 @@ class PETScArray(ArrayBasic, Differentiable):
         in handy for testing or debugging
         """
         return tuple(j + i + k for i, (j, k) in zip(self.shape, self._halo))
-    
+
     @cached_property
     def shape_allocated(self):
         """
@@ -242,15 +242,16 @@ class MockEq(Eq):
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
+    is_time_dep = any(dim.is_Time for dim in target.dimensions)
     # TODO: Current assumption is rhs is part of pde that remains
     # constant at each timestep. Need to insert function to extract this from eq.
-
     y_matvec, x_matvec, b_tmp = [
         PETScArray(name=f'{prefix}_{target.name}',
                    dtype=target.dtype,
-                   dimensions=target.dimensions,
-                   shape=target.shape, liveness='eager',
-                   halo=target.halo)
+                   dimensions=target.space_dimensions,
+                   shape=target.shape[1:] if is_time_dep else target.shape,
+                   liveness='eager',
+                   halo=target.halo[1:] if is_time_dep else target.halo)
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
     # TODO: Extend to rearrange equation for implicit time stepping.
