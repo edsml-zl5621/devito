@@ -5,7 +5,8 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Call,
                            Transformer, FindSymbols,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
-                           Definition, BlankLine, PointerCast)
+                           Definition, BlankLine, PointerCast, filter_iterations,
+                           retrieve_iteration_tree)
 from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
                                 Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
 from devito.symbolics import Byref, Macro, FieldFromPointer
@@ -31,7 +32,12 @@ def lower_petsc(iet, **kwargs):
     # Create core PETSc calls (not specific to each PETScSolve)
     core = make_core_petsc_calls(unique_targets[-1], struct, objs, **kwargs)
 
-    matvec_mapper = MapNodes(Iteration, MatVecAction, 'groupby').visit(iet)
+    # Create matvec mapper from the spatial iteration loops (exclude time loop if present)
+    spatial_body = []
+    for tree in retrieve_iteration_tree(iet):
+        root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
+        spatial_body.append(root)
+    matvec_mapper = MapNodes(Iteration, MatVecAction, 'groupby').visit(List(body=spatial_body))
 
     subs = {}
     setup = []
