@@ -236,15 +236,16 @@ class RHSEq(Eq):
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
+    is_time_dep = any(dim.is_Time for dim in target.dimensions)
     # TODO: Current assumption is rhs is part of pde that remains
     # constant at each timestep. Need to insert function to extract this from eq.
-
     y_matvec, x_matvec, b_tmp = [
         PETScArray(name=f'{prefix}_{target.name}',
                    dtype=target.dtype,
-                   dimensions=target.dimensions,
-                   shape=target.shape, liveness='eager',
-                   halo=target.halo)
+                   dimensions=target.space_dimensions,
+                   shape=target.shape[1:] if is_time_dep else target.shape,
+                   liveness='eager',
+                   halo=target.halo[1:] if is_time_dep else target.halo)
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
     # TODO: Extend to rearrange equation for implicit time stepping.
