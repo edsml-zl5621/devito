@@ -37,7 +37,8 @@ def lower_petsc(iet, **kwargs):
     for tree in retrieve_iteration_tree(iet):
         root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
         spatial_body.append(root)
-    matvec_mapper = MapNodes(Iteration, MatVecAction, 'groupby').visit(List(body=spatial_body))
+    matvec_mapper = MapNodes(Iteration, MatVecAction,
+                             'groupby').visit(List(body=spatial_body))
 
     subs = {}
     setup = []
@@ -162,7 +163,9 @@ def create_dmda(target, objs):
         args.append('DMDA_STENCIL_BOX')
 
     # Global dimensions
-    args.extend(list(target.shape_global)[::-1])
+    args.extend(list(target.shape_global[1:] if
+                     any(dim.is_Time for dim in target.dimensions)
+                     else target.shape_global)[::-1])
     # No.of processors in each dimension
     if len(target.space_dimensions) > 1:
         args.extend(list(target.grid.distributor.topology)[::-1])
