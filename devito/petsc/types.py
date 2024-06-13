@@ -109,7 +109,7 @@ class PETScArray(ArrayBasic, Differentiable):
     _default_fd = 'taylor'
 
     __rkwargs__ = (AbstractFunction.__rkwargs__ +
-                   ('dimensions', 'liveness', 'coefficients'))
+                   ('dimensions', 'shape', 'liveness', 'coefficients'))
 
     def __init_finalize__(self, *args, **kwargs):
 
@@ -120,6 +120,7 @@ class PETScArray(ArrayBasic, Differentiable):
         if self._coefficients not in fd_weights_registry:
             raise ValueError("coefficients must be one of %s"
                              " not %s" % (str(fd_weights_registry), self._coefficients))
+        self._shape = kwargs.get('shape')
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
@@ -129,6 +130,39 @@ class PETScArray(ArrayBasic, Differentiable):
     def coefficients(self):
         """Form of the coefficients of the function."""
         return self._coefficients
+    
+    @property
+    def shape(self):
+        return self._shape
+    
+    @cached_property
+    def _shape_with_inhalo(self):
+        """
+        Shape of the domain+inhalo region. The inhalo region comprises the
+        outhalo as well as any additional "ghost" layers for MPI halo
+        exchanges. Data in the inhalo region are exchanged when running
+        Operators to maintain consistent values as in sequential runs.
+
+        Notes
+        -----
+        Typically, this property won't be used in user code, but it may come
+        in handy for testing or debugging
+        """
+        return tuple(j + i + k for i, (j, k) in zip(self.shape, self._halo))
+    
+    @cached_property
+    def shape_allocated(self):
+        """
+        Shape of the allocated data. It includes the domain and inhalo regions,
+        as well as any additional padding surrounding the halo.
+
+        Notes
+        -----
+        In an MPI context, this is the *local* with_halo region shape.
+        """
+        return DimensionTuple(*[j + i + k for i, (j, k) in zip(self._shape_with_inhalo,
+                                                               self._padding)],
+                              getters=self.dimensions)
 
     @cached_property
     def _C_ctype(self):
