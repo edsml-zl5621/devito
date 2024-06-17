@@ -17,7 +17,7 @@ def test_petsc_local_object():
     """
     Test C++ support for PETSc LocalObjects.
     """
-    lo0 = DM('da')
+    lo0 = DM('da', stencil_width=1)
     lo1 = Mat('A')
     lo2 = Vec('x')
     lo3 = PetscMPIInt('size')
@@ -272,19 +272,23 @@ def test_dmda_create():
         op3 = Operator(petsc3, opt='noop')
 
     assert 'PetscCall(DMDACreate1d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
-        '2,1,2,NULL,&(da)));' in str(op1)
+        '2,1,2,NULL,&(da_so_2)));' in str(op1)
 
     assert 'PetscCall(DMDACreate2d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
-        'DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,2,2,1,1,1,4,NULL,NULL,&(da)));' in str(op2)
+        'DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,2,2,1,1,1,4,NULL,NULL,&(da_so_4)));' \
+        in str(op2)
 
     assert 'PetscCall(DMDACreate3d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
         'DM_BOUNDARY_GHOSTED,DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,6,5,4' + \
-        ',1,1,1,1,6,NULL,NULL,NULL,&(da)));' in str(op3)
+        ',1,1,1,1,6,NULL,NULL,NULL,&(da_so_6)));' in str(op3)
 
-    # Check only one DMDA is created per grid
+    # Check unique DMDA is created per grid, per space_order
+    f4 = Function(name='f4', grid=grid2, space_order=6)
+    eqn4 = Eq(f4.laplace, 10)
+    petsc4 = PETScSolve(eqn4, f4)
     with switchconfig(openmp=False):
-        op4 = Operator(petsc2+petsc2, opt='noop')
-    assert str(op4).count('DMDACreate2d') == 1
+        op4 = Operator(petsc2+petsc2+petsc4, opt='noop')
+    assert str(op4).count('DMDACreate2d') == 2
 
 
 @skipif('petsc')
