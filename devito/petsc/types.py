@@ -23,6 +23,14 @@ class DM(LocalObject):
     """
     dtype = CustomDtype('DM')
 
+    def __init__(self, *args, stencil_width=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._stencil_width = stencil_width
+
+    @property
+    def stencil_width(self):
+        return self._stencil_width
+
 
 class Mat(LocalObject):
     """
