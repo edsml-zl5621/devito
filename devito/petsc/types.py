@@ -243,13 +243,12 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         PETScArray(name=f'{prefix}_{target.name}',
                    dtype=target.dtype,
                    dimensions=target.space_dimensions,
-                   shape=target.shape[1:] if is_time_dep else target.shape,
+                   shape=target.grid.shape,
                    liveness='eager',
                    halo=target.halo[1:] if is_time_dep else target.halo)
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
     # TODO: Extend to rearrange equation for implicit time stepping.
-
     matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.lhs.subs(target, x_matvec),
                             target=target, solver_parameters=solver_parameters),
                             subdomain=eq.subdomain)
