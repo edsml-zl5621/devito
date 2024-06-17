@@ -271,9 +271,9 @@ class Operator(Callable):
         return IRs(expressions, clusters, stree, uiet, iet), byproduct
 
     @classmethod
-    def _rcompile_wrapper(cls, **kwargs0):
-        def wrapper(expressions, **kwargs1):
-            return rcompile(expressions, {**kwargs0, **kwargs1})
+    def _rcompile_wrapper(cls, **kwargs):
+        def wrapper(expressions, **options):
+            return rcompile(expressions, kwargs, options)
         return wrapper
 
     @classmethod
@@ -1012,14 +1012,16 @@ class Operator(Callable):
     # Pickling support
 
     def __getstate__(self):
+        state = dict(self.__dict__)
+
         if self._lib:
-            state = dict(self.__dict__)
             # The compiled shared-object will be pickled; upon unpickling, it
             # will be restored into a potentially different temporary directory,
             # so the entire process during which the shared-object is loaded and
             # given to ctypes must be performed again
             state['_lib'] = None
             state['_cfunction'] = None
+
             # Do not pickle the `args` used to construct the Operator. Not only
             # would this be completely useless, but it might also lead to
             # allocating additional memory upon unpickling, as the user-provided
@@ -1027,12 +1029,16 @@ class Operator(Callable):
             # (e.g., f(t, x-1), f(t, x), f(t, x+1)), which are different objects
             # with distinct `.data` fields
             state['_args'] = None
+
             with open(self._lib._name, 'rb') as f:
                 state['binary'] = f.read()
                 state['soname'] = self._soname
-            return state
-        else:
-            return self.__dict__
+
+        # The allocator depends on the environment at the unpickling site, so
+        # we don't pickle it
+        state['_allocator'] = None
+
+        return state
 
     def __getnewargs_ex__(self):
         return (None,), {}
@@ -1040,12 +1046,18 @@ class Operator(Callable):
     def __setstate__(self, state):
         soname = state.pop('soname', None)
         binary = state.pop('binary', None)
+
         for k, v in state.items():
             setattr(self, k, v)
+
         if soname is not None:
             self._compiler.save(soname, binary)
             self._lib = self._compiler.load(soname)
             self._lib.name = soname
+
+        self._allocator = default_allocator(
+            '%s.%s.%s' % (self._compiler.name, self._language, self._platform)
+        )
 
 
 # Default action (perform or bypass) for selected compilation passes upon
@@ -1056,26 +1068,25 @@ class Operator(Callable):
 # if applied in cascade (e.g., `linearization` on top of `linearization`)
 rcompile_registry = {
     'avoid_denormals': False,
-    'mpi': False,
     'linearize': False,
     'place-transfers': False
 }
 
 
-def rcompile(expressions, kwargs=None):
+def rcompile(expressions, kwargs, options, target=None):
     """
     Perform recursive compilation on an ordered sequence of symbolic expressions.
     """
-    if not kwargs or 'options' not in kwargs:
-        kwargs = parse_kwargs(**kwargs)
+    options = {**kwargs['options'], **rcompile_registry, **options}
+
+    if target is None:
+        cls = operator_selector(**kwargs)
+    else:
+        kwargs = parse_kwargs(**target)
         cls = operator_selector(**kwargs)
         kwargs = cls._normalize_kwargs(**kwargs)
-    else:
-        cls = operator_selector(**kwargs)
 
-    # Tweak the compilation kwargs
-    options = dict(kwargs['options'])
-    options.update(rcompile_registry)
+    # Use the customized opt options
     kwargs['options'] = options
 
     # Recursive profiling not supported -- would be a complete mess

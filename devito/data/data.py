@@ -91,7 +91,7 @@ class Data(np.ndarray):
 
     def __reduce__(self):
         warning("Pickling of `Data` objects is not supported. Casting to `numpy.ndarray`")
-        return np.array(self).__reduce__()
+        return self.view(np.ndarray).__reduce__()
 
     def __array_finalize__(self, obj):
         # `self` is the newly created object
@@ -186,8 +186,8 @@ class Data(np.ndarray):
                     if isinstance(i, slice) and i.step is not None and i.step < 0:
                         comm_type = index_by_index
                         break
-                    else:
-                        comm_type = serial
+                else:
+                    comm_type = serial
             else:
                 comm_type = serial
             kwargs['comm_type'] = comm_type
