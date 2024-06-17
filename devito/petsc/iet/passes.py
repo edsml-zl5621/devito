@@ -7,9 +7,9 @@ from devito.ir.iet import (FindNodes, Call,
                            MapNodes, Iteration, Callable, Callback, List, Uxreplace,
                            Definition, BlankLine, PointerCast, filter_iterations,
                            retrieve_iteration_tree)
+from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.petsc.types import (PetscMPIInt, PETScStruct, DM, Mat,
                                 Vec, KSP, PC, SNES, PetscErrorCode, PETScArray)
-from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.petsc.iet.nodes import MatVecAction, LinearSolverExpression
 from devito.petsc.utils import (solver_mapper, petsc_call, petsc_call_mpi,
                                 core_metadata)
