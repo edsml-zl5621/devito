@@ -275,24 +275,24 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     if not bcs:
         return [matvecaction, rhs]
 
-    else:
-        bcs_for_matvec = []
-        for bc in bcs:
-            # TODO: Insert code to distiguish between essential and natural
-            # boundary conditions since these are treated differently within
-            # the solver
-            # NOTE: May eventually remove the essential bcs from the solve
-            # (and move to rhs) but for now, they are included since this
-            # is not trivial to implement when using DMDA
-            # NOTE: Below is temporary -> Just using this as a palceholder for
-            # the actual BC implementation for the matvec callback
-            bcs_for_matvec.append(MatVecEq(
-                y_matvec, LinearSolveExpr(bc.lhs.subs(target, x_matvec),
-                                          target=target,
-                                          solver_parameters=solver_parameters),
-                subdomain=bc.subdomain))
 
-        return [matvecaction] + bcs_for_matvec + [rhs]
+    bcs_for_matvec = []
+    for bc in bcs:
+        # TODO: Insert code to distiguish between essential and natural
+        # boundary conditions since these are treated differently within
+        # the solver
+        # NOTE: May eventually remove the essential bcs from the solve
+        # (and move to rhs) but for now, they are included since this
+        # is not trivial to implement when using DMDA
+        # NOTE: Below is temporary -> Just using this as a palceholder for
+        # the actual BC implementation for the matvec callback
+        bcs_for_matvec.append(MatVecEq(
+            y_matvec, LinearSolveExpr(bc.lhs.subs(target, x_matvec),
+                                        target=target,
+                                        solver_parameters=solver_parameters),
+            subdomain=bc.subdomain))
+
+    return [matvecaction] + bcs_for_matvec + [rhs]
 
 
 class LinearSolveExpr(sympy.Function, Reconstructable):

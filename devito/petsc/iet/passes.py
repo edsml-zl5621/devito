@@ -46,11 +46,7 @@ def lower_petsc(iet, **kwargs):
     setup = []
 
     # Create a different DMDA for each target with a unique space order
-    unique_dmdas = {}
-    for target in unique_targets:
-        name = 'da_so_%s' % target.space_order
-        unique_dmdas[name] = DM(name=name, liveness='eager',
-                                stencil_width=target.space_order)
+    unique_dmdas = create_dmda_objs(unique_targets)
     objs.update(unique_dmdas)
     for dmda in unique_dmdas.values():
         setup.extend(create_dmda_calls(dmda, objs))
@@ -61,7 +57,6 @@ def lower_petsc(iet, **kwargs):
     # Create the PETSc calls which are specific to each target
     for target in unique_targets:
         solver_objs = build_solver_objs(target)
-        matvec_body_list = List()
 
         # Generate solver setup for target
         for iter, (matvec,) in matvec_mapper.items():
@@ -73,21 +68,21 @@ def lower_petsc(iet, **kwargs):
             solver = generate_solver_calls(solver_objs, objs, matvec, target)
             setup.extend(solver)
             break
-
+        
         # Create the body of the matrix-vector callback for target
+        matvec_body_list = []
         for iter, (matvec,) in matvec_mapper.items():
             if matvec.expr.rhs.target != target:
                 continue
-            matvec_body = matvec_body_list._rebuild(
-                body=[matvec_body_list.body, iter[0]])
-            matvec_body_list = matvec_body_list._rebuild(body=matvec_body)
+            matvec_body_list.append(iter[0])
             # Remove the iteration loop from the main kernel encapsulating
-            # the matvec equations since they are moved to the callback
+            # the matvec equations since they are moved into the callback
             subs.update({iter[0]: None})
 
         # Create the matvec callback and operation for each target
         matvec_callback, matvec_op = create_matvec_callback(
-            target, matvec_body_list, solver_objs, objs)
+            target, List(body=matvec_body_list), solver_objs, objs
+        )
 
         setup.extend([matvec_op, BlankLine])
         efuncs[matvec_callback.name] = matvec_callback
@@ -107,7 +102,6 @@ def lower_petsc(iet, **kwargs):
 
 
 def init_petsc(**kwargs):
-
     # Initialize PETSc -> for now, assuming all solver options have to be
     # specifed via the parameters dict in PETScSolve
     # TODO: Are users going to be able to use PETSc command line arguments?
@@ -130,14 +124,12 @@ def build_petsc_struct(iet):
 
 
 def make_core_petsc_calls(objs, **kwargs):
-    # MPI
     call_mpi = petsc_call_mpi('MPI_Comm_size', [objs['comm'], Byref(objs['size'])])
 
     return call_mpi, BlankLine
 
 
 def build_core_objects(target, **kwargs):
-
     if kwargs['options']['mpi']:
         communicator = target.grid.distributor._obj_comm
     else:
@@ -151,8 +143,16 @@ def build_core_objects(target, **kwargs):
     }
 
 
-def create_dmda_calls(dmda, objs):
+def create_dmda_objs(unique_targets):
+    unique_dmdas = {}
+    for target in unique_targets:
+        name = 'da_so_%s' % target.space_order
+        unique_dmdas[name] = DM(name=name, liveness='eager',
+                                stencil_width=target.space_order)
+    return unique_dmdas
 
+
+def create_dmda_calls(dmda, objs):
     dmda_create = create_dmda(dmda, objs)
     dm_setup = petsc_call('DMSetUp', [dmda])
     dm_app_ctx = petsc_call('DMSetApplicationContext', [dmda, objs['struct']])
@@ -162,7 +162,6 @@ def create_dmda_calls(dmda, objs):
 
 
 def create_dmda(dmda, objs):
-
     no_of_space_dims = len(objs['grid'].dimensions)
 
     # MPI communicator
@@ -216,7 +215,6 @@ def build_solver_objs(target):
 
 
 def generate_solver_calls(solver_objs, objs, matvec, target):
-
     dmda = objs['da_so_%s' % target.space_order]
 
     solver_params = matvec.expr.rhs.solver_parameters
@@ -247,18 +245,20 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
 
     vec_replace_array = petsc_call(
         'VecReplaceArray', [solver_objs['x_local'],
-                            FieldFromPointer(target._C_field_data, target._C_symbol)])
+                            FieldFromPointer(target._C_field_data, target._C_symbol)]
+    )
 
     ksp_set_tols = petsc_call(
         'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
                              solver_params['ksp_atol'], solver_params['ksp_divtol'],
-                             solver_params['ksp_max_it']])
+                             solver_params['ksp_max_it']]
+    )
 
     ksp_set_type = petsc_call(
-        'KSPSetType', [solver_objs['ksp'], solver_mapper[solver_params['ksp_type']]])
+        'KSPSetType', [solver_objs['ksp'], solver_mapper[solver_params['ksp_type']]]
+    )
 
-    ksp_get_pc = petsc_call('KSPGetPC',
-                            [solver_objs['ksp'], Byref(solver_objs['pc'])])
+    ksp_get_pc = petsc_call('KSPGetPC', [solver_objs['ksp'], Byref(solver_objs['pc'])])
 
     pc_set_type = petsc_call('PCSetType',
                              [solver_objs['pc'], solver_mapper[solver_params['pc_type']]])
@@ -285,7 +285,6 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
 
 
 def create_matvec_callback(target, body, solver_objs, objs):
-
     dmda = objs['da_so_%s' % target.space_order]
 
     # There will be 2 PETScArrays within the body
