@@ -68,7 +68,7 @@ def lower_petsc(iet, **kwargs):
             solver = generate_solver_calls(solver_objs, objs, matvec, target)
             setup.extend(solver)
             break
-        
+
         # Create the body of the matrix-vector callback for target
         matvec_body_list = []
         for iter, (matvec,) in matvec_mapper.items():
@@ -197,7 +197,6 @@ def create_dmda(dmda, objs):
 
 def build_solver_objs(target):
     name = target.name
-
     return {
         'Jac': Mat(name='J_%s' % name),
         'x_global': Vec(name='x_global_%s' % name),
@@ -260,8 +259,9 @@ def generate_solver_calls(solver_objs, objs, matvec, target):
 
     ksp_get_pc = petsc_call('KSPGetPC', [solver_objs['ksp'], Byref(solver_objs['pc'])])
 
-    pc_set_type = petsc_call('PCSetType',
-                             [solver_objs['pc'], solver_mapper[solver_params['pc_type']]])
+    pc_set_type = petsc_call(
+        'PCSetType', [solver_objs['pc'], solver_mapper[solver_params['pc_type']]]
+    )
 
     ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
@@ -304,43 +304,55 @@ def create_matvec_callback(target, body, solver_objs, objs):
     mat_get_dm = petsc_call('MatGetDM', [solver_objs['Jac'], Byref(dmda)])
 
     dm_get_app_context = petsc_call(
-        'DMGetApplicationContext', [dmda, Byref(objs['struct']._C_symbol)])
+        'DMGetApplicationContext', [dmda, Byref(objs['struct']._C_symbol)]
+    )
 
     dm_get_local_xvec = petsc_call(
-        'DMGetLocalVector', [dmda, Byref(solver_objs['X_local'])])
+        'DMGetLocalVector', [dmda, Byref(solver_objs['X_local'])]
+    )
 
     global_to_local_begin = petsc_call(
         'DMGlobalToLocalBegin', [dmda, solver_objs['X_global'],
-                                 'INSERT_VALUES', solver_objs['X_local']])
+                                 'INSERT_VALUES', solver_objs['X_local']]
+    )
 
     global_to_local_end = petsc_call('DMGlobalToLocalEnd', [
-        dmda, solver_objs['X_global'], 'INSERT_VALUES', solver_objs['X_local']])
+        dmda, solver_objs['X_global'], 'INSERT_VALUES', solver_objs['X_local']
+    ])
 
     dm_get_local_yvec = petsc_call(
-        'DMGetLocalVector', [dmda, Byref(solver_objs['Y_local'])])
+        'DMGetLocalVector', [dmda, Byref(solver_objs['Y_local'])]
+    )
 
     vec_get_array_y = petsc_call(
-        'VecGetArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)])
+        'VecGetArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)]
+    )
 
     vec_get_array_x = petsc_call(
-        'VecGetArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)])
+        'VecGetArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)]
+    )
 
-    dm_get_local_info = petsc_call('DMDAGetLocalInfo', [
-        dmda, Byref(petsc_arr_seed.function.dmda_info)])
+    dm_get_local_info = petsc_call(
+        'DMDAGetLocalInfo', [dmda, Byref(petsc_arr_seed.function.dmda_info)]
+    )
 
     casts = [PointerCast(i.function) for i in petsc_arrays]
 
     vec_restore_array_y = petsc_call(
-        'VecRestoreArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)])
+        'VecRestoreArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)]
+    )
 
     vec_restore_array_x = petsc_call(
-        'VecRestoreArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)])
+        'VecRestoreArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)]
+    )
 
     dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
-        dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']])
+        dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
+    ])
 
     dm_local_to_global_end = petsc_call('DMLocalToGlobalEnd', [
-        dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']])
+        dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
+    ])
 
     func_return = Call('PetscFunctionReturn', arguments=[0])
 
@@ -367,11 +379,13 @@ def create_matvec_callback(target, body, solver_objs, objs):
 
     matvec_callback = Callable(
         'MyMatShellMult_%s' % target.name, matvec_body, retval=objs['err'],
-        parameters=(solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global']))
+        parameters=(solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global'])
+    )
 
     matvec_operation = petsc_call(
         'MatShellSetOperation', [solver_objs['Jac'], 'MATOP_MULT',
-                                 Callback(matvec_callback.name, void, void)])
+                                 Callback(matvec_callback.name, void, void)]
+    )
 
     return matvec_callback, matvec_operation
 
