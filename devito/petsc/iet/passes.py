@@ -297,9 +297,11 @@ def create_matvec_callback(target, body, solver_objs, objs):
     petsc_arr_seed, = [i.function for i in petsc_arrays
                        if i.function != petsc_arr_write.function]
 
+    define_arrays = [Definition(i.function) for i in petsc_arrays]
+
     # Struct needs to be defined explicitly here since CompositeObjects
     # do not have 'liveness'
-    defn_struct = Definition(objs['struct'])
+    define_struct = Definition(objs['struct'])
 
     mat_get_dm = petsc_call('MatGetDM', [solver_objs['Jac'], Byref(dmda)])
 
@@ -358,7 +360,8 @@ def create_matvec_callback(target, body, solver_objs, objs):
 
     matvec_body = List(body=[
         petsc_func_begin_user,
-        defn_struct,
+        define_arrays,
+        define_struct,
         mat_get_dm,
         dm_get_app_context,
         dm_get_local_xvec,
