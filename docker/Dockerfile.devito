@@ -11,19 +11,36 @@ FROM $base as petsc_builder
 
 ARG petsc
 
+# RUN if [ "$petsc" = "true" ]; then \
+#         apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf mpich && \
+#         python3 -m venv /venv && \
+#         /venv/bin/pip install --no-cache-dir --upgrade pip && \
+#         /venv/bin/pip install --no-cache-dir --no-binary numpy numpy && \
+#         mkdir -p /deps && mkdir -p /opt/petsc && cd /deps && \
+#         git clone -b release https://gitlab.com/petsc/petsc.git petsc && \
+#         cd petsc && \
+#         ./configure --prefix=/opt/petsc --with-mpi-dir=/opt/openmpi --with-fortran-bindings=0 --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
+#         make all \
+#         rm -rf /deps/petsc ; \
+#     else \
+#         mkdir -p /home/petsc/petsc ; \
+#     fi
+
 RUN if [ "$petsc" = "true" ]; then \
         apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf && \
         python3 -m venv /venv && \
         /venv/bin/pip install --no-cache-dir --upgrade pip && \
         /venv/bin/pip install --no-cache-dir --no-binary numpy numpy && \
-        mkdir -p /deps && mkdir -p /opt/petsc && cd /deps && \
+        rm -rf ~/.cache/pip && \
+        mkdir -p /home/petsc && \
+        cd /home/petsc && \
         git clone -b release https://gitlab.com/petsc/petsc.git petsc && \
         cd petsc && \
-        ./configure --prefix=/opt/petsc --with-mpi-dir=/opt/openmpi --with-fortran-bindings=0 --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
-        make all \
-        rm -rf /deps/petsc ; \
+        git pull && \
+        ./configure --with-mpi-dir=/opt/openmpi --with-fortran-bindings=0 --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
+        make all ; \
     else \
-        mkdir -p /home/petsc/petsc ; \
+        mkdir -p /home/petsc/petsc; \
     fi
 
 
