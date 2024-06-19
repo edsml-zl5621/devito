@@ -20,6 +20,7 @@ jobs:
     runs-on: "${{ matrix.os }}"
 
     env:
+      DOCKER_BUILDKIT: "1"
       DEVITO_ARCH: "${{ matrix.arch }}"
       DEVITO_LANGUAGE: ${{ matrix.language }}
 
@@ -45,7 +46,7 @@ jobs:
 
     - name: Build docker image
       run: |
-          docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=devitocodes/bases:cpu-${{ matrix.arch }} --build-arg petsc=petscyes
+          docker build . --file docker/Dockerfile.devito --tag devito_img --build-arg base=devitocodes/bases:cpu-${{ matrix.arch }} --build-arg petscinstall=petsc
 
     - name: Set run prefix
       run: |
