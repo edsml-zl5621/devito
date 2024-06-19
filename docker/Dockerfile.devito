@@ -82,7 +82,7 @@ RUN apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf mpic
 FROM $base as user
 # COPY is much faster than RUN chown by order of magnitude so we have a final step that
 # just copies the built image into the user.
-ARG petsc=""
+ARG PETSC=""
 
 # User/Group Ids
 ARG USER_ID=1000
@@ -104,7 +104,7 @@ RUN groupadd -g ${GROUP_ID} app && \
     install -d -m 0755 -o app -g app /app && \
     chown -R app:app $APP_HOME
 
-COPY --from=${petsc}builder --chown=app:app /app /app
+COPY --from=${PETSC}builder --chown=app:app /app /app
 
 ENV PETSC_ARCH="devito_build"
 ENV PETSC_DIR="/opt/petsc/petsc"
@@ -116,10 +116,10 @@ ADD --chown=app:app docker/entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /print-defaults /jupyter /tests /docker-entrypoint.sh
 
 # Venv
-COPY --from=${petsc}builder --chown=app:app /venv /venv
+COPY --from=${PETSC}builder  --chown=app:app /venv /venv
 
 # opt
-COPY --from=${petsc}builder --chown=app:app /opt /opt
+COPY --from=${PETSC}builder  --chown=app:app /opt /opt
 
 # Install codecov
 WORKDIR /app/devito
