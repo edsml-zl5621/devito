@@ -1,1 +1,1 @@
-from devito.petsc.types import *  # noqa
+from devito.petsc.solve import *  # noqa
