@@ -12,11 +12,6 @@ from sympy import simplify
 __all__ = ['PETScSolve']
 
 
-class SolveError(Exception):
-    """Base class for exceptions in this module."""
-    pass
-
-
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
