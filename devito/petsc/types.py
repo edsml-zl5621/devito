@@ -14,9 +14,6 @@ from devito.symbolics import FieldFromComposite
 from devito.types.basic import IndexedBase
 
 
-__all__ = ['PETScSolve']
-
-
 class DM(LocalObject):
     """
     PETSc Data Management object (DM).
@@ -309,3 +306,4 @@ class PETScStruct(CompositeObject):
         for i in self.fields:
             setattr(values[self.name]._obj, i, kwargs['args'][i])
         return values
+    
