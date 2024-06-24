@@ -64,13 +64,14 @@ def separate_eqn(eqn, target):
     tmp = zeroed_eqn.lhs
 
     tmp2 = eval_time_derivatives(tmp)
-    # Derive the part of the pde that remains constant
-    # at each time step (i.e not updated within the ksp solve)
-    # Solving F(x) = b at each time step.
+    # Extract the part of the PDE that remains constant at each
+    # time step, which is not updated during the KSP solve
+    # In other words, we are solving F(x) = b, where b represents
+    # the part of the pde that doesn't depend on x.
     b = remove_target(tmp2, target)
     F_x = simplify(tmp2 - b)
 
-    return b, F_x
+    return -b, F_x
 
 
 @singledispatch
