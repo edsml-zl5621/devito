@@ -4,12 +4,14 @@
 
 # Base image with compilers
 ARG base=devitocodes/bases:cpu-gcc
+ARG petscinstall=""
 
 FROM $base as builder
 
 # User/Group Ids
 ARG USER_ID=1000
 ARG GROUP_ID=1000
+
 
 ##################  Install devito ############################################
 # Copy Devito
@@ -61,10 +63,13 @@ RUN apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf mpic
     make all
 
 
+ARG petscinstall=""
+FROM ${petscinstall}builder as copybase
+
+
 FROM $base as user
 # COPY is much faster than RUN chown by order of magnitude so we have a final step that
 # just copies the built image into the user.
-ARG petscinstall=""
 
 # User/Group Ids
 ARG USER_ID=1000
@@ -75,6 +80,9 @@ ARG GROUP_ID=1000
 ENV HOME=/app
 ENV APP_HOME=/app
 
+ENV PETSC_ARCH="devito_build"
+ENV PETSC_DIR="/opt/petsc/petsc"
+
 # Create the home directory for the new app user.
 # Create an app user so our program doesn't run as root.
 # Chown all the files to the app user.
@@ -83,10 +91,7 @@ RUN groupadd -g ${GROUP_ID} app && \
     install -d -m 0755 -o app -g app /app && \
     chown -R app:app $APP_HOME
 
-COPY --from=${petscinstall}builder --chown=app:app /app /app
-
-ENV PETSC_ARCH="devito_build"
-ENV PETSC_DIR="/opt/petsc/petsc"
+COPY --from=copybase --chown=app:app /app /app
 
 ADD --chown=app:app docker/run-jupyter.sh /jupyter
 ADD --chown=app:app docker/run-tests.sh /tests
@@ -95,10 +100,10 @@ ADD --chown=app:app docker/entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /print-defaults /jupyter /tests /docker-entrypoint.sh
 
 # Venv
-COPY --from=${petscinstall}builder  --chown=app:app /venv /venv
+COPY --from=copybase  --chown=app:app /venv /venv
 
 # opt
-COPY --from=${petscinstall}builder  --chown=app:app /opt /opt
+COPY --from=copybase  --chown=app:app /opt /opt
 
 # Install codecov
 WORKDIR /app/devito
