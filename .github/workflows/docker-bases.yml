@@ -59,7 +59,7 @@ jobs:
           push: true
           target: 'gcc'
           build-args: 'arch=gcc'
-          tags: 'zoeleibowitz/bases:cpu-gcc'
+          tags: 'devitocodes/bases:cpu-gcc'
 
 
 #######################################################
