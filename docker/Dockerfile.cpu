@@ -18,7 +18,7 @@ RUN apt-get update && \
 # Install for basic base not containing it
 RUN apt-get install -y vim wget git flex libnuma-dev tmux \
         numactl hwloc curl \
-        autoconf libtool build-essential procps
+        autoconf libtool build-essential procps gfortran
 
 # Install tmpi
 RUN curl https://raw.githubusercontent.com/Azrael3000/tmpi/master/tmpi -o /usr/local/bin/tmpi
