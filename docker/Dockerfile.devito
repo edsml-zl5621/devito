@@ -3,7 +3,7 @@
 ##############################################################
 
 # Base image with compilers
-ARG base=devitocodes/bases:cpu-gcc
+ARG base=zoeleibowitz/bases:cpu-gcc
 ARG petscinstall=""
 
 FROM $base as copybase
@@ -11,16 +11,17 @@ FROM $base as copybase
 ##################  Install PETSc ############################################
 FROM copybase as petsccopybase
 
-RUN apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf mpich && \
+RUN apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf && \
     python3 -m venv /venv && \
     /venv/bin/pip install --no-cache-dir --upgrade pip && \
     /venv/bin/pip install --no-cache-dir --no-binary numpy numpy && \
     mkdir -p /opt/petsc && \
+    cd /opt/openmpi && \
+    ls && \
     cd /opt/petsc && \
     git clone -b release https://gitlab.com/petsc/petsc.git petsc && \
     cd petsc && \
-    git pull && \
-    ./configure --with-fortran-bindings=0 --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
+    ./configure --with-fortran-bindings=0 --with-mpi-dir=/opt/openmpi --with-openblas-include=$(pkg-config --variable=includedir openblas) --with-openblas-lib=$(pkg-config --variable=libdir openblas)/libopenblas.so PETSC_ARCH=devito_build && \
     make all
 
 
