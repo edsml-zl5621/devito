@@ -3,7 +3,7 @@
 ##############################################################
 
 # Base image with compilers
-ARG base=zoeleibowitz/bases:cpu-gcc
+ARG base=devitocodes/bases:cpu-gcc
 ARG petscinstall=""
 
 FROM $base as copybase
@@ -97,10 +97,10 @@ ADD --chown=app:app docker/entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /print-defaults /jupyter /tests /docker-entrypoint.sh
 
 # Venv
-COPY --from=builder  --chown=app:app /venv /venv
+COPY --from=builder --chown=app:app /venv /venv
 
 # opt
-COPY --from=builder  --chown=app:app /opt /opt
+COPY --from=builder --chown=app:app /opt /opt
 
 # Install codecov
 WORKDIR /app/devito
