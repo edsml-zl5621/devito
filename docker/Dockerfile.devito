@@ -11,7 +11,7 @@ FROM $base as copybase
 ##################  Install PETSc ############################################
 FROM copybase as petsccopybase
 
-RUN apt-get update && apt-get install -y libopenblas-serial-dev git pkgconf && \
+RUN apt-get update && apt-get install -y git && \
     python3 -m venv /venv && \
     /venv/bin/pip install --no-cache-dir --upgrade pip && \
     /venv/bin/pip install --no-cache-dir --no-binary numpy numpy && \
