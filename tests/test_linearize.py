@@ -5,7 +5,7 @@ import scipy.sparse
 from devito import (Grid, Function, TimeFunction, SparseTimeFunction, Operator, Eq,
                     Inc, MatrixSparseTimeFunction, sin)
 from devito.ir import Call, Callable, DummyExpr, Expression, FindNodes, SymbolRegistry
-from devito.passes import Graph, linearize
+from devito.passes import Graph, linearize, generate_macros
 from devito.types import Array, Bundle, DefaultDimension
 
 
@@ -512,8 +512,10 @@ def test_call_retval_indexed():
     # Emulate what the compiler would do
     graph = Graph(foo)
 
+    sregistry = SymbolRegistry()
     linearize(graph, callback=True, options={'index-mode': 'int64'},
-              sregistry=SymbolRegistry())
+              sregistry=sregistry)
+    generate_macros(graph, sregistry=sregistry)
 
     foo = graph.root
 
@@ -590,3 +592,23 @@ def test_inc_w_default_dims():
     assert f.shape[0]*k._default_value == 35
     assert np.all(g.data[3] == f.shape[0]*k._default_value)
     assert np.all(g.data[4:] == 0)
+
+
+def test_different_dtype():
+    space_order = 4
+
+    grid = Grid(shape=(4, 4))
+
+    f = Function(name='f', grid=grid, space_order=space_order)
+    b = Function(name='b', grid=grid, space_order=space_order, dtype=np.float64)
+
+    f.data[:] = 2.1
+    b.data[:] = 1.3
+
+    eq = Eq(f, b.dx + f.dy)
+
+    op1 = Operator(eq, opt=('advanced', {'linearize': True}))
+
+    # Check generated code has different strides for different dtypes
+    assert "bL0(x,y) b[(x)*y_stride0 + (y)]" in str(op1)
+    assert "L0(x,y) f[(x)*y_stride1 + (y)]" in str(op1)
