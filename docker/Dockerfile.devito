@@ -16,8 +16,6 @@ RUN apt-get update && apt-get install -y git && \
     /venv/bin/pip install --no-cache-dir --upgrade pip && \
     /venv/bin/pip install --no-cache-dir --no-binary numpy numpy && \
     mkdir -p /opt/petsc && \
-    cd /opt/openmpi && \
-    ls && \
     cd /opt/petsc && \
     git clone -b release https://gitlab.com/petsc/petsc.git petsc && \
     cd petsc && \
