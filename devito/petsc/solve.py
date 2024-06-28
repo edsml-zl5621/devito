@@ -65,9 +65,9 @@ def separate_eqn(eqn, target):
 
     tmp2 = eval_time_derivatives(tmp)
     # Extract the part of the PDE that remains constant at each
-    # time step, which is not updated during the KSP solve
+    # time step
     # In other words, we are solving F(x) = b, where b represents
-    # the part of the pde that doesn't depend on x.
+    # the part of the pde that doesn't depend on x
     b = remove_target(tmp2, target)
     F_x = simplify(tmp2 - b)
 
