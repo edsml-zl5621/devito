@@ -59,19 +59,16 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
 
 def separate_eqn(eqn, target):
-
+    """
+    Separate the equation into two separate expressions,
+    where F(target) = b.
+    """
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
-    tmp = zeroed_eqn.lhs
+    tmp = eval_time_derivatives(zeroed_eqn.lhs)
+    b = remove_target(tmp, target)
+    F_target = simplify(tmp - b)
 
-    tmp2 = eval_time_derivatives(tmp)
-    # Extract the part of the PDE that remains constant at each
-    # time step, which is not updated during the KSP solve
-    # In other words, we are solving F(x) = b, where b represents
-    # the part of the pde that doesn't depend on x.
-    b = remove_target(tmp2, target)
-    F_x = simplify(tmp2 - b)
-
-    return -b, F_x
+    return -b, F_target
 
 
 @singledispatch
@@ -85,11 +82,7 @@ def _(expr, target):
     if not expr.has(target):
         return expr
 
-    args = []
-    for a in expr.args:
-        a1 = remove_target(a, target)
-        args.append(a1)
-
+    args = [remove_target(a, target) for a in expr.args]
     return expr.func(*args, evaluate=False)
 
 
@@ -111,6 +104,4 @@ def _(expr, target):
 
 @remove_target.register(Derivative)
 def _(expr, target):
-    if not expr.has(target):
-        return expr
-    return 0
+    return 0 if expr.has(target) else expr
