@@ -10,11 +10,14 @@ on:
   push:
     branches:
       - master
+      # Temporary
       - separate-eqn
   pull_request:
     branches:
       - master
+      # Temporary
       - separate-eqn
+      - centre-stencil
 
 jobs:
   pytest:

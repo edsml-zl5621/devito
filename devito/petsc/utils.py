@@ -1,7 +1,6 @@
 import os
 
 from devito.ir.equations import OpMatVec, OpRHS
-from devito.finite_differences.differentiable import Add, Mul, EvalDerivative
 from devito.tools import memoized_func
 from devito.ir.iet import Call
 from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
