@@ -34,6 +34,8 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     new_target = {func for func in retrieve_functions(F_target) if
                   func.function == target.function}.pop()
 
+    # TODO: Current assumption is that problem is linear and user has not provided
+    # a jacobian. Hence, we can use F_target to form the jac-vec product
     matvecaction = MatVecEq(
         y_matvec, LinearSolveExpr(uxreplace(F_target, {new_target: x_matvec}),
                                   target=target, solver_parameters=solver_parameters),
