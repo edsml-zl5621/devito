@@ -27,19 +27,17 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                    liveness='eager',
                    halo=target.halo[1:] if is_time_dep else target.halo)
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
-    
+
     b, F_target = separate_eqn(eq, target)
 
     # Args were updated so need to update target
-    new_target = {func for func in retrieve_functions(F_target) if 
+    new_target = {func for func in retrieve_functions(F_target) if
                   func.function == target.function}.pop()
 
-    centre = centre_stencil(Eq(y_matvec, F_target), new_target)
-
-    # TODO: Extend to rearrange equation for implicit time stepping.
-    matvecaction = MatVecEq(y_matvec, LinearSolveExpr(uxreplace(F_target, {new_target: x_matvec}),
-                            target=target, solver_parameters=solver_parameters),
-                            subdomain=eq.subdomain)
+    matvecaction = MatVecEq(
+        y_matvec, LinearSolveExpr(uxreplace(F_target, {new_target: x_matvec}),
+                                  target=target, solver_parameters=solver_parameters),
+        subdomain=eq.subdomain)
 
     # Part of pde that remains constant at each timestep
     rhs = RHSEq(b_tmp, LinearSolveExpr(b, target=target,
@@ -120,9 +118,17 @@ def _(expr, target):
 def centre_stencil(eqn, target):
     """
     Extract the centre stencil from equation.
+    The function assumes that the core stencil (i.e F(x)) is already on the
+    RHS of the input equation (first argument).
+
+    NOTE: At the point of entry, the time derivatives are likey evaluated, but
+    not the spatial derivatives. This necessitates evaluating 'eqn'
+    before deriving the centre stencil. By doing so, we ensure that
+    all derivatives, including spatial derivatives, are correctly accounted for
+    in the centre stencil.
     """
-    new = extract_centre(eqn.evaluate.rhs, target)
-    return new
+    centre = extract_centre(eqn.evaluate.rhs, target)
+    return centre
 
 
 @singledispatch

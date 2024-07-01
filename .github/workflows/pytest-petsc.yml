@@ -11,10 +11,12 @@ on:
     branches:
       - master
       - separate-eqn
+      - centre-stencil
   pull_request:
     branches:
       - master
       - separate-eqn
+      - centre-stencil
 
 jobs:
   pytest:
