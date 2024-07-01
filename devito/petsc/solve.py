@@ -118,8 +118,9 @@ def _(expr, target):
 def centre_stencil(eqn, target):
     """
     Extract the centre stencil from equation.
-    The function assumes that the core stencil (i.e F(x)) is already on the
-    RHS of the input equation (first argument).
+    This function assumes that the core stencil, which is the stencil from
+    which the centre stencil will be extracted, is located on the RHS of
+    the input equation (first argument).
 
     NOTE: At the point of entry, the time derivatives are likely evaluated, but
     not the spatial derivatives. This necessitates evaluating 'eqn'
