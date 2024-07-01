@@ -13,6 +13,7 @@ from devito.petsc.types import (DM, Mat, Vec, PetscMPIInt, KSP,
                                 LinearSolveExpr, PETScStruct)
 from devito.petsc.solve import PETScSolve, separate_eqn, centre_stencil
 from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
+# from devito.petsc.utils import centre_stencil
 
 
 @skipif('petsc')
@@ -364,3 +365,45 @@ def test_separate_eqn():
         ' + Derivative(f2(t, x, y), (y, 2)) + f2(t, x, y)/dt'
     assert str(F4) == '-Derivative(f2(t + dt, x, y), (x, 2)) -' + \
         ' Derivative(f2(t + dt, x, y), (y, 2)) + f2(t + dt, x, y)/dt'
+
+
+# @skipif('petsc')
+# def test_centre_stencil():
+#     """
+#     Test extraction of centre stencil.
+#     """
+#     grid = Grid((2, 2))
+
+#     f1 = Function(name='f1', grid=grid, space_order=2)
+#     g1 = Function(name='g1', grid=grid, space_order=2)
+#     eq1 = Eq(g1, f1.laplace)
+#     centre1 = centre_stencil(eq1, f1)
+#     centre2 = centre_stencil(eq1, g1)
+#     assert str(centre1) == '-2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'
+#     assert str(centre2) == '-g1(x, y)'
+
+#     eqn2 = Eq(g1, g1.dx + f1.dx)
+#     centre3 = centre_stencil(eqn2, g1)
+#     centre4 = centre_stencil(eqn2, f1)
+#     assert str(centre3) == '-g1(x, y) - g1(x, y)/h_x'
+#     assert str(centre4) == '-f1(x, y)/h_x'
+
+#     f2 = TimeFunction(name='f2', grid=grid, space_order=2)
+#     g2 = TimeFunction(name='g2', grid=grid, space_order=2)
+#     tmp_eq2 = Eq(f2.dt, f2.laplace + g2)
+#     # target = f2.forward
+#     b2, F2 = separate_eqn(tmp_eq2, f2.forward)
+#     # Linear => can form mat-vec action from F2
+#     y_matvec = PETScArray(name='y_matvec_'f'{f2.forward.name}',
+#                           dimensions=f2.forward.space_dimensions,
+#                           shape=f2.forward.grid.shape)
+#     matvecaction = Eq(y_matvec, F2)
+#     centre5 = centre_stencil(matvecaction, f2.forward)
+
+#     # Implicit Time Stepping
+#     eqn3 = Eq(f2.dt, f2.forward.laplace + g2)
+#     b3, F3 = separate_eqn(eqn3, f2.forward)
+
+#     # Semi-implicit Time Stepping
+#     eqn4 = Eq(f2.dt, f2.forward.laplace + f2.laplace + g2)
+#     b4, F4 = separate_eqn(eqn4, f2.forward)
