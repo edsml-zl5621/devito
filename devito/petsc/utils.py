@@ -1,5 +1,4 @@
 import os
-from functools import singledispatch
 
 from devito.ir.equations import OpMatVec, OpRHS
 from devito.finite_differences.differentiable import Add, Mul, EvalDerivative
@@ -72,43 +71,3 @@ def petsc_call(specific_call, call_args):
 def petsc_call_mpi(specific_call, call_args):
     general_call = 'PetscCallMPI'
     return Call(general_call, [Call(specific_call, arguments=call_args)])
-
-
-def centre_stencil(expr, target):
-    """
-    Extract an expression for the centre stencil.
-    """
-    expr = expr.evaluate
-    expr = extract_centre(expr, target)
-    return expr
-
-
-@singledispatch
-def extract_centre(expr, target):
-    return expr if expr == target else 0
-
-
-@extract_centre.register(Add)
-@extract_centre.register(EvalDerivative)
-def _(expr, target):
-    if not expr.has(target):
-        return 0
-
-    args = [extract_centre(a, target) for a in expr.args]
-    return expr.func(*args, evaluate=True)
-
-
-@extract_centre.register(Mul)
-def _(expr, target):
-    if not expr.has(target):
-        return 0
-
-    args = []
-    for a in expr.args:
-        if not a.has(target):
-            args.append(a)
-        else:
-            a1 = extract_centre(a, target)
-            args.append(a1)
-
-    return expr.func(*args, evaluate=True)
