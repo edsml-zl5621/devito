@@ -395,6 +395,7 @@ def test_separate_eqn(eqn, target, expected):
 
 
 @skipif('petsc')
+<<<<<<< HEAD
 @pytest.mark.parametrize('expr, so, target, expected', [
     ('f1.laplace', 2, 'f1', '-2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'),
     ('f1 + f1.laplace', 2, 'f1',
@@ -438,3 +439,65 @@ def test_centre_stencil(expr, so, target, expected):
     centre = centre_stencil(eval(expr), eval(target))
 
     assert str(centre) == expected
+=======
+def test_centre_stencil():
+    """
+    Test extraction of the centre stencil from an equation.
+    """
+
+    grid = Grid((2, 2))
+
+    f1 = Function(name='f1', grid=grid, space_order=2)
+    g1 = Function(name='g1', grid=grid, space_order=2)
+
+    centre1 = centre_stencil(Eq(g1, f1.laplace), f1)
+    assert str(centre1) == '-2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'
+
+    centre2 = centre_stencil(Eq(g1, f1 + f1.laplace), f1)
+    assert str(centre2) == 'f1(x, y) - 2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'
+
+    centre3 = centre_stencil(Eq(g1, g1.dx + f1.dx), f1)
+    assert str(centre3) == '-f1(x, y)/h_x'
+
+    centre4 = centre_stencil(Eq(g1, 10 + f1.dx2), g1)
+    assert str(centre4) == '0'
+
+    f2 = TimeFunction(name='f2', grid=grid, space_order=2)
+    g2 = TimeFunction(name='g2', grid=grid, space_order=2)
+    centre5 = centre_stencil(Eq(g2, f2.laplace), f2)
+    assert str(centre5) == '-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2'
+
+    centre6 = centre_stencil(Eq(g2, f2*g2), f2)
+    assert str(centre6) == 'f2(t, x, y)*g2(t, x, y)'
+
+    centre7 = centre_stencil(Eq(g2, g2*f2.laplace), f2)
+    assert str(centre7) == '(-2.0*f2(t, x, y)/h_y**2 - ' + \
+        '2.0*f2(t, x, y)/h_x**2)*g2(t, x, y)'
+
+    centre8 = centre_stencil(Eq(g2, f2.forward), f2.forward)
+    assert str(centre8) == 'f2(t + dt, x, y)'
+
+    centre9 = centre_stencil(Eq(g2, f2.forward.laplace), f2.forward)
+    assert str(centre9) == '-2.0*f2(t + dt, x, y)/h_y**2 - 2.0*f2(t + dt, x, y)/h_x**2'
+
+    centre10 = centre_stencil(Eq(g2, f2.laplace + f2.forward.laplace), f2.forward)
+    assert str(centre10) == '-2.0*f2(t + dt, x, y)/h_y**2 - 2.0*f2(t + dt, x, y)/h_x**2'
+
+    centre11 = centre_stencil(Eq(g2, f2.laplace + f2.forward.laplace), f2)
+    assert str(centre11) == '-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2'
+
+    f3 = TimeFunction(name='f2', grid=grid, space_order=4)
+    g3 = TimeFunction(name='g2', grid=grid, space_order=4)
+    centre12 = centre_stencil(Eq(g3, f3.laplace), f3)
+    assert str(centre12) == '-2.5*f2(t, x, y)/h_y**2 - 2.5*f2(t, x, y)/h_x**2'
+
+    centre13 = centre_stencil(Eq(g3, f3.laplace + f3.forward.laplace), f3.forward)
+    assert str(centre13) == '-2.5*f2(t + dt, x, y)/h_y**2 - 2.5*f2(t + dt, x, y)/h_x**2'
+
+    centre14 = centre_stencil(Eq(g3, f3.laplace + f3.forward.laplace), f3)
+    assert str(centre14) == '-2.5*f2(t, x, y)/h_y**2 - 2.5*f2(t, x, y)/h_x**2'
+
+    centre15 = centre_stencil(Eq(g3, f3.forward*f3.forward.laplace), f3.forward)
+    assert str(centre15) == '(-2.5*f2(t + dt, x, y)/h_y**2 - ' + \
+        '2.5*f2(t + dt, x, y)/h_x**2)*f2(t + dt, x, y)'
+>>>>>>> b7c9b8c2d (dsl: Add tests etc for centre stencil extraction)
