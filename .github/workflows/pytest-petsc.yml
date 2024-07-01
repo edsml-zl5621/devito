@@ -12,7 +12,6 @@ on:
       - master
       # Temporary
       - separate-eqn
-      - centre-stencil
   pull_request:
     branches:
       - master
