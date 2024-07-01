@@ -370,8 +370,10 @@ def test_separate_eqn():
 def test_centre_stencil():
     """
     Test extraction of the centre stencil from an equation.
-    It assumes that the core stencil is already on the
-    right-hand side (RHS) of the input equation (first argument).
+
+    This function assumes that the core stencil, which is the stencil from
+    which the centRE stencil will be extracted, is located on the RHS of
+    the input equation (first argument).
     """
 
     grid = Grid((2, 2))
