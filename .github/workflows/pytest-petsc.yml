@@ -10,8 +10,10 @@ on:
   push:
     branches:
       - master
+      - separate-eqn
   pull_request:
     branches:
+      - master
       - separate-eqn
 
 jobs:
