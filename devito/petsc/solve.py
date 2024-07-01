@@ -30,7 +30,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     b, F_target = separate_eqn(eq, target)
 
-    # Args were updated so need to update target
+    # Args were updated so need to update target to enable uxreplace on F_target
     new_target = {func for func in retrieve_functions(F_target) if
                   func.function == target.function}.pop()
 
