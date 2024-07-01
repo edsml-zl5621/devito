@@ -121,7 +121,7 @@ def centre_stencil(eqn, target):
     The function assumes that the core stencil (i.e F(x)) is already on the
     RHS of the input equation (first argument).
 
-    NOTE: At the point of entry, the time derivatives are likey evaluated, but
+    NOTE: At the point of entry, the time derivatives are likely evaluated, but
     not the spatial derivatives. This necessitates evaluating 'eqn'
     before deriving the centre stencil. By doing so, we ensure that
     all derivatives, including spatial derivatives, are correctly accounted for
