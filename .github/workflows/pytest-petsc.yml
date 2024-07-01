@@ -10,16 +10,10 @@ on:
   push:
     branches:
       - master
-<<<<<<< HEAD
       - enable-opt
-=======
-      - separate-eqn
-      - centre-stencil
->>>>>>> b7c9b8c2d (dsl: Add tests etc for centre stencil extraction)
   pull_request:
     branches:
-      - separate-eqn
-      - centre-stencil
+      - master
 
 jobs:
   pytest:
