@@ -119,7 +119,9 @@ def _(expr, target):
 
 def centre_stencil(eqn, target):
     """
-    Extract the centre stencil from equation.
+    Extract the centre stencil from equation. Its coefficient is what 
+    would appear on the diagonal of the matrix system if the matrix were
+    formed explicitly. 
     This function assumes that the core stencil, which is the stencil from
     which the centre stencil will be extracted, is located on the RHS of
     the input equation (first argument).

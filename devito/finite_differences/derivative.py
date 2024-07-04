@@ -393,6 +393,11 @@ class Derivative(sympy.Derivative, Differentiable):
     @property
     def _eval_deriv(self):
         return self._eval_fd(self.expr)
+    
+    @property
+    def _eval_deriv_centre(self):
+        centre = [term for term in self._eval_fd(self.expr).args if term.has(self.expr)][0]
+        return centre
 
     def _eval_fd(self, expr, **kwargs):
         """
