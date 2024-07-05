@@ -479,8 +479,8 @@ class Operator(Callable):
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
 
-        lower_petsc(graph, **kwargs)
-
+        # lower_petsc(graph, **kwargs)
+  
         graph = cls._specialize_iet(graph, **kwargs)
 
         # Instrument the IET for C-level profiling

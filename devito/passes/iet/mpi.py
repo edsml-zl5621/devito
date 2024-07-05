@@ -13,7 +13,9 @@ from devito.mpi.routines import HaloExchangeBuilder, ReductionBuilder
 from devito.passes.iet.engine import iet_pass
 from devito.tools import generator
 
-__all__ = ['mpiize']
+from devito.petsc.iet.nodes import LinearSolverExpression
+
+__all__ = ['mpiize', 'petscize']
 
 
 @iet_pass
@@ -312,7 +314,7 @@ def make_halo_exchanges(iet, mpimode=None, **kwargs):
     for hs in FindNodes(HaloSpot).visit(iet):
         heb = user_heb if isinstance(hs, OverlappableHaloSpot) else sync_heb
         mapper[hs] = heb.make(hs)
-
+    # from IPython import embed; embed()
     efuncs = sync_heb.efuncs + user_heb.efuncs
     iet = Transformer(mapper, nested=True).visit(iet)
 
@@ -331,6 +333,49 @@ def make_halo_exchanges(iet, mpimode=None, **kwargs):
     iet = Transformer(mapper, nested=True).visit(iet)
 
     return iet, {'includes': ['mpi.h'], 'efuncs': efuncs}
+
+
+@iet_pass
+def make_petsc_exchanges(iet, mpimode=None, **kwargs):
+    # from IPython import embed; embed()
+    # To produce unique object names
+    # generators = {'msg': generator(), 'comm': generator(), 'comp': generator()}
+
+
+
+    # sync_heb = HaloExchangeBuilder('basic', generators, **kwargs)
+    # user_heb = HaloExchangeBuilder(mpimode, generators, **kwargs)
+
+
+    user_heb = HaloExchangeBuilder('petsc', **kwargs)
+    mapper = {}
+    for hs in FindNodes(LinearSolverExpression).visit(iet):
+        # from IPython import embed; embed()
+        
+        heb = user_heb
+        mapper[hs] = heb.make(hs)
+
+
+    # # from IPython import embed; embed()
+    efuncs = user_heb.efuncs
+    iet = Transformer(mapper, nested=True).visit(iet)
+
+    # # Must drop the PARALLEL tag from the Iterations within which halo
+    # # exchanges are performed
+    # mapper = {}
+    # for tree in retrieve_iteration_tree(iet):
+    #     for i in reversed(tree):
+    #         if i in mapper:
+    #             # Already seen this subtree, skip
+    #             break
+    #         if FindNodes(Call).visit(i):
+    #             mapper.update({n: n._rebuild(properties=set(n.properties)-{PARALLEL})
+    #                            for n in tree[:tree.index(i)+1]})
+    #             break
+    # iet = Transformer(mapper, nested=True).visit(iet)
+
+    return iet, {'efuncs': efuncs}
+    # return iet, {}
 
 
 @iet_pass
@@ -368,3 +413,9 @@ def mpiize(graph, **kwargs):
         make_halo_exchanges(graph, mpimode=mpimode, **kwargs)
 
     make_reductions(graph, mpimode=mpimode, **kwargs)
+
+
+def petscize(graph, **kwargs):
+
+    make_petsc_exchanges(graph, **kwargs)
+
