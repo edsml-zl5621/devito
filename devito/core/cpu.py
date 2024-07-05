@@ -9,7 +9,7 @@ from devito.passes.clusters import (Lift, blocking, buffering, cire, cse,
                                     factorize, fission, fuse, optimize_pows,
                                     optimize_hyperplanes)
 from devito.passes.iet import (CTarget, OmpTarget, avoid_denormals, linearize,
-                               mpiize, hoist_prodders, relax_incr_dimensions,
+                               mpiize, petscize, hoist_prodders, relax_incr_dimensions,
                                check_stability)
 from devito.tools import timed_pass
 
@@ -193,9 +193,12 @@ class Cpu64AdvOperator(Cpu64OperatorMixin, CoreOperator):
 
         # Flush denormal numbers
         avoid_denormals(graph, **kwargs)
-
+        # from IPython import embed; embed()
         # Distributed-memory parallelism
         mpiize(graph, **kwargs)
+
+        # Distributed-memory parallelism
+        petscize(graph, **kwargs)
 
         # Lower BlockDimensions so that blocks of arbitrary shape may be used
         relax_incr_dimensions(graph, **kwargs)
