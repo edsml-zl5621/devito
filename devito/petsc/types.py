@@ -1,6 +1,7 @@
 import sympy
 from functools import cached_property
 import numpy as np
+from ctypes import POINTER
 
 from devito.tools import CustomDtype
 from devito.types import LocalObject, Eq, CompositeObject
@@ -172,15 +173,15 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @cached_property
     def _C_ctype(self):
-        return CustomDtype(self.petsc_type, modifier='*')
+        # NOTE: Resorting back to using float/double etc instead of PetscScalar
+        # since this is simpler when opt='advanced', otherwise the Temps must also
+        # be converted to PetscScalar
+        # return CustomDtype(dtype_to_ctype(self.dtype), modifier='*')
+        return POINTER(dtype_to_ctype(self.dtype))
 
     @property
     def petsc_type(self):
         return dtype_to_petsctype(self._dtype)
-
-    @property
-    def dtype(self):
-        return CustomDtype(self.petsc_type)
 
     @property
     def symbolic_shape(self):
