@@ -154,14 +154,14 @@ class Cpu64AdvOperator(Cpu64OperatorMixin, CoreOperator):
         options = kwargs['options']
         platform = kwargs['platform']
         sregistry = kwargs['sregistry']
-        
+
         # Toposort+Fusion (the former to expose more fusion opportunities)
         clusters = fuse(clusters, toposort=True)
 
         # Hoist and optimize Dimension-invariant sub-expressions
         clusters = cire(clusters, 'invariants', sregistry, options, platform)
         clusters = Lift().process(clusters)
-
+        # from IPython import embed; embed()
         # Blocking to improve data locality
         if options['blockeager']:
             clusters = blocking(clusters, sregistry, options)
