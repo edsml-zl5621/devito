@@ -1,6 +1,7 @@
 import sympy
 from functools import cached_property
 import numpy as np
+from ctypes import POINTER
 
 from devito.tools import CustomDtype
 from devito.types import LocalObject, Eq, CompositeObject
@@ -172,15 +173,13 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @cached_property
     def _C_ctype(self):
-        return CustomDtype(self.petsc_type, modifier='*')
-
-    @property
-    def petsc_type(self):
-        return dtype_to_petsctype(self._dtype)
-
-    @property
-    def dtype(self):
-        return CustomDtype(self.petsc_type)
+        # TODO: Reverting to using float/double instead of PetscScalar for
+        # simplicity when opt='advanced'. Otherwise, Temp objects must also
+        # be converted to PetscScalar. Additional tests are needed to
+        # ensure this approach is fine. Previously encountered issues
+        # should be resolved as long as we ensure users create Function
+        # objects with the same dtype as the precision configured in PETSc.
+        return POINTER(dtype_to_ctype(self.dtype))
 
     @property
     def symbolic_shape(self):

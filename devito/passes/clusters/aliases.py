@@ -95,7 +95,7 @@ def cire(clusters, mode, sregistry, options, platform):
         transformer = cls(sregistry, options, platform)
 
         clusters = transformer.process(clusters)
-
+    # from IPython import embed; embed()
     return clusters
 
 
