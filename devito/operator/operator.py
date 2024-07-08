@@ -34,6 +34,7 @@ from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
 from devito.petsc.iet.passes import lower_petsc
 from devito.petsc.clusters import petsc_lift
 
+
 __all__ = ['Operator']
 
 
@@ -479,7 +480,7 @@ class Operator(Callable):
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
 
-        # lower_petsc(graph, **kwargs)
+        lower_petsc(graph, **kwargs)
   
         graph = cls._specialize_iet(graph, **kwargs)
 
@@ -1116,6 +1117,28 @@ def rcompile(expressions, kwargs, options, target=None):
         cls = operator_selector(**kwargs)
         kwargs = cls._normalize_kwargs(**kwargs)
         kwargs['options'].update(options)
+
+    # Recursive profiling not supported -- would be a complete mess
+    kwargs.pop('profiler', None)
+
+    return cls._lower(expressions, **kwargs)
+
+
+def rcompile_petsc(expressions, kwargs, options, target=None):
+    """
+    Perform recursive compilation on an ordered sequence of symbolic expressions.
+    """
+    options = {**options, **rcompile_registry}
+
+    if target is None:
+        cls = operator_selector(**kwargs)
+    else:
+        kwargs = parse_kwargs(**target)
+        cls = operator_selector(**kwargs)
+        kwargs = cls._normalize_kwargs(**kwargs)
+
+    # Use the customized opt options
+    kwargs['options'] = options
 
     # Recursive profiling not supported -- would be a complete mess
     kwargs.pop('profiler', None)
