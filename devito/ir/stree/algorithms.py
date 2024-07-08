@@ -170,7 +170,7 @@ def preprocess(clusters, options=None, **kwargs):
 
         elif c.is_dist_reduce:
             processed.append(c)
-
+        
         elif c.is_critical_region:
             if c.is_wait:
                 processed.append(c.rebuild(exprs=[]))

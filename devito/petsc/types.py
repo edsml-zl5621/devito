@@ -281,9 +281,17 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
 
 class LinearSolveExpr(sympy.Function, Reconstructable):
+    """
+    This is attached to equations that appear in
+    the main kernel. Other equations that are related to it
+    e.g matvecs, formfuncs, precondiitoner etc are attached to it
+    and recursively compiled at the IET level to form the various
+    callback functions.
+    """
 
     __rargs__ = ('expr',)
-    __rkwargs__ = ('target', 'solver_parameters')
+    __rkwargs__ = ('target', 'solver_parameters', 'matvecs',
+                   'formfuncs', 'preconditioner')
 
     defaults = {
         'ksp_type': 'gmres',
@@ -294,7 +302,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         'ksp_max_it': 10000  # Maximum iterations
     }
 
-    def __new__(cls, expr, target=None, solver_parameters=None, **kwargs):
+    def __new__(cls, expr, target=None, solver_parameters=None,
+                matvecs=None, formfuncs=None, preconditioner=None, **kwargs):
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -306,6 +315,9 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         obj._expr = expr
         obj._target = target
         obj._solver_parameters = solver_parameters
+        obj._matvecs = matvecs
+        obj._formfuncs = formfuncs
+        obj._preconditioner = preconditioner
         return obj
 
     def __repr__(self):
@@ -330,6 +342,18 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     @property
     def solver_parameters(self):
         return self._solver_parameters
+    
+    @property
+    def matvecs(self):
+        return self._matvecs
+    
+    @property
+    def formfuncs(self):
+        return self._formfuncs
+    
+    @property
+    def preconditioner(self):
+        return self._preconditioner
 
     func = Reconstructable._rebuild
 
@@ -353,3 +377,4 @@ class PETScStruct(CompositeObject):
         for i in self.fields:
             setattr(values[self.name]._obj, i, kwargs['args'][i])
         return values
+

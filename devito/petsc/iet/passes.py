@@ -21,17 +21,6 @@ def lower_petsc(iet, **kwargs):
     # Check if PETScSolve was used
     petsc_nodes = FindNodes(InjectSolveDummy).visit(iet)
 
-    # from IPython import embed; embed()
-    # rcompiler = kwargs['rcompile']
-    # from devito import Grid, Function, Eq
-    # grid = Grid((2,2))
-    # f = Function(name='f', grid=grid, space_order=2)
-    # g = Function(name='g', grid=grid, space_order=2)
-    # new_eqn = Eq(f, g+1)
-    # irs, _ = rcompiler([new_eqn], options={'mpi': False})
-    # from IPython import embed; embed()
-
-
     if not petsc_nodes:
         return iet, {}
 

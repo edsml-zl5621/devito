@@ -29,6 +29,7 @@ def clusterize(exprs, **kwargs):
     """
     Turn a sequence of LoweredEqs into a sequence of Clusters.
     """
+    # from IPython import embed; embeds()
     # Initialization
     clusters = [Cluster(e, e.ispace) for e in exprs]
 
@@ -47,10 +48,10 @@ def clusterize(exprs, **kwargs):
 
     # Input normalization
     clusters = normalize(clusters, **kwargs)
-
+    # from IPython import embed; embed()
     # Derive the necessary communications for distributed-memory parallelism
     clusters = communications(clusters)
-
+    # from IPython import embed; embed()
     return ClusterGroup(clusters)
 
 
@@ -449,7 +450,7 @@ class HaloComms(Queue):
             seen.update({halo_touch, c})
 
         processed.extend(clusters)
-
+        # from IPython import embed; embed() 
         return processed
 
 

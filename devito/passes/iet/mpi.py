@@ -15,7 +15,7 @@ from devito.tools import generator
 
 from devito.petsc.iet.nodes import LinearSolverExpression
 
-__all__ = ['mpiize', 'petscize']
+__all__ = ['mpiize']
 
 
 @iet_pass
@@ -81,7 +81,7 @@ def _hoist_halospots(iet):
     rules = [rule0, rule1]
 
     # Precompute scopes to save time
-    scopes = {i: Scope([e.expr for e in v]) for i, v in MapNodes().visit(iet).items()}
+    scopes = {i: Scope([e.expr for e in v if not isinstance(e, Call)]) for i, v in MapNodes().visit(iet).items()}
 
     # Analysis
     hsmapper = {}
@@ -336,49 +336,6 @@ def make_halo_exchanges(iet, mpimode=None, **kwargs):
 
 
 @iet_pass
-def make_petsc_exchanges(iet, mpimode=None, **kwargs):
-    # from IPython import embed; embed()
-    # To produce unique object names
-    # generators = {'msg': generator(), 'comm': generator(), 'comp': generator()}
-
-
-
-    # sync_heb = HaloExchangeBuilder('basic', generators, **kwargs)
-    # user_heb = HaloExchangeBuilder(mpimode, generators, **kwargs)
-
-
-    user_heb = HaloExchangeBuilder('petsc', **kwargs)
-    mapper = {}
-    for hs in FindNodes(LinearSolverExpression).visit(iet):
-        # from IPython import embed; embed()
-        
-        heb = user_heb
-        mapper[hs] = heb.make(hs)
-
-
-    # # from IPython import embed; embed()
-    efuncs = user_heb.efuncs
-    iet = Transformer(mapper, nested=True).visit(iet)
-
-    # # Must drop the PARALLEL tag from the Iterations within which halo
-    # # exchanges are performed
-    # mapper = {}
-    # for tree in retrieve_iteration_tree(iet):
-    #     for i in reversed(tree):
-    #         if i in mapper:
-    #             # Already seen this subtree, skip
-    #             break
-    #         if FindNodes(Call).visit(i):
-    #             mapper.update({n: n._rebuild(properties=set(n.properties)-{PARALLEL})
-    #                            for n in tree[:tree.index(i)+1]})
-    #             break
-    # iet = Transformer(mapper, nested=True).visit(iet)
-
-    return iet, {'efuncs': efuncs}
-    # return iet, {}
-
-
-@iet_pass
 def make_reductions(iet, mpimode=None, **kwargs):
     rb = ReductionBuilder()
 
@@ -415,7 +372,4 @@ def mpiize(graph, **kwargs):
     make_reductions(graph, mpimode=mpimode, **kwargs)
 
 
-def petscize(graph, **kwargs):
-
-    make_petsc_exchanges(graph, **kwargs)
 
