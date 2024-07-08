@@ -173,15 +173,13 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @cached_property
     def _C_ctype(self):
-        # NOTE: Resorting back to using float/double etc instead of PetscScalar
-        # since this is simpler when opt='advanced', otherwise the Temps must also
-        # be converted to PetscScalar
-        # return CustomDtype(dtype_to_ctype(self.dtype), modifier='*')
+        # TODO: Reverting to using float/double instead of PetscScalar for
+        # simplicity when opt='advanced'. Otherwise, Temp objects must also
+        # be converted to PetscScalar. Additional tests are needed to
+        # ensure this approach is fine. Previously encountered issues
+        # should be resolved as long as we ensure users create Function
+        # objects with the same dtype as the precision configured in PETSc.
         return POINTER(dtype_to_ctype(self.dtype))
-
-    @property
-    def petsc_type(self):
-        return dtype_to_petsctype(self._dtype)
 
     @property
     def symbolic_shape(self):
