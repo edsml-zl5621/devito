@@ -31,8 +31,10 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     b, F_target = separate_eqn(eq, target)
 
     # Args were updated so need to update target to enable uxreplace on F_target
-    new_target = {func for func in retrieve_functions(F_target) if
-                  func.function == target.function}.pop()
+    new_target = {f for f in retrieve_functions(F_target) if
+                  f.function == target.function}
+    assert len(new_target) == 1  # Sanity check: only one target expected
+    new_target = new_target.pop()
 
     # TODO: Current assumption is that problem is linear and user has not provided
     # a jacobian. Hence, we can use F_target to form the jac-vec product
@@ -75,9 +77,7 @@ def separate_eqn(eqn, target):
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
     tmp = eval_time_derivatives(zeroed_eqn.lhs)
     b = remove_target(tmp, target)
-    # Is this ok? Is there another way of using simplify
-    # but maintaining its Devito type?
-    F_target = Add(simplify(tmp - b))
+    F_target = diffify(simplify(tmp - b))
     return -b, F_target
 
 
@@ -117,22 +117,13 @@ def _(expr, target):
     return 0 if expr.has(target) else expr
 
 
-def centre_stencil(eqn, target):
+def centre_stencil(expr, target):
     """
-    Extract the centre stencil from equation. Its coefficient is what 
+    Extract the centre stencil from an expression. Its coefficient is what
     would appear on the diagonal of the matrix system if the matrix were
-    formed explicitly. 
-    This function assumes that the core stencil, which is the stencil from
-    which the centre stencil will be extracted, is located on the RHS of
-    the input equation (first argument).
-
-    NOTE: At the point of entry, the time derivatives are likely evaluated, but
-    not the spatial derivatives. This necessitates evaluating 'eqn'
-    before deriving the centre stencil. By doing so, we ensure that
-    all derivatives, including spatial derivatives, are correctly accounted for
-    in the centre stencil.
+    formed explicitly.
     """
-    centre = extract_centre(eqn.evaluate.rhs, target)
+    centre = extract_centre(expr, target)
     return centre
 
 
@@ -165,3 +156,11 @@ def _(expr, target):
             args.append(a1)
 
     return expr.func(*args, evaluate=False)
+
+
+@extract_centre.register(Derivative)
+def _(expr, target):
+    if not expr.has(target):
+        return 0
+    args = [extract_centre(a, target) for a in expr.evaluate.args]
+    return expr.evaluate.func(*args)
