@@ -24,7 +24,7 @@ from devito.types.dimension import Dimension
 from devito.types.args import ArgProvider
 from devito.types.caching import CacheManager
 from devito.types.basic import AbstractFunction, Size
-from devito.types.utils import Buffer, DimensionTuple, NODE, CELL
+from devito.types.utils import Buffer, DimensionTuple, NODE, CELL, host_layer
 
 __all__ = ['Function', 'TimeFunction', 'SubFunction', 'TempFunction']
 
@@ -866,10 +866,11 @@ class DiscreteFunction(AbstractFunction, ArgProvider, Differentiable):
         if args.options['index-mode'] == 'int32' and \
            args.options['linearize'] and \
            data.size - 1 >= np.iinfo(np.int32).max:
-            raise InvalidArgument("`%s`, with its %d elements, may be too big for "
-                                  "int32 pointer arithmetic, which might cause an "
-                                  "overflow. Use the 'index-mode=int64' option"
-                                  % (self, data.size))
+            raise InvalidArgument("`%s`, with its %d elements, is too big for "
+                                  "int32 pointer arithmetic. Consider using the "
+                                  "'index-mode=int64' option, the save=Buffer(..) "
+                                  "API (TimeFunction only), or domain "
+                                  "decomposition via MPI" % (self.name, data.size))
 
     def _arg_finalize(self, args, alias=None):
         key = alias or self
@@ -1441,6 +1442,13 @@ class TimeFunction(Function):
         _t = self.dimensions[self._time_position]
 
         return self._subs(_t, _t - i * _t.spacing)
+
+    @property
+    def layer(self):
+        """
+        The memory hierarchy layer in which the TimeFunction is stored.
+        """
+        return host_layer
 
     @property
     def _time_size(self):

@@ -3,7 +3,7 @@ import numpy as np
 import scipy.sparse
 
 from devito import (Grid, Function, TimeFunction, SparseTimeFunction, Operator, Eq,
-                    Inc, MatrixSparseTimeFunction, sin)
+                    Inc, MatrixSparseTimeFunction, sin, switchconfig)
 from devito.ir import Call, Callable, DummyExpr, Expression, FindNodes, SymbolRegistry
 from devito.passes import Graph, linearize, generate_macros
 from devito.types import Array, Bundle, DefaultDimension
@@ -126,6 +126,27 @@ def test_interpolation():
     assert np.all(u.data == u1.data)
 
 
+def test_interpolation_enforcing_int64_indexing():
+    grid = Grid(shape=(4, 4))
+
+    src = SparseTimeFunction(name='src', grid=grid, npoint=1, nt=10)
+    rec = SparseTimeFunction(name='rec', grid=grid, npoint=1, nt=10)
+    u = TimeFunction(name="u", grid=grid, time_order=2)
+
+    eqns = ([Eq(u.forward, u + 1)] +
+            src.inject(field=u.forward, expr=src) +
+            rec.interpolate(expr=u.forward))
+
+    op = Operator(eqns, opt=('advanced', {'linearize': True,
+                                          'index-mode': 'int32'}))
+
+    # Check generated code
+    assert 'uL0' in str(op)
+    assert 'int x_stride0' in str(op)  # for `u`
+    assert 'long p_rec_stride0' in str(op)  # for `rec`
+    assert 'long p_src_stride0' in str(op)  # for `src`
+
+
 def test_interpolation_msf():
     grid = Grid(shape=(4, 4))
 
@@ -164,7 +185,7 @@ def test_codegen_quality0(mode):
 
     exprs = FindNodes(Expression).visit(op)
     assert len(exprs) == 6
-    assert all('const long' in str(i) for i in exprs[:-2])
+    assert all('const int' in str(i) for i in exprs[:-2])
 
     # Only four access macros necessary, namely `uL0`, `bufL0`, `bufL1`
     # for the efunc args
@@ -186,8 +207,8 @@ def test_codegen_quality1():
     # 11 expressions in total are expected, 8 of which are for the linearized accesses
     exprs = FindNodes(Expression).visit(op)
     assert len(exprs) == 11
-    assert all('const long' in str(i) for i in exprs[:-3])
-    assert all('const long' not in str(i) for i in exprs[-3:])
+    assert all('const int' in str(i) for i in exprs[:-3])
+    assert all('const int' not in str(i) for i in exprs[-3:])
 
     # Only two access macros necessary, namely `uL0` and `r1L0` (the other five
     # obviously are _POSIX_C_SOURCE, MIN, MAX, START, STOP)
@@ -594,21 +615,27 @@ def test_inc_w_default_dims():
     assert np.all(g.data[4:] == 0)
 
 
-def test_different_dtype():
-    space_order = 4
+@pytest.mark.parametrize('autopadding', [False, True, np.float64])
+def test_different_dtype(autopadding):
 
-    grid = Grid(shape=(4, 4))
+    @switchconfig(autopadding=autopadding)
+    def _test_different_dtype():
+        space_order = 4
 
-    f = Function(name='f', grid=grid, space_order=space_order)
-    b = Function(name='b', grid=grid, space_order=space_order, dtype=np.float64)
+        grid = Grid(shape=(4, 4))
 
-    f.data[:] = 2.1
-    b.data[:] = 1.3
+        f = Function(name='f', grid=grid, space_order=space_order)
+        b = Function(name='b', grid=grid, space_order=space_order, dtype=np.float64)
 
-    eq = Eq(f, b.dx + f.dy)
+        f.data[:] = 2.1
+        b.data[:] = 1.3
 
-    op1 = Operator(eq, opt=('advanced', {'linearize': True}))
+        eq = Eq(f, b.dx + f.dy)
 
-    # Check generated code has different strides for different dtypes
-    assert "bL0(x,y) b[(x)*y_stride0 + (y)]" in str(op1)
-    assert "L0(x,y) f[(x)*y_stride1 + (y)]" in str(op1)
+        op1 = Operator(eq, opt=('advanced', {'linearize': True}))
+
+        # Check generated code has different strides for different dtypes
+        assert "bL0(x,y) b[(x)*y_stride0 + (y)]" in str(op1)
+        assert "L0(x,y) f[(x)*y_stride0 + (y)]" in str(op1)
+
+    _test_different_dtype()

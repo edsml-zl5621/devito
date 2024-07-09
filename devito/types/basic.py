@@ -19,7 +19,8 @@ from devito.types.caching import Cached, Uncached
 from devito.types.lazy import Evaluable
 from devito.types.utils import DimensionTuple
 
-__all__ = ['Symbol', 'Scalar', 'Indexed', 'IndexedData', 'DeviceMap']
+__all__ = ['Symbol', 'Scalar', 'Indexed', 'IndexedData', 'DeviceMap',
+           'IrregularFunctionInterface']
 
 
 Size = namedtuple('Size', 'left right')
@@ -587,7 +588,7 @@ class Scalar(Symbol, ArgProvider):
         if self.name in kwargs:
             return {self.name: kwargs.pop(self.name)}
         else:
-            return self._arg_defaults()
+            return self._arg_defaults(**kwargs)
 
 
 class AbstractTensor(sympy.ImmutableDenseMatrix, Basic, Pickable, Evaluable):
@@ -737,10 +738,17 @@ class AbstractTensor(sympy.ImmutableDenseMatrix, Basic, Pickable, Evaluable):
     def __add__(self, other):
         try:
             # Most case support sympy add
-            return super().__add__(other)
+            tsum = super().__add__(other)
         except TypeError:
             # Sympy doesn't support add with scalars
+            tsum = self.applyfunc(lambda x: x + other)
+
+        # As of sympy 1.13, super does not throw an exception but
+        # only returns NotImplemented for some internal dispatch.
+        if tsum is NotImplemented:
             return self.applyfunc(lambda x: x + other)
+
+        return tsum
 
     def _eval_matrix_mul(self, other):
         """
@@ -915,7 +923,8 @@ class AbstractFunction(sympy.Function, Basic, Pickable, Evaluable):
     def __eq__(self, other):
         try:
             return (self.function is other.function and
-                    self.indices == other.indices)
+                    self.indices == other.indices and
+                    other.is_AbstractFunction)
         except AttributeError:
             # `other` not even an AbstractFunction
             return False
@@ -1001,29 +1010,39 @@ class AbstractFunction(sympy.Function, Basic, Pickable, Evaluable):
         padding = tuple(kwargs.get('padding', ((0, 0),)*self.ndim))
         return DimensionTuple(*padding, getters=self.dimensions)
 
+    @cached_property
+    def __padding_dtype__(self):
+        v = configuration['autopadding']
+        if not self.is_autopaddable or not v:
+            return None
+        try:
+            if issubclass(v, np.number):
+                return v
+        except TypeError:
+            return np.float32
+
     def __padding_setup_smart__(self, **kwargs):
         nopadding = ((0, 0),)*self.ndim
 
-        if kwargs.get('autopadding', configuration['autopadding']):
-            # The padded Dimension
-            candidates = self.space_dimensions
-            if not candidates:
-                return nopadding
-            d = candidates[-1]
-
-            mmts = configuration['platform'].max_mem_trans_size(self.dtype)
-            remainder = self._size_nopad[d] % mmts
-            if remainder == 0:
-                # Already a multiple of `mmts`, no need to pad
-                return nopadding
-
-            dpadding = (0, (mmts - remainder))
-            padding = [(0, 0)]*self.ndim
-            padding[self.dimensions.index(d)] = dpadding
-
-            return tuple(padding)
-        else:
+        if not self.__padding_dtype__:
             return nopadding
+
+        # The padded Dimension
+        if not self.space_dimensions:
+            return nopadding
+        d = self.space_dimensions[-1]
+
+        mmts = configuration['platform'].max_mem_trans_size(self.__padding_dtype__)
+        remainder = self._size_nopad[d] % mmts
+        if remainder == 0:
+            # Already a multiple of `mmts`, no need to pad
+            return nopadding
+
+        dpadding = (0, (mmts - remainder))
+        padding = [(0, 0)]*self.ndim
+        padding[self.dimensions.index(d)] = dpadding
+
+        return tuple(padding)
 
     def __ghost_setup__(self, **kwargs):
         return (0, 0)
@@ -1074,6 +1093,13 @@ class AbstractFunction(sympy.Function, Basic, Pickable, Evaluable):
     @property
     def base(self):
         return self.indexed
+
+    @property
+    def c0(self):
+        """
+        `self`'s first component if `self` is a tensor, otherwise just `self`.
+        """
+        return self
 
     @property
     def _eval_deriv(self):
@@ -1249,6 +1275,19 @@ class AbstractFunction(sympy.Function, Basic, Pickable, Evaluable):
     @property
     def _mem_host(self):
         return self._space == 'host'
+
+    @cached_property
+    def _signature(self):
+        """
+        The signature of an AbstractFunction is the set of fields that
+        makes it "compatible" with another AbstractFunction. The fact that
+        two AbstractFunctions are compatible may be exploited by the compiler
+        to generate smarter code
+        """
+        ret = [type(self), self.indices]
+        attrs = set(self.__rkwargs__) - {'name', 'function'}
+        ret.extend(getattr(self, i) for i in attrs)
+        return frozenset(ret)
 
     def _make_pointer(self):
         """Generate a symbolic pointer to self."""
@@ -1612,3 +1651,16 @@ class Indexed(sympy.Indexed):
         except AttributeError:
             pass
         return super()._subs(old, new, **hints)
+
+
+class IrregularFunctionInterface:
+
+    """
+    A common interface for all irregular AbstractFunctions.
+    """
+
+    is_regular = False
+
+    @property
+    def nbytes_max(self):
+        raise NotImplementedError

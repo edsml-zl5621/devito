@@ -13,7 +13,7 @@ from devito import (NODE, Eq, Inc, Constant, Function, TimeFunction,  # noqa
                     ConditionalDimension, DefaultDimension, Grid, Operator,
                     norm, grad, div, dimensions, switchconfig, configuration,
                     centered, first_derivative, solve, transpose, Abs, cos,
-                    sin, sqrt)
+                    sin, sqrt, Ge)
 from devito.exceptions import InvalidArgument, InvalidOperator
 from devito.finite_differences.differentiable import diffify
 from devito.ir import (Conditional, DummyEq, Expression, Iteration, FindNodes,
@@ -168,6 +168,29 @@ def test_cse_temp_order():
     assert type(args[2]) is CTemp
 
 
+def test_cse_w_conditionals():
+    grid = Grid(shape=(10, 10, 10))
+    x, _, _ = grid.dimensions
+
+    cd = ConditionalDimension(name='cd', parent=x, condition=Ge(x, 4),
+                              indirect=True)
+
+    f = Function(name='f', grid=grid)
+    g = Function(name='g', grid=grid)
+    h = Function(name='h', grid=grid)
+    a0 = Function(name='a0', grid=grid)
+    a1 = Function(name='a1', grid=grid)
+
+    eqns = [Eq(h, a0, implicit_dims=cd),
+            Eq(a0, a0 + f*g, implicit_dims=cd),
+            Eq(a1, a1 + f*g, implicit_dims=cd)]
+
+    op = Operator(eqns)
+
+    assert_structure(op, ['x,y,z'], 'xyz')
+    assert len(FindNodes(Conditional).visit(op)) == 1
+
+
 @pytest.mark.parametrize('expr,expected', [
     ('2*fa[x] + fb[x]', '2*fa[x] + fb[x]'),
     ('fa[x]**2', 'fa[x]*fa[x]'),
@@ -187,6 +210,9 @@ def test_cse_temp_order():
     ('Mul(SizeOf("char"), '
      '-IndexedPointer(FieldFromPointer("size", fa._C_symbol), x), evaluate=False)',
      'sizeof(char)*(-fa_vec->size[x])'),
+    ('sqrt(fa[x]**4)', 'sqrt(fa[x]*fa[x]*fa[x]*fa[x])'),
+    ('sqrt(fa[x])**2', 'fa[x]'),
+    ('fa[x]**-2', '1/(fa[x]*fa[x])'),
 ])
 def test_pow_to_mul(expr, expected):
     grid = Grid((4, 5))

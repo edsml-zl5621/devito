@@ -1,12 +1,14 @@
 from collections import OrderedDict, namedtuple
 from functools import cached_property
 import ctypes
+import shutil
 from operator import attrgetter
 from math import ceil
+from tempfile import gettempdir
 
 from sympy import sympify
 
-from devito.arch import compiler_registry, platform_registry
+from devito.arch import ANYCPU, Device, compiler_registry, platform_registry
 from devito.data import default_allocator
 from devito.exceptions import InvalidOperator, ExecutionError
 from devito.logger import debug, info, perf, warning, is_log_enabled_for, switch_log_level
@@ -16,18 +18,19 @@ from devito.ir.iet import (Callable, CInterface, EntryFunction, FindSymbols, Met
                            derive_parameters, iet_build)
 from devito.ir.support import AccessMode, SymbolRegistry
 from devito.ir.stree import stree_build
-from devito.operator.profiling import AdvancedProfilerVerbose, create_profile
+from devito.operator.profiling import create_profile
 from devito.operator.registry import operator_selector
 from devito.mpi import MPI
 from devito.parameters import configuration
 from devito.passes import (Graph, lower_index_derivatives, generate_implicit,
                            generate_macros, minimize_symbols, unevaluate,
-                           error_mapper, petsc_lift, lower_petsc)
-from devito.symbolics import estimate_cost
-from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_tuple, flatten,
-                          filter_sorted, frozendict, is_integer, split, timed_pass,
-                          timed_region, contains_val)
-from devito.types import Grid, Evaluable
+                           error_mapper, is_on_device, petsc_lift)
+from devito.symbolics import estimate_cost, subs_op_args
+from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tuple,
+                          flatten, filter_sorted, frozendict, is_integer,
+                          split, timed_pass, timed_region, contains_val)
+from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
+                          disk_layer)
 
 __all__ = ['Operator']
 
@@ -224,10 +227,11 @@ class Operator(Callable):
         op._func_table = OrderedDict()
         op._func_table.update(OrderedDict([(i, MetaCall(None, False))
                                            for i in profiler._ext_calls]))
-        op._func_table.update(OrderedDict([(i.root.name, i) for i in byproduct.funcs]))
+        op._func_table.update(OrderedDict([(i.root.name, i)
+                                           for i in byproduct.funcs]))
 
-        # Internal mutable state to store information about previous runs, autotuning
-        # reports, etc
+        # Internal mutable state to store information about previous runs,
+        # autotuning reports, etc
         op._state = cls._initialize_state(**kwargs)
 
         # Produced by the various compilation passes
@@ -521,6 +525,10 @@ class Operator(Callable):
     def objects(self):
         return tuple(i for i in self.parameters if i.is_Object)
 
+    @cached_property
+    def threads_info(self):
+        return frozendict({'nthreads': self.nthreads, 'npthreads': self.npthreads})
+
     # Arguments processing
 
     @cached_property
@@ -555,10 +563,13 @@ class Operator(Callable):
             if set(d._arg_names).intersection(kwargs):
                 futures.update(d._arg_values(self._dspace[d], args={}, **kwargs))
 
+        # Prepare to process data-carriers
+        args = kwargs['args'] = ReducerMap()
+        kwargs['metadata'] = self.threads_info
+
         overrides, defaults = split(self.input, lambda p: p.name in kwargs)
 
         # Process data-carrier overrides
-        args = kwargs['args'] = ReducerMap()
         for p in overrides:
             args.update(p._arg_values(**kwargs))
             try:
@@ -580,9 +591,9 @@ class Operator(Callable):
                     pass
                 elif k in kwargs:
                     # User is in control
-                    # E.g., given a ConditionalDimension `t_sub` with factor `fact` and
-                    # a TimeFunction `usave(t_sub, x, y)`, an override for `fact` is
-                    # supplied w/o overriding `usave`; that's legal
+                    # E.g., given a ConditionalDimension `t_sub` with factor `fact`
+                    # and a TimeFunction `usave(t_sub, x, y)`, an override for
+                    # `fact` is supplied w/o overriding `usave`; that's legal
                     pass
                 elif is_integer(args[k]) and not contains_val(args[k], v):
                     raise ValueError("Default `%s` is incompatible with other args as "
@@ -630,10 +641,13 @@ class Operator(Callable):
         for o in self.objects:
             args.update(o._arg_values(grid=grid, **kwargs))
 
+        # Purge `kwargs`
+        kwargs.pop('args')
+        kwargs.pop('metadata')
+
         # In some "lower-level" Operators implementing a random piece of C, such as
         # one or more calls to third-party library functions, there could still be
         # at this point unprocessed arguments (e.g., scalars)
-        kwargs.pop('args')
         args.update({k: v for k, v in kwargs.items() if k not in args})
 
         # Sanity check
@@ -930,8 +944,10 @@ class Operator(Callable):
             return summary
 
         if summary.globals:
-            # Note that with MPI enabled, the global performance indicators
+            # NOTE: with MPI enabled, the global performance indicators
             # represent "cross-rank" performance data
+
+            # Print out global performance indicators
             metrics = []
 
             v = summary.globals.get('vanilla')
@@ -946,20 +962,22 @@ class Operator(Callable):
             if metrics:
                 perf("Global performance: [%s]" % ', '.join(metrics))
 
+            # Same as above, but excluding the setup phase, e.g. the CPU-GPU
+            # data transfers in the case of a GPU run, mallocs, frees, etc.
+            metrics = []
+
+            v = summary.globals.get('fdlike-nosetup')
+            if v is not None:
+                metrics.append("%.2f s" % fround(v.time))
+                metrics.append("%.2f GPts/s" % fround(v.gpointss))
+
+                perf("Global performance <w/o setup>: [%s]" % ', '.join(metrics))
+
+            # Prepare for the local performance indicators
             perf("Local performance:")
             indent = " "*2
         else:
             indent = ""
-
-            if isinstance(self._profiler, AdvancedProfilerVerbose):
-                metrics = []
-
-                v = summary.globals.get('fdlike-nosetup')
-                if v is not None:
-                    metrics.append("%.2f GPts/s" % fround(v.gpointss))
-
-                if metrics:
-                    perf("Global performance <w/o setup>: [%s]" % ', '.join(metrics))
 
         # Emit local, i.e. "per-rank" performance. Without MPI, this is the only
         # thing that will be emitted
@@ -979,24 +997,14 @@ class Operator(Callable):
 
         for k, v in summary.items():
             rank = "[rank%d]" % k.rank if k.rank is not None else ""
+            name = "%s%s" % (k.name, rank)
 
             if v.time <= 0.01:
                 # Trim down the output for very fast sections
-                name = "%s%s<>" % (k.name, rank)
                 perf("%s* %s ran in %.2f s" % (indent, name, fround(v.time)))
                 continue
 
             metrics = lower_perfentry(v)
-
-            itershapes = [",".join(str(i) for i in its) for its in v.itershapes]
-            if len(itershapes) > 1:
-                itershapes = ",".join("<%s>" % i for i in itershapes)
-            elif len(itershapes) == 1:
-                itershapes = itershapes[0]
-            else:
-                itershapes = ""
-            name = "%s%s<%s>" % (k.name, rank, itershapes)
-
             perf("%s* %s ran in %.2f s %s" % (indent, name, fround(v.time), metrics))
             for n, v1 in summary.subsections.get(k.name, {}).items():
                 metrics = lower_perfentry(v1)
@@ -1018,6 +1026,9 @@ class Operator(Callable):
                     if a in args:
                         perf_args[a] = args[a]
                         break
+        if is_integer(self.npthreads):
+            perf_args['pthreads'] = self.npthreads
+        perf_args = {k: perf_args[k] for k in sorted(perf_args)}
         perf("Performance[mode=%s] arguments: %s" % (self._mode, perf_args))
 
         return summary
@@ -1094,13 +1105,12 @@ def rcompile(expressions, kwargs, options, target=None):
 
     if target is None:
         cls = operator_selector(**kwargs)
+        kwargs['options'] = options
     else:
         kwargs = parse_kwargs(**target)
         cls = operator_selector(**kwargs)
         kwargs = cls._normalize_kwargs(**kwargs)
-
-    # Use the customized opt options
-    kwargs['options'] = options
+        kwargs['options'].update(options)
 
     # Recursive profiling not supported -- would be a complete mess
     kwargs.pop('profiler', None)
@@ -1120,12 +1130,7 @@ class ArgumentsMap(dict):
         super().__init__(args)
 
         self.grid = grid
-
-        self.allocator = op._allocator
-        self.platform = op._platform
-        self.language = op._language
-        self.compiler = op._compiler
-        self.options = op._options
+        self.op = op
 
     @property
     def comm(self):
@@ -1140,6 +1145,110 @@ class ArgumentsMap(dict):
         return {'platform': self.platform.name,
                 'compiler': compiler,
                 'language': self.language}
+
+    @property
+    def allocator(self):
+        return self.op._allocator
+
+    @property
+    def platform(self):
+        return self.op._platform
+
+    @property
+    def language(self):
+        return self.op._language
+
+    @property
+    def compiler(self):
+        return self.op._compiler
+
+    @property
+    def options(self):
+        return self.op._options
+
+    @property
+    def saved_mapper(self):
+        """
+        The number of saved TimeFunctions in the Operator, grouped by
+        memory hierarchy layer.
+        """
+        key0 = lambda f: (f.is_TimeFunction and
+                          f.save is not None and
+                          not isinstance(f.save, Buffer))
+        functions = [f for f in self.op.input if key0(f)]
+
+        key1 = lambda f: f.layer
+        mapper = as_mapper(functions, key1)
+
+        return mapper
+
+    @cached_property
+    def nbytes_avail_mapper(self):
+        """
+        The amount of memory available after accounting for the memory
+        consumed by the Operator, in bytes, grouped by memory hierarchy layer.
+        """
+        mapper = {}
+
+        # The amount of space available on the disk
+        usage = shutil.disk_usage(gettempdir())
+        mapper[disk_layer] = usage.free
+
+        # The amount of space available on the device
+        if isinstance(self.platform, Device):
+            deviceid = max(self.get('deviceid', 0), 0)
+            mapper[device_layer] = self.platform.memavail(deviceid=deviceid)
+
+        # The amount of space available on the host
+        try:
+            nproc = self.grid.distributor.nprocs_local
+        except AttributeError:
+            nproc = 1
+        mapper[host_layer] = int(ANYCPU.memavail() / nproc)
+
+        # Temporaries such as Arrays are allocated and deallocated on-the-fly
+        # while in C land, so they need to be accounted for as well
+        for i in FindSymbols().visit(self.op):
+            if not i.is_Array or not i._mem_heap or i.alias:
+                continue
+
+            if i.is_regular:
+                nbytes = i.nbytes
+            else:
+                nbytes = i.nbytes_max
+            v = subs_op_args(nbytes, self)
+            if not is_integer(v):
+                # E.g. the Arrays used to store the MPI halo exchanges
+                continue
+
+            if i._mem_host:
+                mapper[host_layer] -= v
+            elif i._mem_local:
+                if isinstance(self.platform, Device):
+                    mapper[device_layer] -= v
+                else:
+                    mapper[host_layer] -= v
+            elif i._mem_mapped:
+                if isinstance(self.platform, Device):
+                    mapper[device_layer] -= v
+                mapper[host_layer] -= v
+
+        # All input Functions are yet to be memcpy-ed to the device
+        # TODO: this may not be true depending on `devicerm`, which is however
+        # virtually never used
+        if isinstance(self.platform, Device):
+            for i in self.op.input:
+                if not is_on_device(i, self.options['gpu-fit']):
+                    continue
+                try:
+                    if i._mem_mapped:
+                        mapper[device_layer] -= i.nbytes
+                except AttributeError:
+                    pass
+
+        mapper = {k: int(v) for k, v in mapper.items()}
+
+        return mapper
 
 
 def parse_kwargs(**kwargs):
