@@ -376,4 +376,3 @@ class PETScStruct(CompositeObject):
         for i in self.fields:
             setattr(values[self.name]._obj, i, kwargs['args'][i])
         return values
-
