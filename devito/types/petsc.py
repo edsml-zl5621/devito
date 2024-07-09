@@ -2,8 +2,7 @@ from devito.tools import CustomDtype
 from devito.types import LocalObject, Eq
 from devito.types.utils import DimensionTuple
 from devito.types.array import ArrayBasic
-import numpy as np
-from cached_property import cached_property
+from functools import cached_property
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
