@@ -2,7 +2,7 @@ from functools import singledispatch
 
 from sympy import simplify
 
-from devito.finite_differences.differentiable import Add, Mul, EvalDerivative
+from devito.finite_differences.differentiable import Add, Mul, EvalDerivative, diffify
 from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
 from devito.operations.solve import eval_time_derivatives
@@ -117,32 +117,27 @@ def _(expr, target):
     return 0 if expr.has(target) else expr
 
 
+@singledispatch
 def centre_stencil(expr, target):
     """
     Extract the centre stencil from an expression. Its coefficient is what
     would appear on the diagonal of the matrix system if the matrix were
     formed explicitly.
     """
-    centre = extract_centre(expr, target)
-    return centre
-
-
-@singledispatch
-def extract_centre(expr, target):
     return expr if expr == target else 0
 
 
-@extract_centre.register(Add)
-@extract_centre.register(EvalDerivative)
+@centre_stencil.register(Add)
+@centre_stencil.register(EvalDerivative)
 def _(expr, target):
     if not expr.has(target):
         return 0
 
-    args = [extract_centre(a, target) for a in expr.args]
+    args = [centre_stencil(a, target) for a in expr.args]
     return expr.func(*args, evaluate=False)
 
 
-@extract_centre.register(Mul)
+@centre_stencil.register(Mul)
 def _(expr, target):
     if not expr.has(target):
         return 0
@@ -152,15 +147,15 @@ def _(expr, target):
         if not a.has(target):
             args.append(a)
         else:
-            a1 = extract_centre(a, target)
+            a1 = centre_stencil(a, target)
             args.append(a1)
 
     return expr.func(*args, evaluate=False)
 
 
-@extract_centre.register(Derivative)
+@centre_stencil.register(Derivative)
 def _(expr, target):
     if not expr.has(target):
         return 0
-    args = [extract_centre(a, target) for a in expr.evaluate.args]
+    args = [centre_stencil(a, target) for a in expr.evaluate.args]
     return expr.evaluate.func(*args)
