@@ -2,7 +2,7 @@ from functools import singledispatch
 
 from sympy import simplify
 
-from devito.finite_differences.differentiable import Add, Mul, EvalDerivative
+from devito.finite_differences.differentiable import Add, Mul, EvalDerivative, diffify
 from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
 from devito.operations.solve import eval_time_derivatives
