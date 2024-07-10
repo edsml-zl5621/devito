@@ -1,6 +1,5 @@
 from functools import singledispatch
 
-from sympy import simplify
 import sympy
 
 from devito.finite_differences.differentiable import Add, Mul, EvalDerivative, diffify
@@ -78,7 +77,7 @@ def separate_eqn(eqn, target):
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
     tmp = eval_time_derivatives(zeroed_eqn.lhs)
     b = remove_target(tmp, target)
-    F_target = diffify(simplify(tmp - b))
+    F_target = diffify(sympy.simplify(tmp - b))
     return -b, F_target
 
 
