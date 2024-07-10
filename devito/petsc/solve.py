@@ -2,7 +2,7 @@ from functools import singledispatch
 
 import sympy
 
-from devito.finite_differences.differentiable import Mul, diffify
+from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
 from devito.operations.solve import eval_time_derivatives
@@ -21,7 +21,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                    dimensions=target.space_dimensions,
                    shape=target.grid.shape,
                    liveness='eager',
-                   halo = [target.halo[d] for d in target.space_dimensions])
+                   halo=[target.halo[d] for d in target.space_dimensions])
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
     b, F_target = separate_eqn(eq, target)
@@ -95,7 +95,8 @@ def _(expr, target):
     if not expr.has(target):
         return (expr, 0)
 
-    args_b, args_F = zip(*[remove_target(a, target) if a.has(target) else (a, a) for a in expr.args])
+    args_b, args_F = zip(*[remove_target(a, target) if a.has(target)
+                           else (a, a) for a in expr.args])
     return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
