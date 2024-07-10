@@ -1,56 +1,61 @@
 from functools import singledispatch
 
-from sympy import simplify
+import sympy
 
-from devito.finite_differences.differentiable import Add, Mul, EvalDerivative, diffify
+from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
+from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
-from devito.symbolics import retrieve_functions
 from devito.symbolics import uxreplace
-from devito.petsc.types import PETScArray, LinearSolveExpr, MatVecEq, RHSEq
+from devito.petsc.types import LinearSolveExpr, PETScArray
+
 
 __all__ = ['PETScSolve']
 
 
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
-    # TODO: Add check for time dimensions and utilise implicit dimensions.
 
-    is_time_dep = any(dim.is_Time for dim in target.dimensions)
-    # TODO: Current assumption is rhs is part of pde that remains
-    # constant at each timestep. Need to insert function to extract this from eq.
-    y_matvec, x_matvec, b_tmp = [
-        PETScArray(name=f'{prefix}_{target.name}',
-                   dtype=target.dtype,
-                   dimensions=target.space_dimensions,
-                   shape=target.grid.shape,
-                   liveness='eager',
-                   halo=target.halo[1:] if is_time_dep else target.halo)
-        for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
+    prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
+
+    arrays = {
+        p: PETScArray(name='%s_%s' % (p, target.name),
+                           dtype=target.dtype,
+                           dimensions=target.space_dimensions,
+                           shape=target.grid.shape,
+                           liveness='eager',
+                           halo=[target.halo[d] for d in target.space_dimensions],
+                           space_order=target.space_order)
+        for p in prefixes
+    }
 
     b, F_target = separate_eqn(eq, target)
 
-    # Args were updated so need to update target to enable uxreplace on F_target
-    new_target = {f for f in retrieve_functions(F_target) if
-                  f.function == target.function}
-    assert len(new_target) == 1  # Sanity check: only one target expected
-    new_target = new_target.pop()
-
     # TODO: Current assumption is that problem is linear and user has not provided
     # a jacobian. Hence, we can use F_target to form the jac-vec product
-    matvecaction = MatVecEq(
-        y_matvec, LinearSolveExpr(uxreplace(F_target, {new_target: x_matvec}),
-                                  target=target, solver_parameters=solver_parameters),
-        subdomain=eq.subdomain)
+    matvecaction = Eq(arrays['y_matvec'],
+                      uxreplace(F_target, {target: arrays['x_matvec']}),
+                      subdomain=eq.subdomain)
 
-    # Part of pde that remains constant at each timestep
-    rhs = RHSEq(b_tmp, LinearSolveExpr(b, target=target,
-                solver_parameters=solver_parameters), subdomain=eq.subdomain)
+    formfunction = Eq(arrays['y_formfunc'],
+                      uxreplace(F_target, {target: arrays['x_formfunc']}),
+                      subdomain=eq.subdomain)
+
+    rhs = Eq(arrays['b_tmp'], b, subdomain=eq.subdomain)
+
+    # Placeholder equation for inserting calls to the solver
+    inject_solve = InjectSolveEq(arrays['b_tmp'], LinearSolveExpr(
+        b, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
+        formfuncs=[formfunction], formrhs=[rhs], arrays=arrays,
+    ), subdomain=eq.subdomain)
 
     if not bcs:
-        return [matvecaction, rhs]
+        return [inject_solve]
 
+    # NOTE: BELOW IS NOT FULLY TESTED/IMPLEMENTED YET
     bcs_for_matvec = []
+    bcs_for_formfunc = []
+    bcs_for_rhs = []
     for bc in bcs:
         # TODO: Insert code to distiguish between essential and natural
         # boundary conditions since these are treated differently within
@@ -59,14 +64,24 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         # (and move to rhs) but for now, they are included since this
         # is not trivial to implement when using DMDA
         # NOTE: Below is temporary -> Just using this as a palceholder for
-        # the actual BC implementation for the matvec callback
-        new_rhs = bc.rhs.subs(target, x_matvec)
-        bc_rhs = LinearSolveExpr(
-            new_rhs, target=target, solver_parameters=solver_parameters
-        )
-        bcs_for_matvec.append(MatVecEq(y_matvec, bc_rhs, subdomain=bc.subdomain))
+        # the actual BC implementation
+        centre = centre_stencil(F_target, target)
+        bcs_for_matvec.append(Eq(arrays['y_matvec'],
+                                 centre.subs(target, arrays['x_matvec']),
+                                 subdomain=bc.subdomain))
+        bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
+                                   0., subdomain=bc.subdomain))
+        # NOTE: Temporary
+        bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
 
-    return [matvecaction] + bcs_for_matvec + [rhs]
+    inject_solve = InjectSolveEq(arrays['b_tmp'], LinearSolveExpr(
+        b, target=target, solver_parameters=solver_parameters,
+        matvecs=[matvecaction]+bcs_for_matvec,
+        formfuncs=[formfunction]+bcs_for_formfunc, formrhs=[rhs],
+        arrays=arrays,
+    ), subdomain=eq.subdomain)
+
+    return [inject_solve]
 
 
 def separate_eqn(eqn, target):
@@ -76,45 +91,37 @@ def separate_eqn(eqn, target):
     """
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
     tmp = eval_time_derivatives(zeroed_eqn.lhs)
-    b = remove_target(tmp, target)
-    F_target = diffify(simplify(tmp - b))
+    b, F_target = remove_target(tmp, target)
     return -b, F_target
 
 
 @singledispatch
 def remove_target(expr, target):
-    return 0 if expr == target else expr
+    return (0, expr) if expr == target else (expr, 0)
 
 
-@remove_target.register(Add)
-@remove_target.register(EvalDerivative)
+@remove_target.register(sympy.Add)
 def _(expr, target):
     if not expr.has(target):
-        return expr
+        return (expr, 0)
 
-    args = [remove_target(a, target) for a in expr.args]
-    return expr.func(*args, evaluate=False)
+    args_b, args_F = zip(*(remove_target(a, target) for a in expr.args))
+    return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
 @remove_target.register(Mul)
 def _(expr, target):
     if not expr.has(target):
-        return expr
+        return (expr, 0)
 
-    args = []
-    for a in expr.args:
-        if not a.has(target):
-            args.append(a)
-        else:
-            a1 = remove_target(a, target)
-            args.append(a1)
-
-    return expr.func(*args, evaluate=False)
+    args_b, args_F = zip(*[remove_target(a, target) if a.has(target)
+                           else (a, a) for a in expr.args])
+    return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
 @remove_target.register(Derivative)
 def _(expr, target):
-    return 0 if expr.has(target) else expr
+    return (0, expr) if expr.has(target) else (expr, 0)
 
 
 @singledispatch
@@ -127,8 +134,7 @@ def centre_stencil(expr, target):
     return expr if expr == target else 0
 
 
-@centre_stencil.register(Add)
-@centre_stencil.register(EvalDerivative)
+@centre_stencil.register(sympy.Add)
 def _(expr, target):
     if not expr.has(target):
         return 0

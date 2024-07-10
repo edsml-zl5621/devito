@@ -10,14 +10,10 @@ on:
   push:
     branches:
       - master
-      # Temporary
-      - separate-eqn
+      - enable-opt
   pull_request:
     branches:
       - master
-      # Temporary
-      - separate-eqn
-      - centre-stencil
 
 jobs:
   pytest:
@@ -69,7 +65,7 @@ jobs:
 
     - name: Test with pytest
       run: |
-        ${{ env.RUN_CMD }} pytest -m "not parallel" --cov --cov-config=.coveragerc --cov-report=xml ${{ env.TESTS }}
+        ${{ env.RUN_CMD }} pytest --cov --cov-config=.coveragerc --cov-report=xml ${{ env.TESTS }}
 
     - name: Upload coverage to Codecov
       if: "!contains(matrix.name, 'docker')"
