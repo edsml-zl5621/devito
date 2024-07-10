@@ -1,6 +1,6 @@
 from functools import singledispatch
 
-from sympy import simplify
+import sympy
 
 from devito.finite_differences.differentiable import Add, Mul, EvalDerivative, diffify
 from devito.finite_differences.derivative import Derivative
@@ -77,7 +77,7 @@ def separate_eqn(eqn, target):
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
     tmp = eval_time_derivatives(zeroed_eqn.lhs)
     b = remove_target(tmp, target)
-    F_target = diffify(simplify(tmp - b))
+    F_target = diffify(sympy.simplify(tmp - b))
     return -b, F_target
 
 
@@ -127,8 +127,7 @@ def centre_stencil(expr, target):
     return expr if expr == target else 0
 
 
-@centre_stencil.register(Add)
-@centre_stencil.register(EvalDerivative)
+@centre_stencil.register(sympy.Add)
 def _(expr, target):
     if not expr.has(target):
         return 0
