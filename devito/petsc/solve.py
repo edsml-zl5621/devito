@@ -14,18 +14,14 @@ __all__ = ['PETScSolve']
 
 
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
-    # TODO: Add check for time dimensions and utilise implicit dimensions.
 
-    is_time_dep = any(dim.is_Time for dim in target.dimensions)
-    # TODO: Current assumption is rhs is part of pde that remains
-    # constant at each timestep. Need to insert function to extract this from eq.
     y_matvec, x_matvec, b_tmp = [
         PETScArray(name=f'{prefix}_{target.name}',
                    dtype=target.dtype,
                    dimensions=target.space_dimensions,
                    shape=target.grid.shape,
                    liveness='eager',
-                   halo=target.halo[1:] if is_time_dep else target.halo)
+                   halo = [target.halo[d] for d in target.space_dimensions])
         for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
 
     b, F_target = separate_eqn(eq, target)
@@ -76,43 +72,36 @@ def separate_eqn(eqn, target):
     """
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
     tmp = eval_time_derivatives(zeroed_eqn.lhs)
-    b = remove_target(tmp, target)
-    F_target = diffify(sympy.simplify(tmp - b))
+    b, F_target = remove_target(tmp, target)
     return -b, F_target
 
 
 @singledispatch
 def remove_target(expr, target):
-    return 0 if expr == target else expr
+    return (0, expr) if expr == target else (expr, 0)
 
 
 @remove_target.register(sympy.Add)
 def _(expr, target):
     if not expr.has(target):
-        return expr
+        return (expr, 0)
 
-    args = [remove_target(a, target) for a in expr.args]
-    return expr.func(*args, evaluate=False)
+    args_b, args_F = zip(*(remove_target(a, target) for a in expr.args))
+    return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
 @remove_target.register(Mul)
 def _(expr, target):
     if not expr.has(target):
-        return expr
+        return (expr, 0)
 
-    args = []
-    for a in expr.args:
-        if not a.has(target):
-            args.append(a)
-        else:
-            args.append(remove_target(a, target))
-
-    return expr.func(*args, evaluate=False)
+    args_b, args_F = zip(*[remove_target(a, target) if a.has(target) else (a, a) for a in expr.args])
+    return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
 @remove_target.register(Derivative)
 def _(expr, target):
-    return 0 if expr.has(target) else expr
+    return (0, expr) if expr.has(target) else (expr, 0)
 
 
 @singledispatch
