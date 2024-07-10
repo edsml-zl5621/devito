@@ -6,10 +6,9 @@ from devito.petsc.types import LinearSolveExpr
 def petsc_lift(clusters):
     """
     Lift the iteration space surrounding each PETSc equation to create
-    distinct iteration loops. This simplifys the movement of the loops
-    into specific callback functions generated at the IET level.
-    TODO: Potentially only need to lift the PETSc equations required
-    by the callback functions, not the ones that stay inside the main kernel.
+    distinct iteration loops.
+    # TODO: Can probably remove this now due to recursive compilation, but
+    # leaving it for now.
     """
     processed = []
     for c in clusters:

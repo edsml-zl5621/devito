@@ -31,8 +31,9 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tup
                           split, timed_pass, timed_region, contains_val)
 from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
-from devito.petsc.iet.passes import lower_petsc
+from devito.petsc.iet.passes import lower_petsc, sort_frees
 from devito.petsc.clusters import petsc_lift
+from devito.petsc.utils import derive_callback_dims, derive_struct_inputs
 
 __all__ = ['Operator']
 
@@ -349,7 +350,7 @@ class Operator(Callable):
         expressions = concretize_subdims(expressions, **kwargs)
 
         processed = [LoweredEq(i) for i in expressions]
-
+        # from IPython import embed; embed()
         return processed
 
     # Compilation -- Cluster level
@@ -494,6 +495,9 @@ class Operator(Callable):
         # Target-independent optimizations
         minimize_symbols(graph)
 
+        # If necessary, sort frees into a specific order
+        sort_frees(graph)
+
         return graph.root, graph
 
     # Read-only properties exposed to the outside world
@@ -512,7 +516,12 @@ class Operator(Callable):
 
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
-        ret.update(d for d in dimensions if d.is_PerfKnob)
+
+        # NOTE: Should these dimensions be integrated into self._dimensions instead?
+        # In which case they would get picked up before this
+        struct_dims = derive_callback_dims(self._func_table)
+
+        ret.update(d for d in dimensions if d.is_PerfKnob or d in struct_dims)
 
         ret = tuple(sorted(ret, key=attrgetter('name')))
 
@@ -520,7 +529,8 @@ class Operator(Callable):
 
     @cached_property
     def input(self):
-        return tuple(i for i in self.parameters if i.is_Input)
+        struct_params = derive_struct_inputs(self.parameters)
+        return tuple(i for i in self.parameters+struct_params if i.is_Input)
 
     @cached_property
     def temporaries(self):
