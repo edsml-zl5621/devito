@@ -1,5 +1,7 @@
 import numpy as np
 import os
+import pytest
+
 from conftest import skipif
 from devito import Grid, Function, TimeFunction, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
@@ -9,7 +11,7 @@ from devito.passes.iet.languages.C import CDataManager
 from devito.petsc.types import (DM, Mat, Vec, PetscMPIInt, KSP,
                                 PC, KSPConvergedReason, PETScArray,
                                 LinearSolveExpr, PETScStruct)
-from devito.petsc.solve import PETScSolve, separate_eqn
+from devito.petsc.solve import PETScSolve, separate_eqn, centre_stencil
 from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
 
 
@@ -362,3 +364,51 @@ def test_separate_eqn():
         ' + Derivative(f2(t, x, y), (y, 2)) + f2(t, x, y)/dt'
     assert str(F4) == '-Derivative(f2(t + dt, x, y), (x, 2)) -' + \
         ' Derivative(f2(t + dt, x, y), (y, 2)) + f2(t + dt, x, y)/dt'
+
+
+@skipif('petsc')
+@pytest.mark.parametrize('expr, so, target, expected', [
+    ('f1.laplace', 2, 'f1', '-2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'),
+    ('f1 + f1.laplace', 2, 'f1',
+     'f1(x, y) - 2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'),
+    ('g1.dx + f1.dx', 2, 'f1', '-f1(x, y)/h_x'),
+    ('10 + f1.dx2', 2, 'g1', '0'),
+    ('(f1 * g1.dx).dy', 2, 'f1',
+     '(-1/h_y)*(-g1(x, y)/h_x + g1(x + h_x, y)/h_x)*f1(x, y)'),
+    ('(f1 * g1.dx).dy', 2, 'g1', '-(-1/h_y)*f1(x, y)*g1(x, y)/h_x'),
+    ('f2.laplace', 2, 'f2', '-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2'),
+    ('f2*g2', 2, 'f2', 'f2(t, x, y)*g2(t, x, y)'),
+    ('g2*f2.laplace', 2, 'f2',
+     '(-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2)*g2(t, x, y)'),
+    ('f2.forward', 2, 'f2.forward', 'f2(t + dt, x, y)'),
+    ('f2.forward.laplace', 2, 'f2.forward',
+     '-2.0*f2(t + dt, x, y)/h_y**2 - 2.0*f2(t + dt, x, y)/h_x**2'),
+    ('f2.laplace + f2.forward.laplace', 2, 'f2.forward',
+     '-2.0*f2(t + dt, x, y)/h_y**2 - 2.0*f2(t + dt, x, y)/h_x**2'),
+    ('f2.laplace + f2.forward.laplace', 2,
+     'f2', '-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2'),
+    ('f2.laplace', 4, 'f2', '-2.5*f2(t, x, y)/h_y**2 - 2.5*f2(t, x, y)/h_x**2'),
+    ('f2.laplace + f2.forward.laplace', 4, 'f2.forward',
+     '-2.5*f2(t + dt, x, y)/h_y**2 - 2.5*f2(t + dt, x, y)/h_x**2'),
+    ('f2.laplace + f2.forward.laplace', 4, 'f2',
+     '-2.5*f2(t, x, y)/h_y**2 - 2.5*f2(t, x, y)/h_x**2'),
+    ('f2.forward*f2.forward.laplace', 4, 'f2.forward',
+     '(-2.5*f2(t + dt, x, y)/h_y**2 - 2.5*f2(t + dt, x, y)/h_x**2)*f2(t + dt, x, y)')
+])
+def test_centre_stencil(expr, so, target, expected):
+    """
+    Test extraction of centre stencil from an equation.
+    """
+    grid = Grid((2, 2))
+
+    f1 = Function(name='f1', grid=grid, space_order=so)  # noqa
+    g1 = Function(name='g1', grid=grid, space_order=so)  # noqa
+    h1 = Function(name='h1', grid=grid, space_order=so)  # noqa
+
+    f2 = TimeFunction(name='f2', grid=grid, space_order=so)  # noqa
+    g2 = TimeFunction(name='g2', grid=grid, space_order=so)  # noqa
+    h2 = TimeFunction(name='h2', grid=grid, space_order=so)  # noqa
+
+    centre = centre_stencil(eval(expr), eval(target))
+
+    assert str(centre) == expected
