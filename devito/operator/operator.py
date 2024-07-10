@@ -354,7 +354,7 @@ class Operator(Callable):
         expressions = concretize_subdims(expressions, **kwargs)
 
         processed = [LoweredEq(i) for i in expressions]
-
+        # from IPython import embed; embed()
         return processed
 
     # Compilation -- Cluster level
@@ -498,6 +498,9 @@ class Operator(Callable):
         # Target-independent optimizations
         minimize_symbols(graph)
 
+        # If necessary, sort frees into a specific order
+        sort_frees(graph)
+
         return graph.root, graph
 
     # Read-only properties exposed to the outside world
@@ -524,7 +527,8 @@ class Operator(Callable):
 
     @cached_property
     def input(self):
-        return tuple(i for i in self.parameters if i.is_Input)
+        struct_params = derive_struct_inputs(self.parameters)
+        return tuple(i for i in self.parameters+struct_params if i.is_Input)
 
     @cached_property
     def temporaries(self):
