@@ -1130,7 +1130,7 @@ class Lambda(Node):
 
 class Callback(Call):
     """
-    Callback as a function pointer.
+    Base class for special callback types.
 
     Parameters
     ----------
@@ -1143,17 +1143,28 @@ class Callback(Call):
 
     Notes
     -----
-    The reason Callback is an IET type rather than a SymPy type is
+    - The reason Callback is an IET type rather than a SymPy type is
     due to the fact that, when represented at the SymPy level, the IET
     engine fails to bind the callback to a specific Call. Consequently,
     errors occur during the creation of the call graph.
     """
     # TODO: Create a common base class for Call and Callback to avoid
     # having arguments=None here
-    def __init__(self, name, retval, param_types, arguments=None):
+    def __init__(self, name, retval=None, param_types=None, arguments=None):
         super().__init__(name=name)
         self.retval = retval
         self.param_types = as_tuple(param_types)
+
+    @property
+    def callback_form(self):
+        """
+        A string representation of the callback form.
+
+        Notes
+        -----
+        To be overridden by subclasses.
+        """
+        return
 
 
 class Section(List):

@@ -1,14 +1,14 @@
 import os
 
-from devito.ir.equations import OpMatVec, OpRHS
+from devito.ir.equations import OpInjectSolve
 from devito.tools import memoized_func
-from devito.ir.iet import Call
-from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
+from devito.ir.iet import Call, FindSymbols
+from devito.petsc.iet.nodes import PETScCallable, InjectSolveDummy
+from devito.petsc.types import PETScStruct
 
 # Mapping special Eq operations to their corresponding IET Expression subclass types.
 # These operations correspond to subclasses of Eq utilised within PETScSolve.
-petsc_iet_mapper = {OpMatVec: MatVecAction,
-                    OpRHS: RHSLinearSystem}
+petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
 
 
 solver_mapper = {
@@ -25,7 +25,6 @@ def get_petsc_dir():
         petsc_dir = os.environ.get(i)
         if petsc_dir:
             return petsc_dir
-
     # TODO: Raise error if PETSC_DIR is not set
     return None
 
@@ -60,13 +59,3 @@ def core_metadata():
         'lib_dirs': lib_dir,
         'ldflags': ('-Wl,-rpath,%s' % lib_dir)
     }
-
-
-def petsc_call(specific_call, call_args):
-    general_call = 'PetscCall'
-    return Call(general_call, [Call(specific_call, arguments=call_args)])
-
-
-def petsc_call_mpi(specific_call, call_args):
-    general_call = 'PetscCallMPI'
-    return Call(general_call, [Call(specific_call, arguments=call_args)])
