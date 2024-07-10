@@ -147,8 +147,7 @@ def _(expr, target):
         if not a.has(target):
             args.append(a)
         else:
-            a1 = centre_stencil(a, target)
-            args.append(a1)
+            args.append(centre_stencil(a, target))
 
     return expr.func(*args, evaluate=False)
 
