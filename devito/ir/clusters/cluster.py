@@ -376,7 +376,7 @@ class Cluster:
                     d = i.dim
                 try:
                     if i.lower < 0 or \
-                    i.upper > f._size_nodomain[d].left + f._size_halo[d].right:
+                       i.upper > f._size_nodomain[d].left + f._size_halo[d].right:
                         # It'd mean trying to access a point before the
                         # left halo (test0) or after the right halo (test1)
                         oobs.update(d._defines)
