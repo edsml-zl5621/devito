@@ -330,61 +330,41 @@ def test_cinterface_petsc_struct():
      'f1', ('g1(x, y)', 'Derivative(f1(x, y), (x, 2)) + Derivative(f1(x, y), (y, 2))')),
     ('Eq(g1, f1.laplace)',
      'f1', ('-g1(x, y)', '-Derivative(f1(x, y), (x, 2)) - Derivative(f1(x, y), (y, 2))')),
-
     ('Eq(g1, f1.laplace)', 'g1',
      ('Derivative(f1(x, y), (x, 2)) + Derivative(f1(x, y), (y, 2))', 'g1(x, y)')),
-
     ('Eq(f1 + f1.laplace, g1)', 'f1', ('g1(x, y)',
      'f1(x, y) + Derivative(f1(x, y), (x, 2)) + Derivative(f1(x, y), (y, 2))')),
-
     ('Eq(g1.dx + f1.dx, g1)', 'f1',
      ('g1(x, y) - Derivative(g1(x, y), x)', 'Derivative(f1(x, y), x)')),
-
     ('Eq(g1.dx + f1.dx, g1)', 'g1',
      ('-Derivative(f1(x, y), x)', '-g1(x, y) + Derivative(g1(x, y), x)')),
-
     ('Eq(f1 * g1.dx, g1)', 'g1', ('0', 'f1(x, y)*Derivative(g1(x, y), x) - g1(x, y)')),
-
     ('Eq(f1 * g1.dx, g1)', 'f1', ('g1(x, y)', 'f1(x, y)*Derivative(g1(x, y), x)')),
-
     ('Eq((f1 * g1.dx).dy, f1)', 'f1',
      ('0', '-f1(x, y) + Derivative(f1(x, y)*Derivative(g1(x, y), x), y)')),
-
     ('Eq((f1 * g1.dx).dy, f1)', 'g1',
      ('f1(x, y)', 'Derivative(f1(x, y)*Derivative(g1(x, y), x), y)')),
-
     ('Eq(f2.laplace, g2)', 'g2',
      ('-Derivative(f2(t, x, y), (x, 2)) - Derivative(f2(t, x, y), (y, 2))',
       '-g2(t, x, y)')),
-
     ('Eq(f2.laplace, g2)', 'f2', ('g2(t, x, y)',
      'Derivative(f2(t, x, y), (x, 2)) + Derivative(f2(t, x, y), (y, 2))')),
-
     ('Eq(f2.laplace, f2)', 'f2', ('0',
      '-f2(t, x, y) + Derivative(f2(t, x, y), (x, 2)) + Derivative(f2(t, x, y), (y, 2))')),
-
     ('Eq(f2*g2, f2)', 'f2', ('0', 'f2(t, x, y)*g2(t, x, y) - f2(t, x, y)')),
-
     ('Eq(f2*g2, f2)', 'g2', ('f2(t, x, y)', 'f2(t, x, y)*g2(t, x, y)')),
-
     ('Eq(g2*f2.laplace, f2)', 'g2', ('f2(t, x, y)',
      '(Derivative(f2(t, x, y), (x, 2)) + Derivative(f2(t, x, y), (y, 2)))*g2(t, x, y)')),
-
     ('Eq(f2.forward, f2)', 'f2.forward', ('f2(t, x, y)', 'f2(t + dt, x, y)')),
-
     ('Eq(f2.forward, f2)', 'f2', ('-f2(t + dt, x, y)', '-f2(t, x, y)')),
-
     ('Eq(f2.forward.laplace, f2)', 'f2.forward', ('f2(t, x, y)',
      'Derivative(f2(t + dt, x, y), (x, 2)) + Derivative(f2(t + dt, x, y), (y, 2))')),
-
     ('Eq(f2.forward.laplace, f2)', 'f2',
      ('-Derivative(f2(t + dt, x, y), (x, 2)) - Derivative(f2(t + dt, x, y), (y, 2))',
       '-f2(t, x, y)')),
-
     ('Eq(f2.laplace + f2.forward.laplace, g2)', 'f2.forward',
      ('g2(t, x, y) - Derivative(f2(t, x, y), (x, 2)) - Derivative(f2(t, x, y), (y, 2))',
       'Derivative(f2(t + dt, x, y), (x, 2)) + Derivative(f2(t + dt, x, y), (y, 2))')),
-
     ('Eq(g2.laplace, f2 + g2.forward)', 'g2.forward',
      ('f2(t, x, y) - Derivative(g2(t, x, y), (x, 2)) - Derivative(g2(t, x, y), (y, 2))',
       '-g2(t + dt, x, y)'))
