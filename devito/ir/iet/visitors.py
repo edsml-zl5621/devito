@@ -625,7 +625,7 @@ class CGen(Visitor):
         return LambdaCollection([top, c.Block(body)])
 
     def visit_Callback(self, o, nested_call=False):
-        return CallbackArg(o.name, o.retval, o.param_types)
+        return CallbackArg(o)
 
     def visit_HaloSpot(self, o):
         body = flatten(self._visit(i) for i in o.children)
@@ -1434,11 +1434,8 @@ def sorted_efuncs(efuncs):
 
 class CallbackArg(c.Generable):
 
-    def __init__(self, name, retval, param_types):
-        self.name = name
-        self.retval = retval
-        self.param_types = param_types
+    def __init__(self, callback):
+        self.callback = callback
 
     def generate(self):
-        param_types_str = ', '.join([str(t) for t in self.param_types])
-        yield "(%s (*)(%s))%s" % (self.retval, param_types_str, self.name)
+        yield self.callback.callback_form
