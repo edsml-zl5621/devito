@@ -2,7 +2,7 @@ from functools import singledispatch
 
 import sympy
 
-from devito.finite_differences.differentiable import Add, Mul, EvalDerivative, diffify
+from devito.finite_differences.differentiable import Mul, diffify
 from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
 from devito.operations.solve import eval_time_derivatives
@@ -86,8 +86,7 @@ def remove_target(expr, target):
     return 0 if expr == target else expr
 
 
-@remove_target.register(Add)
-@remove_target.register(EvalDerivative)
+@remove_target.register(sympy.Add)
 def _(expr, target):
     if not expr.has(target):
         return expr
@@ -106,8 +105,7 @@ def _(expr, target):
         if not a.has(target):
             args.append(a)
         else:
-            a1 = remove_target(a, target)
-            args.append(a1)
+            args.append(remove_target(a, target))
 
     return expr.func(*args, evaluate=False)
 
