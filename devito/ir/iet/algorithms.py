@@ -28,7 +28,11 @@ def iet_build(stree):
                 if e.is_Increment:
                     exprs.append(Increment(e))
                 elif isinstance(e.rhs, LinearSolveExpr):
+<<<<<<< HEAD
                     exprs.append(petsc_iet_mapper[e.operation](e, operation=e.operation))
+=======
+                    exprs.append(iet_mapper[e.operation](e, operation=e.operation))
+>>>>>>> 8911a782e (fix circular imports)
                 else:
                     exprs.append(Expression(e, operation=e.operation))
             body = ExpressionBundle(i.ispace, i.ops, i.traffic, body=exprs)
@@ -60,3 +64,12 @@ def iet_build(stree):
         queues.setdefault(i.parent, []).append(body)
 
     assert False
+<<<<<<< HEAD
+=======
+
+
+# # Mapping special Eq operations to their corresponding IET Expression subclass types.
+# # These operations correspond to subclasses of Eq utilised within PETScSolve.
+# linsolve_mapper = {OpMatVec: MatVecAction,
+#                    OpRHS: RHSLinearSystem}
+>>>>>>> 8911a782e (fix circular imports)
