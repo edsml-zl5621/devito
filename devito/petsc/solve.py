@@ -1,6 +1,7 @@
 from functools import singledispatch
 
 from sympy import simplify
+import sympy
 
 from devito.finite_differences.differentiable import Add, Mul, EvalDerivative, diffify
 from devito.finite_differences.derivative import Derivative
@@ -127,8 +128,7 @@ def centre_stencil(expr, target):
     return expr if expr == target else 0
 
 
-@centre_stencil.register(Add)
-@centre_stencil.register(EvalDerivative)
+@centre_stencil.register(sympy.Add)
 def _(expr, target):
     if not expr.has(target):
         return 0
