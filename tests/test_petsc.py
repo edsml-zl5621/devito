@@ -5,14 +5,14 @@ import pytest
 from conftest import skipif
 from devito import Grid, Function, TimeFunction, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
-                           FindNodes,
-                           PointerCast, retrieve_iteration_tree)
+                           FindNodes, PointerCast, retrieve_iteration_tree)
+from devito.types import Constant, CCompositeObject
 from devito.passes.iet.languages.C import CDataManager
-from devito.petsc.types import (DM, Mat, Vec, PetscMPIInt, KSP,
+from devito.petsc.types import (DM, Mat, LocalVec, PetscMPIInt, KSP,
                                 PC, KSPConvergedReason, PETScArray,
-                                LinearSolveExpr, PETScStruct)
+                                LinearSolveExpr)
 from devito.petsc.solve import PETScSolve, separate_eqn, centre_stencil
-from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
+from devito.petsc.iet.nodes import Expression
 
 
 @skipif('petsc')
@@ -22,7 +22,7 @@ def test_petsc_local_object():
     """
     lo0 = DM('da', stencil_width=1)
     lo1 = Mat('A')
-    lo2 = Vec('x')
+    lo2 = LocalVec('x')
     lo3 = PetscMPIInt('size')
     lo4 = KSP('ksp')
     lo5 = PC('pc')
@@ -68,11 +68,11 @@ def test_petsc_functions():
 
     expr = DummyExpr(ptr0.indexed[x, y], ptr1.indexed[x, y] + 1)
 
-    assert str(defn0) == 'PetscScalar*restrict ptr0_vec;'
-    assert str(defn1) == 'const PetscScalar*restrict ptr1_vec;'
-    assert str(defn2) == 'const PetscScalar*restrict ptr2_vec;'
-    assert str(defn3) == 'PetscInt*restrict ptr3_vec;'
-    assert str(defn4) == 'const PetscInt*restrict ptr4_vec;'
+    assert str(defn0) == 'float *restrict ptr0_vec;'
+    assert str(defn1) == 'const float *restrict ptr1_vec;'
+    assert str(defn2) == 'const double *restrict ptr2_vec;'
+    assert str(defn3) == 'int *restrict ptr3_vec;'
+    assert str(defn4) == 'const long *restrict ptr4_vec;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
 
 
@@ -123,16 +123,18 @@ def test_petsc_solve():
 
     matvec_callback = [root for root in callable_roots if root.name == 'MyMatShellMult_f']
 
-    action_expr = FindNodes(MatVecAction).visit(matvec_callback[0])
-    rhs_expr = FindNodes(RHSLinearSystem).visit(op)
+    formrhs_callback = [root for root in callable_roots if root.name == 'FormRHS_f']
+
+    action_expr = FindNodes(Expression).visit(matvec_callback[0])
+    rhs_expr = FindNodes(Expression).visit(formrhs_callback[0])
 
     assert str(action_expr[-1].expr.rhs) == \
-        'ctx->h_x**(-2)*x_matvec_f[x + 1, y + 2]' + \
-        ' - 2.0*ctx->h_x**(-2)*x_matvec_f[x + 2, y + 2]' + \
-        ' + ctx->h_x**(-2)*x_matvec_f[x + 3, y + 2]' + \
-        ' + ctx->h_y**(-2)*x_matvec_f[x + 2, y + 1]' + \
-        ' - 2.0*ctx->h_y**(-2)*x_matvec_f[x + 2, y + 2]' + \
-        ' + ctx->h_y**(-2)*x_matvec_f[x + 2, y + 3]'
+        'matvec->h_x**(-2)*x_matvec_f[x + 1, y + 2]' + \
+        ' - 2.0*matvec->h_x**(-2)*x_matvec_f[x + 2, y + 2]' + \
+        ' + matvec->h_x**(-2)*x_matvec_f[x + 3, y + 2]' + \
+        ' + matvec->h_y**(-2)*x_matvec_f[x + 2, y + 1]' + \
+        ' - 2.0*matvec->h_y**(-2)*x_matvec_f[x + 2, y + 2]' + \
+        ' + matvec->h_y**(-2)*x_matvec_f[x + 2, y + 3]'
 
     assert str(rhs_expr[-1].expr.rhs) == 'g[x + 2, y + 2]'
 
@@ -142,7 +144,7 @@ def test_petsc_solve():
     assert op.arguments().get('y_M') == 1
     assert op.arguments().get('x_M') == 1
 
-    assert len(retrieve_iteration_tree(op)) == 1
+    assert len(retrieve_iteration_tree(op)) == 0
 
     # TODO: Remove pragmas from PETSc callback functions
     assert len(matvec_callback[0].parameters) == 3
@@ -172,13 +174,9 @@ def test_multiple_petsc_solves():
 
     callable_roots = [meta_call.root for meta_call in op._func_table.values()]
 
-    assert len(callable_roots) == 2
-
-    structs = [i for i in op.parameters if isinstance(i, PETScStruct)]
-
-    # Only create 1 struct per Grid/DMDA
-    assert len(structs) == 1
-    assert len(structs[0].fields) == 6
+    # One FormRHS, one MatShellMult and one FormFunction per solve
+    # One PopulateMatContext for all solves
+    assert len(callable_roots) == 7
 
 
 @skipif('petsc')
@@ -194,40 +192,27 @@ def test_petsc_cast():
     arr1 = PETScArray(name='arr1', dimensions=g1.dimensions, shape=g1.shape)
     arr2 = PETScArray(name='arr2', dimensions=g2.dimensions, shape=g2.shape)
 
+    arr3 = PETScArray(name='arr3', dimensions=g1.dimensions,
+                      shape=g1.shape, space_order=4)
+
     # Casts will be explictly generated and placed at specific locations in the C code,
     # specifically after various other PETSc calls have been executed.
     cast0 = PointerCast(arr0)
     cast1 = PointerCast(arr1)
     cast2 = PointerCast(arr2)
+    cast3 = PointerCast(arr3)
 
     assert str(cast0) == \
-        'PetscScalar (*restrict arr0) = (PetscScalar (*)) arr0_vec;'
+        'float (*restrict arr0) = (float (*)) arr0_vec;'
     assert str(cast1) == \
-        'PetscScalar (*restrict arr1)[info.gxm] = (PetscScalar (*)[info.gxm]) arr1_vec;'
+        'float (*restrict arr1)[da_so_1_info.gxm] = ' + \
+        '(float (*)[da_so_1_info.gxm]) arr1_vec;'
     assert str(cast2) == \
-        'PetscScalar (*restrict arr2)[info.gym][info.gxm] = ' + \
-        '(PetscScalar (*)[info.gym][info.gxm]) arr2_vec;'
-
-
-@skipif('petsc')
-def test_no_automatic_cast():
-    """
-    Verify that the compiler does not automatically generate casts for PETScArrays.
-    They will be generated at specific points within the C code, particularly after
-    other PETSc calls, rather than necessarily at the top of the Kernel.
-    """
-    grid = Grid((2, 2))
-
-    f = Function(name='f', grid=grid, space_order=2)
-
-    arr = PETScArray(name='arr', dimensions=f.dimensions, shape=f.shape)
-
-    eqn = Eq(arr, f.laplace)
-
-    with switchconfig(openmp=False):
-        op = Operator(eqn, opt='noop')
-
-    assert len(op.body.casts) == 1
+        'float (*restrict arr2)[da_so_1_info.gym][da_so_1_info.gxm] = ' + \
+        '(float (*)[da_so_1_info.gym][da_so_1_info.gxm]) arr2_vec;'
+    assert str(cast3) == \
+        'float (*restrict arr3)[da_so_4_info.gxm] = ' + \
+        '(float (*)[da_so_4_info.gxm]) arr3_vec;'
 
 
 @skipif('petsc')
@@ -319,7 +304,6 @@ def test_cinterface_petsc_struct():
     assert 'include "%s.h"' % name in ccode
 
     # The public `struct MatContext` only appears in the header file
-    assert any(isinstance(i, PETScStruct) for i in op.parameters)
     assert 'struct MatContext\n{' not in ccode
     assert 'struct MatContext\n{' in hcode
 
@@ -395,7 +379,6 @@ def test_separate_eqn(eqn, target, expected):
 
 
 @skipif('petsc')
-<<<<<<< HEAD
 @pytest.mark.parametrize('expr, so, target, expected', [
     ('f1.laplace', 2, 'f1', '-2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'),
     ('f1 + f1.laplace', 2, 'f1',
@@ -439,65 +422,134 @@ def test_centre_stencil(expr, so, target, expected):
     centre = centre_stencil(eval(expr), eval(target))
 
     assert str(centre) == expected
-=======
-def test_centre_stencil():
+
+
+@skipif('petsc')
+def test_callback_arguments():
     """
-    Test extraction of the centre stencil from an equation.
+    Test the arguments of each callback function.
     """
+    grid = Grid((2, 2))
+
+    f1 = Function(name='f1', grid=grid, space_order=2)
+    g1 = Function(name='g1', grid=grid, space_order=2)
+
+    eqn1 = Eq(f1.laplace, g1)
+
+    petsc1 = PETScSolve(eqn1, f1)
+
+    with switchconfig(openmp=False):
+        op = Operator(petsc1)
+
+    mv = op._func_table['MyMatShellMult_f1'].root
+    ff = op._func_table['FormFunction_f1'].root
+
+    assert len(mv.parameters) == 3
+    assert len(ff.parameters) == 4
+
+    assert str(mv.parameters) == '(J_f1, X_global_f1, Y_global_f1)'
+    assert str(ff.parameters) == '(snes_f1, X_global_f1, Y_global_f1, dummy_f1)'
+
+
+@skipif('petsc')
+def test_petsc_struct():
 
     grid = Grid((2, 2))
 
     f1 = Function(name='f1', grid=grid, space_order=2)
     g1 = Function(name='g1', grid=grid, space_order=2)
 
-    centre1 = centre_stencil(Eq(g1, f1.laplace), f1)
-    assert str(centre1) == '-2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'
+    mu1 = Constant(name='mu1', value=2.0)
+    mu2 = Constant(name='mu2', value=2.0)
 
-    centre2 = centre_stencil(Eq(g1, f1 + f1.laplace), f1)
-    assert str(centre2) == 'f1(x, y) - 2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'
+    eqn1 = Eq(f1.laplace, g1*mu1)
+    petsc1 = PETScSolve(eqn1, f1)
 
-    centre3 = centre_stencil(Eq(g1, g1.dx + f1.dx), f1)
-    assert str(centre3) == '-f1(x, y)/h_x'
+    eqn2 = Eq(f1, g1*mu2)
 
-    centre4 = centre_stencil(Eq(g1, 10 + f1.dx2), g1)
-    assert str(centre4) == '0'
+    with switchconfig(openmp=False):
+        op = Operator([eqn2] + petsc1)
 
-    f2 = TimeFunction(name='f2', grid=grid, space_order=2)
-    g2 = TimeFunction(name='g2', grid=grid, space_order=2)
-    centre5 = centre_stencil(Eq(g2, f2.laplace), f2)
-    assert str(centre5) == '-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2'
+    arguments = op.arguments()
 
-    centre6 = centre_stencil(Eq(g2, f2*g2), f2)
-    assert str(centre6) == 'f2(t, x, y)*g2(t, x, y)'
+    # Check mu1 and mu2 in arguments
+    assert 'mu1' in arguments
+    assert 'mu2' in arguments
 
-    centre7 = centre_stencil(Eq(g2, g2*f2.laplace), f2)
-    assert str(centre7) == '(-2.0*f2(t, x, y)/h_y**2 - ' + \
-        '2.0*f2(t, x, y)/h_x**2)*g2(t, x, y)'
+    # Check mu1 and mu2 in op.parameters
+    assert mu1 in op.parameters
+    assert mu2 in op.parameters
 
-    centre8 = centre_stencil(Eq(g2, f2.forward), f2.forward)
-    assert str(centre8) == 'f2(t + dt, x, y)'
+    # Check PETSc struct not in op.parameters
+    assert all(not isinstance(i, CCompositeObject) for i in op.parameters)
 
-    centre9 = centre_stencil(Eq(g2, f2.forward.laplace), f2.forward)
-    assert str(centre9) == '-2.0*f2(t + dt, x, y)/h_y**2 - 2.0*f2(t + dt, x, y)/h_x**2'
 
-    centre10 = centre_stencil(Eq(g2, f2.laplace + f2.forward.laplace), f2.forward)
-    assert str(centre10) == '-2.0*f2(t + dt, x, y)/h_y**2 - 2.0*f2(t + dt, x, y)/h_x**2'
+@skipif('petsc')
+@pytest.mark.parallel(mode=1)
+def test_apply(mode):
 
-    centre11 = centre_stencil(Eq(g2, f2.laplace + f2.forward.laplace), f2)
-    assert str(centre11) == '-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2'
+    grid = Grid(shape=(13, 13), dtype=np.float64)
 
-    f3 = TimeFunction(name='f2', grid=grid, space_order=4)
-    g3 = TimeFunction(name='g2', grid=grid, space_order=4)
-    centre12 = centre_stencil(Eq(g3, f3.laplace), f3)
-    assert str(centre12) == '-2.5*f2(t, x, y)/h_y**2 - 2.5*f2(t, x, y)/h_x**2'
+    pn = Function(name='pn', grid=grid, space_order=2, dtype=np.float64)
+    rhs = Function(name='rhs', grid=grid, space_order=2, dtype=np.float64)
+    mu = Constant(name='mu', value=2.0)
 
-    centre13 = centre_stencil(Eq(g3, f3.laplace + f3.forward.laplace), f3.forward)
-    assert str(centre13) == '-2.5*f2(t + dt, x, y)/h_y**2 - 2.5*f2(t + dt, x, y)/h_x**2'
+    eqn = Eq(pn.laplace*mu, rhs, subdomain=grid.interior)
 
-    centre14 = centre_stencil(Eq(g3, f3.laplace + f3.forward.laplace), f3)
-    assert str(centre14) == '-2.5*f2(t, x, y)/h_y**2 - 2.5*f2(t, x, y)/h_x**2'
+    petsc = PETScSolve(eqn, pn)
 
-    centre15 = centre_stencil(Eq(g3, f3.forward*f3.forward.laplace), f3.forward)
-    assert str(centre15) == '(-2.5*f2(t + dt, x, y)/h_y**2 - ' + \
-        '2.5*f2(t + dt, x, y)/h_x**2)*f2(t + dt, x, y)'
->>>>>>> b7c9b8c2d (dsl: Add tests etc for centre stencil extraction)
+    # Build the op
+    with switchconfig(openmp=False):
+        op = Operator(petsc)
+
+    # Check the Operator runs without errors. Not verifying output for
+    # now. Need to consolidate BC implementation
+    op.apply()
+
+    # Verify that users can override `mu`
+    mu_new = Constant(name='mu_new', value=4.0)
+    op.apply(mu=mu_new)
+
+
+@skipif('petsc')
+def test_petsc_frees():
+
+    grid = Grid((2, 2))
+
+    f = Function(name='f', grid=grid, space_order=2)
+    g = Function(name='g', grid=grid, space_order=2)
+
+    eqn = Eq(f.laplace, g)
+    petsc = PETScSolve(eqn, f)
+
+    with switchconfig(openmp=False):
+        op = Operator(petsc)
+
+    frees = op.body.frees
+
+    # Check the frees appear in the following order
+    assert str(frees[0]) == 'PetscCall(VecDestroy(&(b_global_f)));'
+    assert str(frees[1]) == 'PetscCall(VecDestroy(&(x_global_f)));'
+    assert str(frees[2]) == 'PetscCall(MatDestroy(&(J_f)));'
+    assert str(frees[3]) == 'PetscCall(SNESDestroy(&(snes_f)));'
+    assert str(frees[4]) == 'PetscCall(DMDestroy(&(da_so_2)));'
+
+
+@skipif('petsc')
+def test_calls_to_callbacks():
+
+    grid = Grid((2, 2))
+
+    f = Function(name='f', grid=grid, space_order=2)
+    g = Function(name='g', grid=grid, space_order=2)
+
+    eqn = Eq(f.laplace, g)
+    petsc = PETScSolve(eqn, f)
+
+    with switchconfig(openmp=False):
+        op = Operator(petsc)
+
+    ccode = str(op.ccode)
+
+    assert '(void (*)(void))MyMatShellMult_f' in ccode
+    assert 'PetscCall(SNESSetFunction(snes_f,NULL,FormFunction_f,NULL));' in ccode
