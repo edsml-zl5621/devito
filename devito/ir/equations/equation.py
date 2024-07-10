@@ -9,7 +9,8 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
 from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import (Eq, Inc, ReduceMax, ReduceMin,
-                          relational_min, MatVecEq, RHSEq)
+                          relational_min)
+from devito.petsc.types import MatVecEq, RHSEq
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
            'OpMatVec', 'OpRHS']
@@ -227,7 +228,7 @@ class LoweredEq(IREq):
         expr._reads, expr._writes = detect_io(expr)
         expr._implicit_dims = input_expr.implicit_dims
         expr._operation = Operation.detect(input_expr)
- 
+
         return expr
 
     @property
