@@ -1,14 +1,17 @@
 import numpy as np
 import os
+import pytest
+
 from conftest import skipif
-from devito import Grid, Function, Eq, Operator, switchconfig
+from devito import Grid, Function, TimeFunction, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
                            FindNodes,
                            PointerCast, retrieve_iteration_tree)
 from devito.passes.iet.languages.C import CDataManager
 from devito.petsc.types import (DM, Mat, Vec, PetscMPIInt, KSP,
-                                PC, KSPConvergedReason, PETScArray, PETScSolve,
+                                PC, KSPConvergedReason, PETScArray,
                                 LinearSolveExpr, PETScStruct)
+from devito.petsc.solve import PETScSolve, separate_eqn, centre_stencil
 from devito.petsc.iet.nodes import MatVecAction, RHSLinearSystem
 
 
@@ -319,3 +322,119 @@ def test_cinterface_petsc_struct():
     assert any(isinstance(i, PETScStruct) for i in op.parameters)
     assert 'struct MatContext\n{' not in ccode
     assert 'struct MatContext\n{' in hcode
+
+
+@skipif('petsc')
+@pytest.mark.parametrize('eqn, target, expected', [
+    ('Eq(f1.laplace, g1)',
+     'f1', ('g1(x, y)', 'Derivative(f1(x, y), (x, 2)) + Derivative(f1(x, y), (y, 2))')),
+    ('Eq(g1, f1.laplace)',
+     'f1', ('-g1(x, y)', '-Derivative(f1(x, y), (x, 2)) - Derivative(f1(x, y), (y, 2))')),
+    ('Eq(g1, f1.laplace)', 'g1',
+     ('Derivative(f1(x, y), (x, 2)) + Derivative(f1(x, y), (y, 2))', 'g1(x, y)')),
+    ('Eq(f1 + f1.laplace, g1)', 'f1', ('g1(x, y)',
+     'f1(x, y) + Derivative(f1(x, y), (x, 2)) + Derivative(f1(x, y), (y, 2))')),
+    ('Eq(g1.dx + f1.dx, g1)', 'f1',
+     ('g1(x, y) - Derivative(g1(x, y), x)', 'Derivative(f1(x, y), x)')),
+    ('Eq(g1.dx + f1.dx, g1)', 'g1',
+     ('-Derivative(f1(x, y), x)', '-g1(x, y) + Derivative(g1(x, y), x)')),
+    ('Eq(f1 * g1.dx, g1)', 'g1', ('0', 'f1(x, y)*Derivative(g1(x, y), x) - g1(x, y)')),
+    ('Eq(f1 * g1.dx, g1)', 'f1', ('g1(x, y)', 'f1(x, y)*Derivative(g1(x, y), x)')),
+    ('Eq((f1 * g1.dx).dy, f1)', 'f1',
+     ('0', '-f1(x, y) + Derivative(f1(x, y)*Derivative(g1(x, y), x), y)')),
+    ('Eq((f1 * g1.dx).dy, f1)', 'g1',
+     ('f1(x, y)', 'Derivative(f1(x, y)*Derivative(g1(x, y), x), y)')),
+    ('Eq(f2.laplace, g2)', 'g2',
+     ('-Derivative(f2(t, x, y), (x, 2)) - Derivative(f2(t, x, y), (y, 2))',
+      '-g2(t, x, y)')),
+    ('Eq(f2.laplace, g2)', 'f2', ('g2(t, x, y)',
+     'Derivative(f2(t, x, y), (x, 2)) + Derivative(f2(t, x, y), (y, 2))')),
+    ('Eq(f2.laplace, f2)', 'f2', ('0',
+     '-f2(t, x, y) + Derivative(f2(t, x, y), (x, 2)) + Derivative(f2(t, x, y), (y, 2))')),
+    ('Eq(f2*g2, f2)', 'f2', ('0', 'f2(t, x, y)*g2(t, x, y) - f2(t, x, y)')),
+    ('Eq(f2*g2, f2)', 'g2', ('f2(t, x, y)', 'f2(t, x, y)*g2(t, x, y)')),
+    ('Eq(g2*f2.laplace, f2)', 'g2', ('f2(t, x, y)',
+     '(Derivative(f2(t, x, y), (x, 2)) + Derivative(f2(t, x, y), (y, 2)))*g2(t, x, y)')),
+    ('Eq(f2.forward, f2)', 'f2.forward', ('f2(t, x, y)', 'f2(t + dt, x, y)')),
+    ('Eq(f2.forward, f2)', 'f2', ('-f2(t + dt, x, y)', '-f2(t, x, y)')),
+    ('Eq(f2.forward.laplace, f2)', 'f2.forward', ('f2(t, x, y)',
+     'Derivative(f2(t + dt, x, y), (x, 2)) + Derivative(f2(t + dt, x, y), (y, 2))')),
+    ('Eq(f2.forward.laplace, f2)', 'f2',
+     ('-Derivative(f2(t + dt, x, y), (x, 2)) - Derivative(f2(t + dt, x, y), (y, 2))',
+      '-f2(t, x, y)')),
+    ('Eq(f2.laplace + f2.forward.laplace, g2)', 'f2.forward',
+     ('g2(t, x, y) - Derivative(f2(t, x, y), (x, 2)) - Derivative(f2(t, x, y), (y, 2))',
+      'Derivative(f2(t + dt, x, y), (x, 2)) + Derivative(f2(t + dt, x, y), (y, 2))')),
+    ('Eq(g2.laplace, f2 + g2.forward)', 'g2.forward',
+     ('f2(t, x, y) - Derivative(g2(t, x, y), (x, 2)) - Derivative(g2(t, x, y), (y, 2))',
+      '-g2(t + dt, x, y)'))
+])
+def test_separate_eqn(eqn, target, expected):
+    """
+    Test the separate_eqn function.
+
+    This function is called within PETScSolve to decompose the equation
+    into the form F(x) = b. This is necessary to utilise the SNES
+    interface in PETSc.
+    """
+    grid = Grid((2, 2))
+
+    so = 2
+
+    f1 = Function(name='f1', grid=grid, space_order=so)  # noqa
+    g1 = Function(name='g1', grid=grid, space_order=so)  # noqa
+
+    f2 = TimeFunction(name='f2', grid=grid, space_order=so)  # noqa
+    g2 = TimeFunction(name='g2', grid=grid, space_order=so)  # noqa
+
+    b, F = separate_eqn(eval(eqn), eval(target))
+    expected_b, expected_F = expected
+
+    assert str(b) == expected_b
+    assert str(F) == expected_F
+
+
+@skipif('petsc')
+@pytest.mark.parametrize('expr, so, target, expected', [
+    ('f1.laplace', 2, 'f1', '-2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'),
+    ('f1 + f1.laplace', 2, 'f1',
+     'f1(x, y) - 2.0*f1(x, y)/h_y**2 - 2.0*f1(x, y)/h_x**2'),
+    ('g1.dx + f1.dx', 2, 'f1', '-f1(x, y)/h_x'),
+    ('10 + f1.dx2', 2, 'g1', '0'),
+    ('(f1 * g1.dx).dy', 2, 'f1',
+     '(-1/h_y)*(-g1(x, y)/h_x + g1(x + h_x, y)/h_x)*f1(x, y)'),
+    ('(f1 * g1.dx).dy', 2, 'g1', '-(-1/h_y)*f1(x, y)*g1(x, y)/h_x'),
+    ('f2.laplace', 2, 'f2', '-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2'),
+    ('f2*g2', 2, 'f2', 'f2(t, x, y)*g2(t, x, y)'),
+    ('g2*f2.laplace', 2, 'f2',
+     '(-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2)*g2(t, x, y)'),
+    ('f2.forward', 2, 'f2.forward', 'f2(t + dt, x, y)'),
+    ('f2.forward.laplace', 2, 'f2.forward',
+     '-2.0*f2(t + dt, x, y)/h_y**2 - 2.0*f2(t + dt, x, y)/h_x**2'),
+    ('f2.laplace + f2.forward.laplace', 2, 'f2.forward',
+     '-2.0*f2(t + dt, x, y)/h_y**2 - 2.0*f2(t + dt, x, y)/h_x**2'),
+    ('f2.laplace + f2.forward.laplace', 2,
+     'f2', '-2.0*f2(t, x, y)/h_y**2 - 2.0*f2(t, x, y)/h_x**2'),
+    ('f2.laplace', 4, 'f2', '-2.5*f2(t, x, y)/h_y**2 - 2.5*f2(t, x, y)/h_x**2'),
+    ('f2.laplace + f2.forward.laplace', 4, 'f2.forward',
+     '-2.5*f2(t + dt, x, y)/h_y**2 - 2.5*f2(t + dt, x, y)/h_x**2'),
+    ('f2.laplace + f2.forward.laplace', 4, 'f2',
+     '-2.5*f2(t, x, y)/h_y**2 - 2.5*f2(t, x, y)/h_x**2'),
+    ('f2.forward*f2.forward.laplace', 4, 'f2.forward',
+     '(-2.5*f2(t + dt, x, y)/h_y**2 - 2.5*f2(t + dt, x, y)/h_x**2)*f2(t + dt, x, y)')
+])
+def test_centre_stencil(expr, so, target, expected):
+    """
+    Test extraction of centre stencil from an equation.
+    """
+    grid = Grid((2, 2))
+
+    f1 = Function(name='f1', grid=grid, space_order=so)  # noqa
+    g1 = Function(name='g1', grid=grid, space_order=so)  # noqa
+
+    f2 = TimeFunction(name='f2', grid=grid, space_order=so)  # noqa
+    g2 = TimeFunction(name='g2', grid=grid, space_order=so)  # noqa
+
+    centre = centre_stencil(eval(expr), eval(target))
+
+    assert str(centre) == expected
