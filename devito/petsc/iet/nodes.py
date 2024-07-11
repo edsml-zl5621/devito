@@ -1,4 +1,7 @@
-from devito.ir.iet import Expression
+from operator import attrgetter
+from functools import cached_property
+
+from devito.ir.iet import Expression, Callable, FindSymbols
 from devito.ir.equations import OpMatVec, OpRHS
 
 
@@ -29,3 +32,29 @@ class RHSLinearSystem(LinearSolverExpression):
 
     def __init__(self, expr, pragmas=None, operation=OpRHS):
         super().__init__(expr, pragmas=pragmas, operation=operation)
+
+    
+class PETScCallable(Callable):
+
+    def __init__(self, name, body, retval=None, parameters=None, prefix=None,
+                 irs=None):
+        super().__init__(name, body, retval, parameters, prefix)
+        self._irs = irs
+
+    @property
+    def irs(self):
+        return self._irs
+    
+    @cached_property
+    def dimensions(self):
+        # ret = set().union(*[d._defines for d in self._dimensions])
+
+        # During compilation other Dimensions may have been produced
+        dimensions = FindSymbols('dimensions').visit(self)
+
+        # ret.update(d for d in dimensions if d.is_PerfKnob)
+
+        # ret = tuple(sorted(ret, key=attrgetter('name')))
+
+        return dimensions
+

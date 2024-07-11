@@ -10,7 +10,7 @@ from devito.types.array import ArrayBasic
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction, Symbol
 from devito.finite_differences.tools import fd_weights_registry
-from devito.tools import Reconstructable, dtype_to_ctype
+from devito.tools import Reconstructable, dtype_to_ctype, DAG
 from devito.symbolics import FieldFromComposite, Byref
 from devito.types.basic import IndexedBase
 
@@ -429,7 +429,22 @@ class PETScStruct(CompositeObject):
     def usr_ctx(self):
         return self._usr_ctx
 
-    def _arg_values(self, **kwargs):
+    def _arg_values(self, efuncs, grid, **kwargs):
+        # from IPython import embed; embed()
+        # args_keys = set(kwargs['args'].keys())
+        # efunc = efuncs['MyMatShellMult_pn'].root
+        # struct_params = efunc.struct_params
+        # filtered_params = [param for param in struct_params if str(param) not in args_keys]
+
+        # nodes = efunc.dimensions
+        # edges = [(i, i.parent) for i in efunc.dimensions
+        #          if i.is_Derived and i.parent in set(nodes)]
+        # toposort = DAG(nodes, edges).topological_sort()
+
+
+
+
+        # from IPython import embed; embed()
         values = super()._arg_values(**kwargs)
         for i in self.fields:
             setattr(values[self.name]._obj, i, kwargs['args'][i])
