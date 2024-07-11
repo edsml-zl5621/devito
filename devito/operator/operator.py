@@ -715,6 +715,7 @@ class Operator(Callable):
 
     def arguments(self, **kwargs):
         """Arguments to run the Operator."""
+        # from IPython import embed; embed()
         args = self._prepare_arguments(**kwargs)
         # Check all arguments are present
         for p in self.parameters:
