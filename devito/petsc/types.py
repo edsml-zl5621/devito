@@ -11,7 +11,7 @@ from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction, Symbol
 from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import Reconstructable, dtype_to_ctype
-from devito.symbolics import FieldFromComposite
+from devito.symbolics import FieldFromComposite, Byref
 from devito.types.basic import IndexedBase
 
 
@@ -28,6 +28,16 @@ class DM(LocalObject):
     @property
     def stencil_width(self):
         return self._stencil_width
+    
+    @property
+    def info(self):
+        return DMDALocalInfo(name='%s_info' % self.name, liveness='eager')
+    
+    @property
+    def _C_free(self):
+        from devito.petsc.utils import petsc_call
+        destroy = petsc_call('DMDestroy', [Byref(self.function)])
+        return destroy
 
 
 class Mat(LocalObject):
@@ -36,12 +46,24 @@ class Mat(LocalObject):
     """
     dtype = CustomDtype('Mat')
 
+    @property
+    def _C_free(self):
+        from devito.petsc.utils import petsc_call
+        destroy = petsc_call('MatDestroy', [Byref(self.function)])
+        return destroy
+
 
 class Vec(LocalObject):
     """
     PETSc Vector object (Vec).
     """
     dtype = CustomDtype('Vec')
+
+    @property
+    def _C_free(self):
+        from devito.petsc.utils import petsc_call
+        destroy = petsc_call('VecDestroy', [Byref(self.function)])
+        return destroy
 
 
 class PetscMPIInt(LocalObject):
@@ -59,6 +81,12 @@ class KSP(LocalObject):
     """
     dtype = CustomDtype('KSP')
 
+    @property
+    def _C_free(self):
+        from devito.petsc.utils import petsc_call
+        destroy = petsc_call('KSPDestroy', [Byref(self.function)])
+        return destroy
+
 
 class SNES(LocalObject):
     """
@@ -66,12 +94,24 @@ class SNES(LocalObject):
     """
     dtype = CustomDtype('SNES')
 
+    @property
+    def _C_free(self):
+        from devito.petsc.utils import petsc_call
+        destroy = petsc_call('SNESDestroy', [Byref(self.function)])
+        return destroy
+
 
 class PC(LocalObject):
     """
     PETSc object that manages all preconditioners (PC).
     """
     dtype = CustomDtype('PC')
+
+    @property
+    def _C_free(self):
+        from devito.petsc.utils import petsc_call
+        destroy = petsc_call('PCDestroy', [Byref(self.function)])
+        return destroy
 
 
 class KSPConvergedReason(LocalObject):
@@ -115,7 +155,8 @@ class PETScArray(ArrayBasic, Differentiable):
     _default_fd = 'taylor'
 
     __rkwargs__ = (AbstractFunction.__rkwargs__ +
-                   ('dimensions', 'shape', 'liveness', 'coefficients'))
+                   ('dimensions', 'shape', 'liveness', 'coefficients',
+                    'space_order'))
 
     def __init_finalize__(self, *args, **kwargs):
 
@@ -127,6 +168,7 @@ class PETScArray(ArrayBasic, Differentiable):
             raise ValueError("coefficients must be one of %s"
                              " not %s" % (str(fd_weights_registry), self._coefficients))
         self._shape = kwargs.get('shape')
+        self._space_order = kwargs.get('space_order', 1)
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
@@ -140,6 +182,10 @@ class PETScArray(ArrayBasic, Differentiable):
     @property
     def shape(self):
         return self._shape
+
+    @property
+    def space_order(self):
+        return self._space_order
 
     @cached_property
     def _shape_with_inhalo(self):
@@ -184,16 +230,14 @@ class PETScArray(ArrayBasic, Differentiable):
     @property
     def symbolic_shape(self):
         field_from_composites = [
-            FieldFromComposite('g%sm' % d.name, self.dmda_info) for d in self.dimensions]
+            FieldFromComposite('g%sm' % d.name, self.dmda.info) for d in self.dimensions]
         # Reverse it since DMDA is setup backwards to Devito dimensions.
         return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
 
-    @cached_property
-    def dmda_info(self):
-        # To access the local grid info via the DM in
-        # PETSc you use DMDAGetLocalInfo(da, &info)
-        # and then access the local no.of grid points via info.gmx, info.gmy, info.gmz
-        return DMDALocalInfo(name='info', liveness='eager')
+    @property
+    def dmda(self):
+        name = 'da_so_%s' % self.space_order
+        return DM(name=name, liveness='eager', stencil_width=self.space_order)
 
     @cached_property
     def indexed(self):
