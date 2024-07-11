@@ -16,6 +16,7 @@ __all__ = ['PETScSolve']
 
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
+<<<<<<< HEAD
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
     arrays = {
@@ -28,11 +29,22 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
                            space_order=target.space_order)
         for p in prefixes
     }
+=======
+    y_matvec, x_matvec, y_formfunc, x_formfunc, b_tmp = [
+        PETScArray(name=f'{prefix}_{target.name}',
+                   dtype=target.dtype,
+                   dimensions=target.space_dimensions,
+                   shape=target.grid.shape,
+                   liveness='eager',
+                   halo=[target.halo[d] for d in target.space_dimensions])
+        for prefix in ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']]
+>>>>>>> a9eb4f38b (compiler: Add solver execution calls)
 
     b, F_target = separate_eqn(eq, target)
 
     # TODO: Current assumption is that problem is linear and user has not provided
     # a jacobian. Hence, we can use F_target to form the jac-vec product
+<<<<<<< HEAD
     matvecaction = Eq(arrays['y_matvec'],
                       uxreplace(F_target, {target: arrays['x_matvec']}),
                       subdomain=eq.subdomain)
@@ -51,6 +63,21 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     if not bcs:
         return [inject_solve]
+=======
+    matvecaction = Eq(y_matvec, uxreplace(F_target, {new_target: x_matvec}),
+                      subdomain=eq.subdomain)
+    
+    formfunction = Eq(y_formfunc, uxreplace(F_target, {new_target: x_formfunc}),
+                      subdomain=eq.subdomain)
+
+    # Part of pde that remains constant at each timestep
+    rhs = RHSEq(b_tmp, LinearSolveExpr(b, target=target,
+                solver_parameters=solver_parameters, matvecs=[matvecaction], formfuncs=[formfunction]),
+                subdomain=eq.subdomain)
+
+    if not bcs:
+        return [rhs]
+>>>>>>> a9eb4f38b (compiler: Add solver execution calls)
 
     # NOTE: BELOW IS NOT FULLY TESTED/IMPLEMENTED YET
     bcs_for_matvec = []

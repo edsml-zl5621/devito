@@ -215,19 +215,33 @@ def dtype_to_petsctype(dtype):
     }[dtype]
 
 
+# TODO: Establish clearer and more descriptive names for all PETSc equation types.
+# For instance, consider renaming MatVecEq to JacVecEq to reflect its
+# specific functionality. Also, may not need all of these equation types after all
+# due to recursive compilation.
 class MatVecEq(Eq):
     """
     Represents the mathematical expression of applying a linear
     operator to a vector. This is a key component
-    for running matrix-free solvers.
+    for running matrix-free solvers. Represents the lhs operation of
+    J(x) * Delta(x) = -F(x).
     """
     pass
 
 
 class RHSEq(Eq):
     """
-    Represents the mathematical expression of building the
-    rhs of a linear system.
+    Represents the mathematical expression for constructing the
+    right-hand side (RHS) vector `b` in the system of nonlinear
+    equations of the form F(x) = b.
+    """
+    pass
+
+
+class FormFuncEq(Eq):
+    """
+    Represents the mathematical expression of constructing
+    F(x) in the equation F(x) = b. 
     """
     pass
 
@@ -281,7 +295,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
 class LinearSolveExpr(sympy.Function, Reconstructable):
     """
-    This object is attached to equation that appear
+    This object is attached to equations that appear
     in the main kernel (e.g setting up the RHS of linear system).
     Other related equations, such as matvec, formfunc, and
     preconditioner equations, are attached to this and recursively
