@@ -281,11 +281,11 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
 class LinearSolveExpr(sympy.Function, Reconstructable):
     """
-    This is attached to equations that appear in
-    the main kernel. Other equations that are related to it
-    e.g matvecs, formfuncs, precondiitoner etc are attached to it
-    and recursively compiled at the IET level to form the various
-    callback functions.
+    This object is attached to equation that appear
+    in the main kernel (e.g setting up the RHS of linear system).
+    Other related equations, such as matvec, formfunc, and
+    preconditioner equations, are attached to this and recursively
+    compiled at the IET level to form the various callback functions.
     """
 
     __rargs__ = ('expr',)
