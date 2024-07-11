@@ -33,6 +33,7 @@ from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
 from devito.petsc.iet.passes import lower_petsc
 from devito.petsc.clusters import petsc_lift
+from devito.petsc.types import PETScStruct
 
 
 __all__ = ['Operator']
@@ -242,6 +243,7 @@ class Operator(Callable):
         op._writes = filter_sorted(flatten(e.writes for e in irs.expressions))
         op._dimensions = set().union(*[e.dimensions for e in irs.expressions])
         op._dtype, op._dspace = irs.clusters.meta
+        # from IPython import embed; embed()
         op._profiler = profiler
 
         return op
@@ -481,9 +483,9 @@ class Operator(Callable):
         graph = Graph(iet, **kwargs)
 
         lower_petsc(graph, **kwargs)
-  
+        # from IPython import embed; embed()
         graph = cls._specialize_iet(graph, **kwargs)
-
+        # from IPython import embed; embed()
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced
@@ -494,7 +496,7 @@ class Operator(Callable):
 
         # Target-independent optimizations
         minimize_symbols(graph)
-
+        # from IPython import embed; embed()
         return graph.root, graph
 
     # Read-only properties exposed to the outside world
@@ -513,7 +515,11 @@ class Operator(Callable):
 
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
-        ret.update(d for d in dimensions if d.is_PerfKnob)
+
+        # from IPython import embed; embed()
+
+        # ret.update(d for d in dimensions if d.is_PerfKnob)
+        ret.update(d for d in dimensions)
 
         ret = tuple(sorted(ret, key=attrgetter('name')))
 
@@ -563,7 +569,7 @@ class Operator(Callable):
         edges = [(i, i.parent) for i in self.dimensions
                  if i.is_Derived and i.parent in set(nodes)]
         toposort = DAG(nodes, edges).topological_sort()
-
+        # from IPython import embed; embed()
         futures = {}
         for d in reversed(toposort):
             if set(d._arg_names).intersection(kwargs):
@@ -638,14 +644,20 @@ class Operator(Callable):
         # An ArgumentsMap carries additional metadata that may be used by
         # the subsequent phases of the arguments processing
         args = kwargs['args'] = ArgumentsMap(args, grid, self)
+        # from IPython import embed; embed()
+        # from_callbacks = self._petsc_callbacks(grid, **kwargs)
 
         # Process Dimensions
         for d in reversed(toposort):
             args.update(d._arg_values(self._dspace[d], grid, **kwargs))
 
+        # from IPython import embed; embed()
         # Process Objects
         for o in self.objects:
-            args.update(o._arg_values(grid=grid, **kwargs))
+            if isinstance(o, PETScStruct):
+                args.update(o._arg_values(efuncs=self._func_table, grid=grid, **kwargs))
+            else:
+                args.update(o._arg_values(grid=grid, **kwargs))
 
         # Purge `kwargs`
         kwargs.pop('args')
@@ -677,7 +689,16 @@ class Operator(Callable):
         # Execute autotuning and adjust arguments accordingly
         args.update(self._autotune(args, autotune or configuration['autotuning']))
 
+        # from IPython import embed; embed()
+        # from_callbacks = self._petsc_callbacks(**kwargs)
+
         return args
+    
+    # def _petsc_callbacks(self, grid, **kwargs):
+    #     # from IPython import embed; embed()
+    #     return {}
+
+
 
     def _postprocess_errors(self, retval):
         if retval == 0:
