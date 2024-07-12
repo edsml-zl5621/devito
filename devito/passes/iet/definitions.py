@@ -19,6 +19,7 @@ from devito.symbolics import (Byref, DefFunction, FieldFromPointer, IndexedPoint
 from devito.tools import as_mapper, as_list, as_tuple, filter_sorted, flatten
 from devito.types import (Array, CustomDimension, DeviceMap, DeviceRM, Eq, Symbol,
                           IndexedData)
+from devito.petsc.utils import sort_petsc_frees
 
 __all__ = ['DataManager', 'DeviceAwareDataManager', 'Storage']
 
@@ -296,6 +297,7 @@ class DataManager:
                 init = self.lang['thread-num'](retobj=tid)
                 frees.append(Block(header=header, body=[init] + body))
             frees.extend(as_list(cbody.frees) + flatten(v.frees))
+            frees = sort_petsc_frees(frees)
 
             # maps/unmaps
             maps = as_list(cbody.maps) + flatten(v.maps)
@@ -370,7 +372,7 @@ class DataManager:
                     includes.add(v)
 
         iet, efuncs = self._inject_definitions(iet, storage)
-
+        # from IPython import embed; embed()
         return iet, {'efuncs': efuncs,
                      'globals': as_tuple(globs),
                      'includes': as_tuple(includes)}

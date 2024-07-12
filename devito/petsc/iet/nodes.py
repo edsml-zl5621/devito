@@ -52,6 +52,8 @@ class PETScCallable(Callable):
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
 
+        # from IPython import embed; embed()
+
         # ret.update(d for d in dimensions if d.is_PerfKnob)
 
         # ret = tuple(sorted(ret, key=attrgetter('name')))

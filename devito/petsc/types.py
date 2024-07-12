@@ -53,7 +53,14 @@ class Mat(LocalObject):
         return destroy
 
 
-class Vec(LocalObject):
+class LocalVec(LocalObject):
+    """
+    PETSc Vector object (Vec).
+    """
+    dtype = CustomDtype('Vec')
+    
+
+class GlobalVec(LocalObject):
     """
     PETSc Vector object (Vec).
     """
@@ -81,11 +88,11 @@ class KSP(LocalObject):
     """
     dtype = CustomDtype('KSP')
 
-    @property
-    def _C_free(self):
-        from devito.petsc.utils import petsc_call
-        destroy = petsc_call('KSPDestroy', [Byref(self.function)])
-        return destroy
+    # @property
+    # def _C_free(self):
+    #     from devito.petsc.utils import petsc_call
+    #     destroy = petsc_call('KSPDestroy', [Byref(self.function)])
+    #     return destroy
 
 
 class SNES(LocalObject):
@@ -107,11 +114,11 @@ class PC(LocalObject):
     """
     dtype = CustomDtype('PC')
 
-    @property
-    def _C_free(self):
-        from devito.petsc.utils import petsc_call
-        destroy = petsc_call('PCDestroy', [Byref(self.function)])
-        return destroy
+    # @property
+    # def _C_free(self):
+    #     from devito.petsc.utils import petsc_call
+    #     destroy = petsc_call('PCDestroy', [Byref(self.function)])
+    #     return destroy
 
 
 class KSPConvergedReason(LocalObject):
