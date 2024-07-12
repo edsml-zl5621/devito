@@ -1,9 +1,5 @@
 import os
 
-<<<<<<< HEAD
-=======
-from devito.ir.equations import OpMatVec, OpRHS
->>>>>>> b7c9b8c2d (dsl: Add tests etc for centre stencil extraction)
 from devito.tools import memoized_func
 
 

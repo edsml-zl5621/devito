@@ -31,9 +31,12 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tup
                           split, timed_pass, timed_region, contains_val)
 from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
+
 from devito.petsc.iet.passes import lower_petsc
+from devito.petsc.iet.nodes import PETScCallable
 from devito.petsc.clusters import petsc_lift
 from devito.petsc.types import PETScStruct
+from devito.petsc.utils import generate_petsc_dimensions
 
 
 __all__ = ['Operator']
@@ -516,10 +519,9 @@ class Operator(Callable):
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
 
-        # from IPython import embed; embed()
+        petsc_dims = generate_petsc_dimensions(self._func_table)
 
-        # ret.update(d for d in dimensions if d.is_PerfKnob)
-        ret.update(d for d in dimensions)
+        ret.update(d for d in dimensions if d.is_PerfKnob or d in petsc_dims)
 
         ret = tuple(sorted(ret, key=attrgetter('name')))
 
