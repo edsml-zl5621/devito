@@ -3,6 +3,7 @@ from functools import cached_property
 
 from devito.ir.iet import Expression, Callable, FindSymbols
 from devito.ir.equations import OpMatVec, OpRHS
+from devito.tools import as_tuple
 
 
 class LinearSolverExpression(Expression):
@@ -36,27 +37,28 @@ class RHSLinearSystem(LinearSolverExpression):
     
 class PETScCallable(Callable):
 
-    def __init__(self, name, body, retval=None, parameters=None, prefix=None,
-                 irs=None):
+    def __init__(self, name, body, retval=None, parameters=None, prefix=None, unused_parameters=None):
         super().__init__(name, body, retval, parameters, prefix)
-        self._irs = irs
+        self._unused_parameters = as_tuple(unused_parameters)
+
+    # @cached_property
+    # def dimensions(self):
+    #     # ret = set().union(*[d._defines for d in self._dimensions])
+
+    #     # During compilation other Dimensions may have been produced
+    #     dimensions = FindSymbols('dimensions').visit(self)
+
+    #     # from IPython import embed; embed()
+
+    #     # ret.update(d for d in dimensions if d.is_PerfKnob)
+
+    #     # ret = tuple(sorted(ret, key=attrgetter('name')))
+
+    #     return dimensions
 
     @property
-    def irs(self):
-        return self._irs
+    def unused_parameters(self):
+        return self._unused_parameters
     
-    @cached_property
-    def dimensions(self):
-        # ret = set().union(*[d._defines for d in self._dimensions])
 
-        # During compilation other Dimensions may have been produced
-        dimensions = FindSymbols('dimensions').visit(self)
-
-        # from IPython import embed; embed()
-
-        # ret.update(d for d in dimensions if d.is_PerfKnob)
-
-        # ret = tuple(sorted(ret, key=attrgetter('name')))
-
-        return dimensions
 

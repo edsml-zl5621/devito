@@ -161,7 +161,7 @@ class Cpu64AdvOperator(Cpu64OperatorMixin, CoreOperator):
         # Hoist and optimize Dimension-invariant sub-expressions
         clusters = cire(clusters, 'invariants', sregistry, options, platform)
         clusters = Lift().process(clusters)
-        # from IPython import embed; embed()
+
         # Blocking to improve data locality
         if options['blockeager']:
             clusters = blocking(clusters, sregistry, options)

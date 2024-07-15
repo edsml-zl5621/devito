@@ -571,7 +571,7 @@ class Operator(Callable):
         edges = [(i, i.parent) for i in self.dimensions
                  if i.is_Derived and i.parent in set(nodes)]
         toposort = DAG(nodes, edges).topological_sort()
-        # from IPython import embed; embed()
+
         futures = {}
         for d in reversed(toposort):
             if set(d._arg_names).intersection(kwargs):
@@ -646,20 +646,19 @@ class Operator(Callable):
         # An ArgumentsMap carries additional metadata that may be used by
         # the subsequent phases of the arguments processing
         args = kwargs['args'] = ArgumentsMap(args, grid, self)
-        # from IPython import embed; embed()
+
         # from_callbacks = self._petsc_callbacks(grid, **kwargs)
 
         # Process Dimensions
         for d in reversed(toposort):
             args.update(d._arg_values(self._dspace[d], grid, **kwargs))
 
-        # from IPython import embed; embed()
         # Process Objects
         for o in self.objects:
-            if isinstance(o, PETScStruct):
-                args.update(o._arg_values(efuncs=self._func_table, grid=grid, **kwargs))
-            else:
-                args.update(o._arg_values(grid=grid, **kwargs))
+            # if isinstance(o, PETScStruct):
+            #     args.update(o._arg_values(efuncs=self._func_table, grid=grid, **kwargs))
+            # else:
+            args.update(o._arg_values(grid=grid, **kwargs))
 
         # Purge `kwargs`
         kwargs.pop('args')
