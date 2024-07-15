@@ -17,6 +17,7 @@ def iet_build(stree):
     nsections = 0
     queues = OrderedDict()
     for i in stree.visit():
+        # from IPython import embed; embed()
         if i == stree:
             # We hit this handle at the very end of the visit
             return List(body=queues.pop(i))
