@@ -1,4 +1,5 @@
 import sympy
+# from sympy import Function
 from functools import cached_property
 import numpy as np
 from ctypes import POINTER
@@ -10,7 +11,7 @@ from devito.types.array import ArrayBasic
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction, Symbol
 from devito.finite_differences.tools import fd_weights_registry
-from devito.tools import Reconstructable, dtype_to_ctype, DAG
+from devito.tools import dtype_to_ctype, DAG, Reconstructable
 from devito.symbolics import FieldFromComposite, Byref
 from devito.types.basic import IndexedBase
 
@@ -88,12 +89,6 @@ class KSP(LocalObject):
     """
     dtype = CustomDtype('KSP')
 
-    # @property
-    # def _C_free(self):
-    #     from devito.petsc.utils import petsc_call
-    #     destroy = petsc_call('KSPDestroy', [Byref(self.function)])
-    #     return destroy
-
 
 class SNES(LocalObject):
     """
@@ -113,12 +108,6 @@ class PC(LocalObject):
     PETSc object that manages all preconditioners (PC).
     """
     dtype = CustomDtype('PC')
-
-    # @property
-    # def _C_free(self):
-    #     from devito.petsc.utils import petsc_call
-    #     destroy = petsc_call('PCDestroy', [Byref(self.function)])
-    #     return destroy
 
 
 class KSPConvergedReason(LocalObject):
@@ -297,6 +286,7 @@ class FormFuncEq(Eq):
     pass
 
 
+<<<<<<< HEAD
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
@@ -352,10 +342,13 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     preconditioner equations, are attached to this and recursively
     compiled at the IET level to form the various callback functions.
     """
+=======
+class LinearSolveExpr(sympy.Basic, Reconstructable):
 
-    __rargs__ = ('expr',)
-    __rkwargs__ = ('target', 'solver_parameters', 'matvecs',
-                   'formfuncs', 'preconditioner')
+    __rargs__ = ('args',)
+    __rkwargs__ = ('target', 'solver_parameters')
+>>>>>>> fc449bd10 (dsl: Change LinSolveExpr to inherit from basic not function)
+
 
     defaults = {
         'ksp_type': 'gmres',
@@ -366,8 +359,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         'ksp_max_it': 10000  # Maximum iterations
     }
 
-    def __new__(cls, expr, target=None, solver_parameters=None,
-                matvecs=None, formfuncs=None, preconditioner=None, **kwargs):
+    def __new__(cls, *args, target=None, solver_parameters=None, matvecs=None,
+                formfuncs=None, preconditioner=None, **kwargs):
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -375,17 +368,16 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
             for key, val in cls.defaults.items():
                 solver_parameters[key] = solver_parameters.get(key, val)
 
-        obj = super().__new__(cls, expr)
-        obj._expr = expr
-        obj._target = target
-        obj._solver_parameters = solver_parameters
-        obj._matvecs = matvecs
-        obj._formfuncs = formfuncs
-        obj._preconditioner = preconditioner
+        obj = super().__new__(cls, *args)
+        obj.target = target
+        obj.solver_parameters = solver_parameters
+        obj.matvecs = matvecs
+        obj.formfuncs = formfuncs
+        obj.preconditioner = preconditioner
         return obj
 
     def __repr__(self):
-        return "%s(%s)" % (self.__class__.__name__, self.expr)
+        return "LinearSolveExpr(%s)" % self.target
 
     __str__ = __repr__
 
@@ -395,29 +387,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     def __hash__(self):
         return hash(self.target)
 
-    @property
-    def expr(self):
-        return self._expr
-
-    @property
-    def target(self):
-        return self._target
-
-    @property
-    def solver_parameters(self):
-        return self._solver_parameters
-    
-    @property
-    def matvecs(self):
-        return self._matvecs
-    
-    @property
-    def formfuncs(self):
-        return self._formfuncs
-    
-    @property
-    def preconditioner(self):
-        return self._preconditioner
+    def __eq__(self, other):
+        return isinstance(other, LinearSolveExpr) and self.target == other.target
 
     func = Reconstructable._rebuild
 
@@ -436,22 +407,7 @@ class PETScStruct(CompositeObject):
     def usr_ctx(self):
         return self._usr_ctx
 
-    def _arg_values(self, efuncs, grid, **kwargs):
-        # from IPython import embed; embed()
-        # args_keys = set(kwargs['args'].keys())
-        # efunc = efuncs['MyMatShellMult_pn'].root
-        # struct_params = efunc.struct_params
-        # filtered_params = [param for param in struct_params if str(param) not in args_keys]
-
-        # nodes = efunc.dimensions
-        # edges = [(i, i.parent) for i in efunc.dimensions
-        #          if i.is_Derived and i.parent in set(nodes)]
-        # toposort = DAG(nodes, edges).topological_sort()
-
-
-
-
-        # from IPython import embed; embed()
+    def _arg_values(self, **kwargs):
         values = super()._arg_values(**kwargs)
         for i in self.fields:
             setattr(values[self.name]._obj, i, kwargs['args'][i])

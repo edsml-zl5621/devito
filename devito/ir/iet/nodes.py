@@ -28,7 +28,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback']
+           'CallableBody', 'Transfer', 'Callback', 'MatVecCallback']
 
 # First-class IET nodes
 
@@ -1146,6 +1146,17 @@ class Callback(Call):
         super().__init__(name=name)
         self.retval = retval
         self.param_types = as_tuple(param_types)
+    
+    @property
+    def callback_form(self):
+        return "%s" % self.name
+    
+
+class MatVecCallback(Callback):
+    @property
+    def callback_form(self):
+        param_types_str = ', '.join([str(t) for t in self.param_types])
+        return "(%s (*)(%s))%s" % (self.retval, param_types_str, self.name)
 
 
 class Section(List):

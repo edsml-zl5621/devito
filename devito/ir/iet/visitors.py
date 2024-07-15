@@ -187,6 +187,7 @@ class CGen(Visitor):
         '_mem_shared': '',
     }
     _restrict_keyword = 'restrict'
+    # _restrict_keyword = ''
 
     def _gen_struct_decl(self, obj, masked=()):
         """
@@ -314,7 +315,10 @@ class CGen(Visitor):
         return ret
 
     def _gen_signature(self, o, is_declaration=False):
-        decls = self._args_decl(o.parameters)
+        try:
+            decls = self._args_decl(o.parameters + o.unused_parameters)
+        except AttributeError:
+            decls = self._args_decl(o.parameters)
         prefix = ' '.join(o.prefix + (self._gen_rettype(o.retval),))
         signature = c.FunctionDeclaration(c.Value(prefix, o.name), decls)
         if o.templates:
@@ -614,7 +618,7 @@ class CGen(Visitor):
         return LambdaCollection([top, c.Block(body)])
 
     def visit_Callback(self, o, nested_call=False):
-        return CallbackArg(o.name, o.retval, o.param_types)
+        return CallbackArg(o)
 
     def visit_HaloSpot(self, o):
         body = flatten(self._visit(i) for i in o.children)
@@ -1420,11 +1424,8 @@ def sorted_efuncs(efuncs):
 
 class CallbackArg(c.Generable):
 
-    def __init__(self, name, retval, param_types):
-        self.name = name
-        self.retval = retval
-        self.param_types = param_types
+    def __init__(self, callback):
+        self.callback = callback
 
     def generate(self):
-        param_types_str = ', '.join([str(t) for t in self.param_types])
-        yield "(%s (*)(%s))%s" % (self.retval, param_types_str, self.name)
+        yield self.callback.callback_form

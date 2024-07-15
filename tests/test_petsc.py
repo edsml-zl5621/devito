@@ -12,7 +12,11 @@ from devito.petsc.types import (DM, Mat, LocalVec, PetscMPIInt, KSP,
                                 PC, KSPConvergedReason, PETScArray,
                                 LinearSolveExpr)
 from devito.petsc.solve import PETScSolve, separate_eqn, centre_stencil
+<<<<<<< HEAD
 from devito.petsc.iet.nodes import Expression
+=======
+from devito.petsc.iet.nodes import RHSLinearSystem, Expression
+>>>>>>> fc449bd10 (dsl: Change LinSolveExpr to inherit from basic not function)
 
 
 @skipif('petsc')
@@ -123,10 +127,15 @@ def test_petsc_solve():
 
     matvec_callback = [root for root in callable_roots if root.name == 'MyMatShellMult_f']
 
+<<<<<<< HEAD
     formrhs_callback = [root for root in callable_roots if root.name == 'FormRHS_f']
 
     action_expr = FindNodes(Expression).visit(matvec_callback[0])
     rhs_expr = FindNodes(Expression).visit(formrhs_callback[0])
+=======
+    action_expr = FindNodes(Expression).visit(matvec_callback[0])
+    rhs_expr = FindNodes(RHSLinearSystem).visit(op)
+>>>>>>> fc449bd10 (dsl: Change LinSolveExpr to inherit from basic not function)
 
     assert str(action_expr[-1].expr.rhs) == \
         'matvec->h_x**(-2)*x_matvec_f[x + 1, y + 2]' + \
@@ -174,9 +183,19 @@ def test_multiple_petsc_solves():
 
     callable_roots = [meta_call.root for meta_call in op._func_table.values()]
 
+<<<<<<< HEAD
     # One FormRHS, one MatShellMult and one FormFunction per solve
     # One PopulateMatContext for all solves
     assert len(callable_roots) == 7
+=======
+    assert len(callable_roots) == 4
+
+    structs = [i for i in op.parameters if isinstance(i, PETScStruct)]
+
+    # Only create 1 struct per Grid/DMDA
+    assert len(structs) == 1
+    assert len(structs[0].fields) == 6
+>>>>>>> fc449bd10 (dsl: Change LinSolveExpr to inherit from basic not function)
 
 
 @skipif('petsc')
@@ -191,6 +210,9 @@ def test_petsc_cast():
     arr0 = PETScArray(name='arr0', dimensions=g0.dimensions, shape=g0.shape)
     arr1 = PETScArray(name='arr1', dimensions=g1.dimensions, shape=g1.shape)
     arr2 = PETScArray(name='arr2', dimensions=g2.dimensions, shape=g2.shape)
+    
+    arr3 = PETScArray(name='arr3', dimensions=g1.dimensions,
+                      shape=g1.shape, space_order=4)
 
     arr3 = PETScArray(name='arr3', dimensions=g1.dimensions,
                       shape=g1.shape, space_order=4)
@@ -205,14 +227,43 @@ def test_petsc_cast():
     assert str(cast0) == \
         'float (*restrict arr0) = (float (*)) arr0_vec;'
     assert str(cast1) == \
+<<<<<<< HEAD
         'float (*restrict arr1)[da_so_1_info.gxm] = ' + \
         '(float (*)[da_so_1_info.gxm]) arr1_vec;'
+=======
+        'float (*restrict arr1)[da_so_1_info.gxm] = (float (*)[da_so_1_info.gxm]) arr1_vec;'
+>>>>>>> fc449bd10 (dsl: Change LinSolveExpr to inherit from basic not function)
     assert str(cast2) == \
         'float (*restrict arr2)[da_so_1_info.gym][da_so_1_info.gxm] = ' + \
         '(float (*)[da_so_1_info.gym][da_so_1_info.gxm]) arr2_vec;'
     assert str(cast3) == \
+<<<<<<< HEAD
         'float (*restrict arr3)[da_so_4_info.gxm] = ' + \
         '(float (*)[da_so_4_info.gxm]) arr3_vec;'
+=======
+        'float (*restrict arr3)[da_so_4_info.gxm] = (float (*)[da_so_4_info.gxm]) arr3_vec;'
+
+
+@skipif('petsc')
+def test_no_automatic_cast():
+    """
+    Verify that the compiler does not automatically generate casts for PETScArrays.
+    They will be generated at specific points within the C code, particularly after
+    other PETSc calls, rather than necessarily at the top of the Kernel.
+    """
+    grid = Grid((2, 2))
+
+    f = Function(name='f', grid=grid, space_order=2)
+
+    arr = PETScArray(name='arr', dimensions=f.dimensions, shape=f.shape)
+
+    eqn = Eq(arr, f.laplace)
+
+    with switchconfig(openmp=False):
+        op = Operator(eqn, opt='noop')
+
+    assert len(op.body.casts) == 1
+>>>>>>> fc449bd10 (dsl: Change LinSolveExpr to inherit from basic not function)
 
 
 @skipif('petsc')
@@ -259,8 +310,10 @@ def test_dmda_create():
         op2 = Operator(petsc2, opt='noop')
         op3 = Operator(petsc3, opt='noop')
 
-    assert 'PetscCall(DMDACreate1d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
-        '2,1,2,NULL,&(da_so_2)));' in str(op1)
+    # assert 'PetscCall(DMDACreate1d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
+    #     '2,1,2,NULL,&(da_so_2)));' in str(op1)
+
+    assert 'PetscCall(DMDACreate1d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,2,1,2,NULL,&(da_so_2)))' in str(op1)
 
     assert 'PetscCall(DMDACreate2d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
         'DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,2,2,1,1,1,4,NULL,NULL,&(da_so_4)));' \
