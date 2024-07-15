@@ -314,7 +314,7 @@ def pow_to_mul(expr):
                 args = [a1, a0]
         except ValueError:
             pass
-
+        # from IPython import embed; embed()
         return expr.func(*args, evaluate=False)
 
 

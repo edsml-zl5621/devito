@@ -407,7 +407,7 @@ class Operator(Callable):
         # Make sure no reconstructions can unpick any of the symbolic
         # optimizations performed so far
         clusters = unevaluate(clusters)
-
+        # from IPython import embed; embed()
         return ClusterGroup(clusters)
 
     # Compilation -- ScheduleTree level

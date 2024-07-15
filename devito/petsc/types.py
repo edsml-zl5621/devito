@@ -286,7 +286,6 @@ class FormFuncEq(Eq):
     pass
 
 
-<<<<<<< HEAD
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Add check for time dimensions and utilise implicit dimensions.
 
@@ -342,12 +341,6 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     preconditioner equations, are attached to this and recursively
     compiled at the IET level to form the various callback functions.
     """
-=======
-class LinearSolveExpr(sympy.Basic, Reconstructable):
-
-    __rargs__ = ('args',)
-    __rkwargs__ = ('target', 'solver_parameters')
->>>>>>> fc449bd10 (dsl: Change LinSolveExpr to inherit from basic not function)
 
 
     defaults = {
