@@ -28,7 +28,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'MatVecCallback']
+           'CallableBody', 'Transfer']
 
 # First-class IET nodes
 
@@ -1118,45 +1118,6 @@ class Lambda(Node):
     @property
     def defines(self):
         return tuple(self.parameters)
-
-
-class Callback(Call):
-    """
-    Callback as a function pointer.
-
-    Parameters
-    ----------
-    name : str
-        The name of the callback.
-    retval : str
-        The return type of the callback.
-    param_types : str or list of str
-        The return type for each argument of the callback.
-
-    Notes
-    -----
-    The reason Callback is an IET type rather than a SymPy type is
-    due to the fact that, when represented at the SymPy level, the IET
-    engine fails to bind the callback to a specific Call. Consequently,
-    errors occur during the creation of the call graph.
-    """
-    # TODO: Create a common base class for Call and Callback to avoid
-    # having arguments=None here
-    def __init__(self, name, retval, param_types, arguments=None):
-        super().__init__(name=name)
-        self.retval = retval
-        self.param_types = as_tuple(param_types)
-    
-    @property
-    def callback_form(self):
-        return "%s" % self.name
-    
-
-class MatVecCallback(Callback):
-    @property
-    def callback_form(self):
-        param_types_str = ', '.join([str(t) for t in self.param_types])
-        return "(%s (*)(%s))%s" % (self.retval, param_types_str, self.name)
 
 
 class Section(List):
