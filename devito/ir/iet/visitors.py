@@ -187,7 +187,6 @@ class CGen(Visitor):
         '_mem_shared': '',
     }
     _restrict_keyword = 'restrict'
-    # _restrict_keyword = ''
 
     def _gen_struct_decl(self, obj, masked=()):
         """

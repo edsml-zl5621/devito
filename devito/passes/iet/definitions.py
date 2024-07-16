@@ -372,7 +372,7 @@ class DataManager:
                     includes.add(v)
 
         iet, efuncs = self._inject_definitions(iet, storage)
-        # from IPython import embed; embed()
+
         return iet, {'efuncs': efuncs,
                      'globals': as_tuple(globs),
                      'includes': as_tuple(includes)}

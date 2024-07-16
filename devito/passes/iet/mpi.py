@@ -13,8 +13,6 @@ from devito.mpi.routines import HaloExchangeBuilder, ReductionBuilder
 from devito.passes.iet.engine import iet_pass
 from devito.tools import generator
 
-from devito.petsc.iet.nodes import LinearSolverExpression
-
 __all__ = ['mpiize']
 
 
@@ -81,7 +79,8 @@ def _hoist_halospots(iet):
     rules = [rule0, rule1]
 
     # Precompute scopes to save time
-    scopes = {i: Scope([e.expr for e in v if not isinstance(e, Call)]) for i, v in MapNodes().visit(iet).items()}
+    scopes = {i: Scope([e.expr for e in v if not isinstance(e, Call)])
+              for i, v in MapNodes().visit(iet).items()}
 
     # Analysis
     hsmapper = {}
@@ -314,7 +313,7 @@ def make_halo_exchanges(iet, mpimode=None, **kwargs):
     for hs in FindNodes(HaloSpot).visit(iet):
         heb = user_heb if isinstance(hs, OverlappableHaloSpot) else sync_heb
         mapper[hs] = heb.make(hs)
-    # from IPython import embed; embed()
+
     efuncs = sync_heb.efuncs + user_heb.efuncs
     iet = Transformer(mapper, nested=True).visit(iet)
 
@@ -370,6 +369,3 @@ def mpiize(graph, **kwargs):
         make_halo_exchanges(graph, mpimode=mpimode, **kwargs)
 
     make_reductions(graph, mpimode=mpimode, **kwargs)
-
-
-

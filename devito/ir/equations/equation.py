@@ -13,7 +13,7 @@ from devito.types import (Eq, Inc, ReduceMax, ReduceMin,
 from devito.petsc.types import MatVecEq, RHSEq
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
-           'OpMatVec', 'OpRHS']
+           'OpRHS', 'OpInjectSolve']
 
 
 class IREq(sympy.Eq, Pickable):
@@ -104,8 +104,7 @@ class Operation(Tag):
             Inc: OpInc,
             ReduceMax: OpMax,
             ReduceMin: OpMin,
-            MatVecEq: OpMatVec,
-            RHSEq: OpRHS
+            InjectSolveEq: OpInjectSolve
         }
         try:
             return reduction_mapper[type(expr)]
@@ -124,10 +123,8 @@ OpMax = Operation('max')
 OpMin = Operation('min')
 
 # Operations required by a Linear Solve of the form Ax=b:
-# Application of linear operator on a vector -> op for matrix-vector multiplication.
-OpMatVec = Operation('matvec')
-# Building the right-hand side of linear system.
 OpRHS = Operation('rhs')
+OpInjectSolve = Operation('solve')
 
 
 class LoweredEq(IREq):
