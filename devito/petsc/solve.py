@@ -1,166 +1,318 @@
-from functools import singledispatch
+import cgen as c
 
-import sympy
+from devito.passes.iet.engine import iet_pass
+from devito.ir.iet import (FindNodes, Transformer,
+                           MapNodes, Iteration, List, BlankLine,
+                           filter_iterations, retrieve_iteration_tree,
+                           Callable, CallableBody, DummyExpr, Call)
+from devito.symbolics import Byref, Macro, FieldFromPointer
+from devito.tools import filter_ordered
+from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec,
+                                GlobalVec, KSP, PC, SNES, PetscErrorCode, DummyArg)
+from devito.petsc.iet.nodes import InjectSolveDummy
+from devito.petsc.utils import solver_mapper, core_metadata
+from devito.petsc.iet.routines import PETScCallbackBuilder
+from devito.petsc.iet.utils import petsc_call, petsc_call_mpi, petsc_struct
 
-from devito.finite_differences.differentiable import Mul
-from devito.finite_differences.derivative import Derivative
-from devito.types import Eq
-from devito.types.equation import InjectSolveEq
-from devito.operations.solve import eval_time_derivatives
-from devito.symbolics import uxreplace
-from devito.petsc.types import LinearSolveExpr, PETScArray
+
+@iet_pass
+def lower_petsc(iet, **kwargs):
+
+    # Check if PETScSolve was used
+    petsc_nodes = FindNodes(InjectSolveDummy).visit(iet)
+
+    if not petsc_nodes:
+        return iet, {}
+
+    unique_targets = list({i.expr.rhs.target for i in petsc_nodes})
+    init = init_petsc(**kwargs)
+
+    # Assumption is that all targets have the same grid so can use any target here
+    objs = build_core_objects(unique_targets[-1], **kwargs)
+
+    # Create core PETSc calls (not specific to each PETScSolve)
+    core = make_core_petsc_calls(objs, **kwargs)
+
+    # Create injectsolve mapper from the spatial iteration loops
+    # (exclude time loop if present)
+    spatial_body = []
+    for tree in retrieve_iteration_tree(iet):
+        root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
+        spatial_body.append(root)
+    injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
+                                  'groupby').visit(List(body=spatial_body))
+
+    setup = []
+    subs = {}
+
+    # Create a different DMDA for each target with a unique space order
+    unique_dmdas = create_dmda_objs(unique_targets)
+    objs.update(unique_dmdas)
+    for dmda in unique_dmdas.values():
+        setup.extend(create_dmda_calls(dmda, objs))
+
+    builder = PETScCallbackBuilder(**kwargs)
+
+    # Create the PETSc calls which are specific to each target
+    for target in unique_targets:
+        solver_objs = build_solver_objs(target)
+
+        # Generate the solver setup for target. This is required only
+        # once per target
+        for (injectsolve,) in injectsolve_mapper.values():
+            # Skip if not associated with the target
+            if injectsolve.expr.rhs.target != target:
+                continue
+            solver_setup = generate_solver_setup(solver_objs, objs, injectsolve, target)
+            setup.extend(solver_setup)
+            break
+
+        # Generate all PETSc callback functions for the target via recusive compilation
+        for iter, (injectsolve,) in injectsolve_mapper.items():
+            if injectsolve.expr.rhs.target != target:
+                continue
+            matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
+                                                            objs, solver_objs)
+            setup.extend([matvec_op, formfunc_op])
+            subs.update({iter[0]: List(body=runsolve)})
+            break
+
+    # Generate callback to populate main struct object
+    struct_main = petsc_struct('ctx', filter_ordered(builder.struct_params))
+    struct_callback = generate_struct_callback(struct_main)
+    call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
+    calls_set_app_ctx = [petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
+                         for i in unique_dmdas]
+    setup.extend([BlankLine, call_struct_callback] + calls_set_app_ctx)
+
+    iet = Transformer(subs).visit(iet)
+
+    body = iet.body._rebuild(
+        init=init, body=core+tuple(setup)+(BlankLine,)+iet.body.body
+    )
+    iet = iet._rebuild(body=body)
+    metadata = core_metadata()
+    metadata.update({'efuncs': tuple(builder.efuncs.values())+(struct_callback,)})
+
+    return iet, metadata
 
 
-__all__ = ['PETScSolve']
+def init_petsc(**kwargs):
+    # Initialize PETSc -> for now, assuming all solver options have to be
+    # specifed via the parameters dict in PETScSolve
+    # TODO: Are users going to be able to use PETSc command line arguments?
+    # In firedrake, they have an options_prefix for each solver, enabling the use
+    # of command line options
+    initialize = petsc_call('PetscInitialize', [Null, Null, Null, Null])
+
+    return petsc_func_begin_user, initialize
 
 
-def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
+def make_core_petsc_calls(objs, **kwargs):
+    call_mpi = petsc_call_mpi('MPI_Comm_size', [objs['comm'], Byref(objs['size'])])
 
-    prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
+    return call_mpi, BlankLine
 
-    arrays = {
-        p: PETScArray(name='%s_%s' % (p, target.name),
-                           dtype=target.dtype,
-                           dimensions=target.space_dimensions,
-                           shape=target.grid.shape,
-                           liveness='eager',
-                           halo=[target.halo[d] for d in target.space_dimensions],
-                           space_order=target.space_order)
-        for p in prefixes
+
+def build_core_objects(target, **kwargs):
+    if kwargs['options']['mpi']:
+        communicator = target.grid.distributor._obj_comm
+    else:
+        communicator = 'PETSC_COMM_SELF'
+
+    return {
+        'size': PetscMPIInt(name='size'),
+        'comm': communicator,
+        'err': PetscErrorCode(name='err'),
+        'grid': target.grid
     }
 
-    b, F_target = separate_eqn(eq, target)
 
-    # TODO: Current assumption is that problem is linear and user has not provided
-    # a jacobian. Hence, we can use F_target to form the jac-vec product
-    matvecaction = Eq(arrays['y_matvec'],
-                      uxreplace(F_target, {target: arrays['x_matvec']}),
-                      subdomain=eq.subdomain)
-
-    formfunction = Eq(arrays['y_formfunc'],
-                      uxreplace(F_target, {target: arrays['x_formfunc']}),
-                      subdomain=eq.subdomain)
-
-    rhs = Eq(arrays['b_tmp'], b, subdomain=eq.subdomain)
-
-    # Placeholder equation for inserting calls to the solver
-    inject_solve = InjectSolveEq(arrays['b_tmp'], LinearSolveExpr(
-        b, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
-        formfuncs=[formfunction], formrhs=[rhs], arrays=arrays,
-    ), subdomain=eq.subdomain)
-
-    if not bcs:
-        return [inject_solve]
-
-    # NOTE: BELOW IS NOT FULLY TESTED/IMPLEMENTED YET
-    bcs_for_matvec = []
-    bcs_for_formfunc = []
-    bcs_for_rhs = []
-    for bc in bcs:
-        # TODO: Insert code to distiguish between essential and natural
-        # boundary conditions since these are treated differently within
-        # the solver
-        # NOTE: May eventually remove the essential bcs from the solve
-        # (and move to rhs) but for now, they are included since this
-        # is not trivial to implement when using DMDA
-        # NOTE: Below is temporary -> Just using this as a palceholder for
-        # the actual BC implementation
-        centre = centre_stencil(F_target, target)
-        bcs_for_matvec.append(Eq(arrays['y_matvec'],
-                                 centre.subs(target, arrays['x_matvec']),
-                                 subdomain=bc.subdomain))
-        bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
-                                   0., subdomain=bc.subdomain))
-        # NOTE: Temporary
-        bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
-
-    inject_solve = InjectSolveEq(arrays['b_tmp'], LinearSolveExpr(
-        b, target=target, solver_parameters=solver_parameters,
-        matvecs=[matvecaction]+bcs_for_matvec,
-        formfuncs=[formfunction]+bcs_for_formfunc, formrhs=[rhs],
-        arrays=arrays,
-    ), subdomain=eq.subdomain)
-
-    return [inject_solve]
+def create_dmda_objs(unique_targets):
+    unique_dmdas = {}
+    for target in unique_targets:
+        name = 'da_so_%s' % target.space_order
+        unique_dmdas[name] = DM(name=name, liveness='eager',
+                                stencil_width=target.space_order)
+    return unique_dmdas
 
 
-def separate_eqn(eqn, target):
-    """
-    Separate the equation into two separate expressions,
-    where F(target) = b.
-    """
-    zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
-    tmp = eval_time_derivatives(zeroed_eqn.lhs)
-    b, F_target = remove_target(tmp, target)
-    return -b, F_target
+def create_dmda_calls(dmda, objs):
+    dmda_create = create_dmda(dmda, objs)
+    dm_setup = petsc_call('DMSetUp', [dmda])
+    dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
+    dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
+    return dmda_create, dm_setup, dm_mat_type, dm_get_local_info, BlankLine
 
 
-@singledispatch
-def remove_target(expr, target):
-    return (0, expr) if expr == target else (expr, 0)
+def create_dmda(dmda, objs):
+    no_of_space_dims = len(objs['grid'].dimensions)
+
+    # MPI communicator
+    args = [objs['comm']]
+
+    # Type of ghost nodes
+    args.extend(['DM_BOUNDARY_GHOSTED' for _ in range(no_of_space_dims)])
+
+    # Stencil type
+    if no_of_space_dims > 1:
+        args.append('DMDA_STENCIL_BOX')
+
+    # Global dimensions
+    args.extend(list(objs['grid'].shape)[::-1])
+    # No.of processors in each dimension
+    if no_of_space_dims > 1:
+        args.extend(list(objs['grid'].distributor.topology)[::-1])
+
+    # Number of degrees of freedom per node
+    args.append(1)
+    # "Stencil width" -> size of overlap
+    args.append(dmda.stencil_width)
+    args.extend([Null for _ in range(no_of_space_dims)])
+
+    # The distributed array object
+    args.append(Byref(dmda))
+
+    # The PETSc call used to create the DMDA
+    dmda = petsc_call('DMDACreate%sd' % no_of_space_dims, args)
+
+    return dmda
 
 
-@remove_target.register(sympy.Add)
-def _(expr, target):
-    if not expr.has(target):
-        return (expr, 0)
-
-    args_b, args_F = zip(*(remove_target(a, target) for a in expr.args))
-    return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
-
-
-@remove_target.register(Mul)
-def _(expr, target):
-    if not expr.has(target):
-        return (expr, 0)
-
-    args_b, args_F = zip(*[remove_target(a, target) if a.has(target)
-                           else (a, a) for a in expr.args])
-    return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
-
-
-@remove_target.register(Derivative)
-def _(expr, target):
-    return (0, expr) if expr.has(target) else (expr, 0)
+def build_solver_objs(target):
+    name = target.name
+    return {
+        'Jac': Mat(name='J_%s' % name),
+        'x_global': GlobalVec(name='x_global_%s' % name),
+        'x_local': LocalVec(name='x_local_%s' % name, liveness='eager'),
+        'b_global': GlobalVec(name='b_global_%s' % name),
+        'b_local': LocalVec(name='b_local_%s' % name),
+        'ksp': KSP(name='ksp_%s' % name),
+        'pc': PC(name='pc_%s' % name),
+        'snes': SNES(name='snes_%s' % name),
+        'X_global': GlobalVec(name='X_global_%s' % name),
+        'Y_global': GlobalVec(name='Y_global_%s' % name),
+        'X_local': LocalVec(name='X_local_%s' % name, liveness='eager'),
+        'Y_local': LocalVec(name='Y_local_%s' % name, liveness='eager'),
+        'dummy': DummyArg(name='dummy_%s' % name)
+    }
 
 
-@singledispatch
-def centre_stencil(expr, target):
-    """
-    Extract the centre stencil from an expression. Its coefficient is what
-    would appear on the diagonal of the matrix system if the matrix were
-    formed explicitly.
-    """
-    return expr if expr == target else 0
+def generate_solver_setup(solver_objs, objs, injectsolve, target):
+    dmda = objs['da_so_%s' % target.space_order]
+
+    solver_params = injectsolve.expr.rhs.solver_parameters
+
+    snes_create = petsc_call('SNESCreate', [objs['comm'], Byref(solver_objs['snes'])])
+
+    snes_set_dm = petsc_call('SNESSetDM', [solver_objs['snes'], dmda])
+
+    create_matrix = petsc_call('DMCreateMatrix', [dmda, Byref(solver_objs['Jac'])])
+
+    # NOTE: Assumming all solves are linear for now.
+    snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
+
+    snes_set_jac = petsc_call(
+        'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
+                            solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
+    )
+
+    global_x = petsc_call('DMCreateGlobalVector',
+                          [dmda, Byref(solver_objs['x_global'])])
+
+    local_x = petsc_call('DMCreateLocalVector',
+                         [dmda, Byref(solver_objs['x_local'])])
+
+    global_b = petsc_call('DMCreateGlobalVector',
+                          [dmda, Byref(solver_objs['b_global'])])
+
+    local_b = petsc_call('DMCreateLocalVector',
+                         [dmda, Byref(solver_objs['b_local'])])
+
+    snes_get_ksp = petsc_call('SNESGetKSP',
+                              [solver_objs['snes'], Byref(solver_objs['ksp'])])
+
+    vec_replace_array = petsc_call(
+        'VecReplaceArray', [solver_objs['x_local'],
+                            FieldFromPointer(target._C_field_data, target._C_symbol)]
+    )
+
+    ksp_set_tols = petsc_call(
+        'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
+                             solver_params['ksp_atol'], solver_params['ksp_divtol'],
+                             solver_params['ksp_max_it']]
+    )
+
+    ksp_set_type = petsc_call(
+        'KSPSetType', [solver_objs['ksp'], solver_mapper[solver_params['ksp_type']]]
+    )
+
+    ksp_get_pc = petsc_call('KSPGetPC', [solver_objs['ksp'], Byref(solver_objs['pc'])])
+
+    # Even though the default will be jacobi, set to PCNONE for now
+    pc_set_type = petsc_call('PCSetType', [solver_objs['pc'], 'PCNONE'])
+
+    ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
+
+    return (
+        snes_create,
+        snes_set_dm,
+        create_matrix,
+        snes_set_jac,
+        snes_set_type,
+        global_x,
+        local_x,
+        global_b,
+        local_b,
+        snes_get_ksp,
+        vec_replace_array,
+        ksp_set_tols,
+        ksp_set_type,
+        ksp_get_pc,
+        pc_set_type,
+        ksp_set_from_ops
+    )
 
 
-@centre_stencil.register(sympy.Add)
-def _(expr, target):
-    if not expr.has(target):
-        return 0
-
-    args = [centre_stencil(a, target) for a in expr.args]
-    return expr.func(*args, evaluate=False)
-
-
-@centre_stencil.register(Mul)
-def _(expr, target):
-    if not expr.has(target):
-        return 0
-
-    args = []
-    for a in expr.args:
-        if not a.has(target):
-            args.append(a)
-        else:
-            args.append(centre_stencil(a, target))
-
-    return expr.func(*args, evaluate=False)
+def generate_struct_callback(struct):
+    body = [DummyExpr(FieldFromPointer(i._C_symbol, struct),
+                      i._C_symbol) for i in struct.fields]
+    struct_callback_body = CallableBody(
+        List(body=body), init=tuple([petsc_func_begin_user]),
+        retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
+    )
+    struct_callback = Callable(
+        'PopulateMatContext', struct_callback_body, PetscErrorCode(name='err'),
+        parameters=[struct]
+    )
+    return struct_callback
 
 
-@centre_stencil.register(Derivative)
-def _(expr, target):
-    if not expr.has(target):
-        return 0
-    args = [centre_stencil(a, target) for a in expr.evaluate.args]
-    return expr.evaluate.func(*args)
+@iet_pass
+def sort_frees(iet):
+    frees = iet.body.frees
+
+    if not frees:
+        return iet, {}
+
+    destroys = ["VecDestroy", "MatDestroy", "SNESDestroy", "DMDestroy"]
+    priority = {k: i for i, k in enumerate(destroys, start=1)}
+
+    def key(i):
+        for destroy, prio in priority.items():
+            if destroy in str(i):
+                return prio
+        return float('inf')
+
+    frees = sorted(frees, key=key)
+
+    body = iet.body._rebuild(frees=frees)
+    iet = iet._rebuild(body=body)
+    return iet, {}
+
+
+Null = Macro('NULL')
+void = 'void'
+
+# TODO: Don't use c.Line here?
+petsc_func_begin_user = c.Line('PetscFunctionBeginUser;')

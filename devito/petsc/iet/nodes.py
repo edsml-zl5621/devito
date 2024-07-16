@@ -1,7 +1,7 @@
 from operator import attrgetter
 from functools import cached_property
 
-from devito.ir.iet import Expression, Callable, FindSymbols
+from devito.ir.iet import Expression, Callable, FindSymbols, Call
 from devito.ir.equations import OpMatVec, OpRHS
 from devito.tools import as_tuple
 
@@ -41,24 +41,45 @@ class PETScCallable(Callable):
         super().__init__(name, body, retval, parameters, prefix)
         self._unused_parameters = as_tuple(unused_parameters)
 
-    # @cached_property
-    # def dimensions(self):
-    #     # ret = set().union(*[d._defines for d in self._dimensions])
-
-    #     # During compilation other Dimensions may have been produced
-    #     dimensions = FindSymbols('dimensions').visit(self)
-
-    #     # from IPython import embed; embed()
-
-    #     # ret.update(d for d in dimensions if d.is_PerfKnob)
-
-    #     # ret = tuple(sorted(ret, key=attrgetter('name')))
-
-    #     return dimensions
-
     @property
     def unused_parameters(self):
         return self._unused_parameters
     
 
+class Callback(Call):
+    """
+    Callback as a function pointer.
 
+    Parameters
+    ----------
+    name : str
+        The name of the callback.
+    retval : str
+        The return type of the callback.
+    param_types : str or list of str
+        The return type for each argument of the callback.
+
+    Notes
+    -----
+    The reason Callback is an IET type rather than a SymPy type is
+    due to the fact that, when represented at the SymPy level, the IET
+    engine fails to bind the callback to a specific Call. Consequently,
+    errors occur during the creation of the call graph.
+    """
+    # TODO: Create a common base class for Call and Callback to avoid
+    # having arguments=None here
+    def __init__(self, name, retval, param_types, arguments=None):
+        super().__init__(name=name)
+        self.retval = retval
+        self.param_types = as_tuple(param_types)
+    
+    @property
+    def callback_form(self):
+        return "%s" % self.name
+    
+
+class MatVecCallback(Callback):
+    @property
+    def callback_form(self):
+        param_types_str = ', '.join([str(t) for t in self.param_types])
+        return "(%s (*)(%s))%s" % (self.retval, param_types_str, self.name)
