@@ -31,13 +31,9 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tup
                           split, timed_pass, timed_region, contains_val)
 from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
-
 from devito.petsc.iet.passes import lower_petsc
-from devito.petsc.iet.nodes import PETScCallable
 from devito.petsc.clusters import petsc_lift
-from devito.petsc.types import PETScStruct
 from devito.petsc.utils import generate_petsc_dimensions
-
 
 __all__ = ['Operator']
 
@@ -246,7 +242,6 @@ class Operator(Callable):
         op._writes = filter_sorted(flatten(e.writes for e in irs.expressions))
         op._dimensions = set().union(*[e.dimensions for e in irs.expressions])
         op._dtype, op._dspace = irs.clusters.meta
-        # from IPython import embed; embed()
         op._profiler = profiler
 
         return op
@@ -407,7 +402,7 @@ class Operator(Callable):
         # Make sure no reconstructions can unpick any of the symbolic
         # optimizations performed so far
         clusters = unevaluate(clusters)
-        # from IPython import embed; embed()
+
         return ClusterGroup(clusters)
 
     # Compilation -- ScheduleTree level
@@ -486,9 +481,9 @@ class Operator(Callable):
         graph = Graph(iet, **kwargs)
 
         lower_petsc(graph, **kwargs)
-        # from IPython import embed; embed()
+
         graph = cls._specialize_iet(graph, **kwargs)
-        # from IPython import embed; embed()
+
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced
@@ -499,7 +494,7 @@ class Operator(Callable):
 
         # Target-independent optimizations
         minimize_symbols(graph)
-        # from IPython import embed; embed()
+
         return graph.root, graph
 
     # Read-only properties exposed to the outside world
@@ -647,17 +642,12 @@ class Operator(Callable):
         # the subsequent phases of the arguments processing
         args = kwargs['args'] = ArgumentsMap(args, grid, self)
 
-        # from_callbacks = self._petsc_callbacks(grid, **kwargs)
-
         # Process Dimensions
         for d in reversed(toposort):
             args.update(d._arg_values(self._dspace[d], grid, **kwargs))
 
         # Process Objects
         for o in self.objects:
-            # if isinstance(o, PETScStruct):
-            #     args.update(o._arg_values(efuncs=self._func_table, grid=grid, **kwargs))
-            # else:
             args.update(o._arg_values(grid=grid, **kwargs))
 
         # Purge `kwargs`
@@ -690,16 +680,7 @@ class Operator(Callable):
         # Execute autotuning and adjust arguments accordingly
         args.update(self._autotune(args, autotune or configuration['autotuning']))
 
-        # from IPython import embed; embed()
-        # from_callbacks = self._petsc_callbacks(**kwargs)
-
         return args
-    
-    # def _petsc_callbacks(self, grid, **kwargs):
-    #     # from IPython import embed; embed()
-    #     return {}
-
-
 
     def _postprocess_errors(self, retval):
         if retval == 0:
@@ -737,7 +718,6 @@ class Operator(Callable):
 
     def arguments(self, **kwargs):
         """Arguments to run the Operator."""
-        # from IPython import embed; embed()
         args = self._prepare_arguments(**kwargs)
         # Check all arguments are present
         for p in self.parameters:
@@ -1140,28 +1120,6 @@ def rcompile(expressions, kwargs, options, target=None):
         cls = operator_selector(**kwargs)
         kwargs = cls._normalize_kwargs(**kwargs)
         kwargs['options'].update(options)
-
-    # Recursive profiling not supported -- would be a complete mess
-    kwargs.pop('profiler', None)
-
-    return cls._lower(expressions, **kwargs)
-
-
-def rcompile_petsc(expressions, kwargs, options, target=None):
-    """
-    Perform recursive compilation on an ordered sequence of symbolic expressions.
-    """
-    options = {**options, **rcompile_registry}
-
-    if target is None:
-        cls = operator_selector(**kwargs)
-    else:
-        kwargs = parse_kwargs(**target)
-        cls = operator_selector(**kwargs)
-        kwargs = cls._normalize_kwargs(**kwargs)
-
-    # Use the customized opt options
-    kwargs['options'] = options
 
     # Recursive profiling not supported -- would be a complete mess
     kwargs.pop('profiler', None)

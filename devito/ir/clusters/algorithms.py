@@ -469,7 +469,7 @@ def reduction_comms(clusters):
             op = e.operation
             if op is None or c.is_sparse:
                 continue
-            
+
             var = e.lhs
             grid = c.grid
             if grid is None:
@@ -491,7 +491,7 @@ def reduction_comms(clusters):
             # The IterationSpace within which the global distributed reduction
             # must be carried out
             ispace = c.ispace.prefix(lambda d: d in var.free_symbols)
-            # from IPython import embed; embed()
+
             fifo.append(DistReduce(var, op=op, grid=grid, ispace=ispace))
 
         processed.append(c)

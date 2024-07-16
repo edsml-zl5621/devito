@@ -298,7 +298,6 @@ def infer_dtype(dtypes):
           highest precision;
         * If there's at least one floating dtype, ignore any integer dtypes.
     """
-    # from IPython import embed; embed()
     # Resolve the vector types, if any
     dtypes = {dtypes_vector_mapper.get_base_dtype(i, i) for i in dtypes}
 

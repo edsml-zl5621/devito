@@ -68,7 +68,7 @@ class HaloExchangeBuilder:
         """
         # Sanity check
         assert all(f.is_Function and f.grid is not None for f in hs.fmapper)
-        # from IPython import embed; embed()
+
         # Pack-up Functions into Bundles. Worst case scenario, we have Bundles
         # with just one components each. This is to maximize the likelihood of
         # packed sends/recvs
@@ -86,7 +86,7 @@ class HaloExchangeBuilder:
 
             # Callables for send/recv/wait
             mapper[(f, hse)] = self._make_all(f, hse, msg)
-        # from IPython import embed; embed()
+
         msgs = [self._msgs[(f, hse)] for f, hse in hs.fmapper.items()]
 
         # Callable for poking the asynchronous progress engine
@@ -119,7 +119,7 @@ class HaloExchangeBuilder:
             haloupdates.append(self._call_haloupdate(haloupdate.name, f, hse, msg))
             if halowait is not None:
                 halowaits.append(self._call_halowait(halowait.name, f, hse, msg))
-        # from IPython import embed; embed()
+
         body = self._make_body(callcompute, remainder, haloupdates, halowaits)
 
         return body
@@ -525,7 +525,6 @@ class BasicHaloExchangeBuilder(HaloExchangeBuilder):
             body.append(self._call_remainder(remainder))
 
         return List(body=body)
-
 
 
 class DiagHaloExchangeBuilder(BasicHaloExchangeBuilder):
