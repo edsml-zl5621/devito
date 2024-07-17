@@ -1,6 +1,13 @@
 import os
 
+from devito.ir.equations import OpInjectSolve
 from devito.tools import memoized_func
+from devito.ir.iet import Call, FindSymbols
+from devito.petsc.iet.nodes import PETScCallable, InjectSolveDummy
+
+# Mapping special Eq operations to their corresponding IET Expression subclass types.
+# These operations correspond to subclasses of Eq utilised within PETScSolve.
+petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
 
 
 solver_mapper = {
@@ -17,8 +24,10 @@ def get_petsc_dir():
         petsc_dir = os.environ.get(i)
         if petsc_dir:
             return petsc_dir
-    # TODO: Raise error if PETSC_DIR is not set
-    return None
+    raise ValueError(
+        'Environment variable PETSC_DIR is not set. '
+        'Set it to the PETSc directory.'
+    )
 
 
 @memoized_func
@@ -28,8 +37,10 @@ def get_petsc_arch():
         petsc_arch = os.environ.get(i)
         if petsc_arch:
             return petsc_arch
-    # TODO: Raise error if PETSC_ARCH is not set
-    return None
+    raise ValueError(
+        'Environment variable PETSC_ARCH is not set. '
+        'Set it to the configuration of PETSc you wish to use.'
+    )
 
 
 def core_metadata():

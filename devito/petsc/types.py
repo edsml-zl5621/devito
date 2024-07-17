@@ -12,7 +12,6 @@ from devito.types.basic import AbstractFunction, Symbol
 from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import dtype_to_ctype, Reconstructable
 from devito.symbolics import FieldFromComposite, Byref
-from devito.types.basic import IndexedBase
 
 
 class DM(LocalObject):
@@ -214,12 +213,15 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @cached_property
     def _C_ctype(self):
-        # TODO: Reverting to using float/double instead of PetscScalar for
+        # NOTE: Reverting to using float/double instead of PetscScalar for
         # simplicity when opt='advanced'. Otherwise, Temp objects must also
         # be converted to PetscScalar. Additional tests are needed to
-        # ensure this approach is fine. Previously encountered issues
-        # should be resolved as long as we ensure users create Function
-        # objects with the same precision as the precision configured in PETSc.
+        # ensure this approach is fine. Previously, issues arose from
+        # mismatches between precision of Function objects in Devito and the
+        # precision of the PETSc configuration.
+        # TODO: Use cat $PETSC_DIR/$PETSC_ARCH/lib/petsc/conf/petscvariables
+        # | grep -E "PETSC_(SCALAR|PRECISION)" to determine the precision of
+        # the user's PETSc configuration.
         return POINTER(dtype_to_ctype(self.dtype))
 
     @property
@@ -244,15 +246,6 @@ def dtype_to_petsctype(dtype):
         np.int64: 'PetscInt',
         np.float64: 'PetscScalar'
     }[dtype]
-
-
-class RHSEq(Eq):
-    """
-    Represents the mathematical expression for constructing the
-    right-hand side (RHS) vector `b` in the system of nonlinear
-    equations of the form F(x) = b.
-    """
-    pass
 
 
 class InjectSolveEq(Eq):
@@ -341,7 +334,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     @property
     def formfuncs(self):
         return self._formfuncs
-    
+
     @property
     def formrhs(self):
         return self._formrhs
@@ -381,7 +374,7 @@ class PETScStruct(CompositeObject):
         for i in self.fields:
             setattr(values[self.name]._obj, i, kwargs['args'][i])
         return values
-    
+
     @property
     def liveness(self):
         return self._liveness
