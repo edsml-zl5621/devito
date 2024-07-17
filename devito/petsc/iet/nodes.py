@@ -1,5 +1,5 @@
 from devito.ir.iet import Expression, Callable, Call
-from devito.ir.equations import OpRHS, OpInjectSolve
+from devito.ir.equations import OpInjectSolve
 from devito.tools import as_tuple
 
 
@@ -9,14 +9,6 @@ class LinearSolverExpression(Expression):
     matrix-free linear solve of the form Ax=b.
     """
     pass
-
-
-class RHSLinearSystem(LinearSolverExpression):
-    """
-    Expression to build the RHS of a linear system.
-    """
-    def __init__(self, expr, pragmas=None, operation=OpRHS):
-        super().__init__(expr, pragmas=pragmas, operation=operation)
 
 
 class InjectSolveDummy(LinearSolverExpression):

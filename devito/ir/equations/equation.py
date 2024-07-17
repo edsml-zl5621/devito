@@ -8,12 +8,11 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
                                Stencil, detect_io, detect_accesses)
 from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
-from devito.types import (Eq, Inc, ReduceMax, ReduceMin,
-                          relational_min)
-from devito.petsc.types import MatVecEq, RHSEq
+from devito.types import Eq, Inc, ReduceMax, ReduceMin
+from devito.petsc.types import InjectSolveEq
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
-           'OpRHS', 'OpInjectSolve']
+           'OpInjectSolve']
 
 
 class IREq(sympy.Eq, Pickable):
@@ -121,9 +120,6 @@ class Operation(Tag):
 OpInc = Operation('+')
 OpMax = Operation('max')
 OpMin = Operation('min')
-
-# Operations required by a Linear Solve of the form Ax=b:
-OpRHS = Operation('rhs')
 OpInjectSolve = Operation('solve')
 
 
