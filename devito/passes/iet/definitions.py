@@ -399,7 +399,7 @@ class DataManager:
         defines = set(FindSymbols('defines|globals').visit(iet))
         bases = sorted({i.base for i in indexeds
                         if isinstance(i.base, IndexedData)}, key=lambda i: i.name)
-
+        # from IPython import embed; embed()
         # Some objects don't distinguish their _C_symbol because they are known,
         # by construction, not to require it, thus making the generated code
         # cleaner. These objects don't need a cast
