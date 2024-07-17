@@ -553,4 +553,3 @@ def test_calls_to_callbacks():
 
     assert '(void (*)(void))MyMatShellMult_f' in ccode
     assert 'PetscCall(SNESSetFunction(snes_f,NULL,FormFunction_f,NULL));' in ccode
-    
