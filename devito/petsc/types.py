@@ -8,7 +8,7 @@ from devito.types import LocalObject, Eq, CompositeObject
 from devito.types.utils import DimensionTuple
 from devito.types.array import ArrayBasic
 from devito.finite_differences import Differentiable
-from devito.types.basic import AbstractFunction, Symbol
+from devito.types.basic import AbstractFunction, AbstractSymbol
 from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import dtype_to_ctype, Reconstructable, sympy_mutex
 from devito.symbolics import FieldFromComposite, Byref
@@ -374,7 +374,7 @@ class PETScStruct(CompositeObject):
 
     def __init__(self, name, usr_ctx, liveness='lazy'):
         pfields = [(i._C_name, dtype_to_ctype(i.dtype))
-                   for i in usr_ctx if isinstance(i, Symbol)]
+                   for i in usr_ctx if isinstance(i, AbstractSymbol)]
         self._usr_ctx = usr_ctx
         super().__init__(name, 'MatContext', pfields)
 >>>>>>> 29ada0831 (compiler: form rhs in callback function and remove manual petsc casts)
@@ -390,9 +390,11 @@ class PETScStruct(CompositeObject):
     func = Reconstructable._rebuild
 =======
     def _arg_values(self, **kwargs):
+        # from IPython import embed; embed()
         values = super()._arg_values(**kwargs)
-        for i in self.fields:
-            setattr(values[self.name]._obj, i, kwargs['args'][i])
+        for i in self.usr_ctx:
+            setattr(values[self.name]._obj, i.name, kwargs['args'][i.name])
+        # from IPython import embed; embed()
         return values
 
     @property
