@@ -373,8 +373,10 @@ class PETScStruct(CompositeObject):
     __rkwargs__ = ('liveness',)
 
     def __init__(self, name, usr_ctx, liveness='lazy'):
+        # pfields = [(i._C_name, dtype_to_ctype(i.dtype))
+        #            for i in usr_ctx if isinstance(i, AbstractSymbol)]
         pfields = [(i._C_name, dtype_to_ctype(i.dtype))
-                   for i in usr_ctx if isinstance(i, AbstractSymbol)]
+                   for i in usr_ctx]
         self._usr_ctx = usr_ctx
         super().__init__(name, 'MatContext', pfields)
 >>>>>>> 29ada0831 (compiler: form rhs in callback function and remove manual petsc casts)
@@ -408,4 +410,11 @@ class PETScStruct(CompositeObject):
     @property
     def _mem_internal_lazy(self):
         return self._liveness == 'lazy'
+<<<<<<< HEAD
 >>>>>>> 29ada0831 (compiler: form rhs in callback function and remove manual petsc casts)
+=======
+    
+    @property
+    def fields(self):
+        return self._usr_ctx
+>>>>>>> 41157b0bc (compiler: Place dataobj pointers inside ctx struct)

@@ -2,7 +2,8 @@ from collections import OrderedDict
 
 import cgen as c
 
-from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody)
+from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
+                           derive_parameters)
 from devito.symbolics import Byref, FieldFromPointer, Macro
 from devito.petsc.types import PETScStruct
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
@@ -58,7 +59,9 @@ class PETScCallbackBuilder:
         self._efuncs[formfunc_callback.name] = formfunc_callback
         self._efuncs[formrhs_callback.name] = formrhs_callback
 
-        return matvec_callback, formfunc_callback, formrhs_callback
+        # from IPython import embed; embed()
+
+        return matvec_callback, formfunc_callback, formrhs_callback, 
 
     def make_matvec(self, injectsolve, objs, solver_objs):
         target = injectsolve.expr.rhs.target
@@ -290,7 +293,12 @@ class PETScCallbackBuilder:
                                        options={'mpi': False})
         body_formrhs = self.create_formrhs_body(injectsolve, irs_formrhs.uiet.body,
                                                 solver_objs, objs)
+    
+        # from IPython import embed; embed()
+        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
+        # formrhs_callback = Uxreplace(subs).visit(formrhs_callback)
 
+        # TODO: CHANGE THE PARAMETERS HERE 
         formrhs_callback = PETScCallable(
             'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
             parameters=(
@@ -299,6 +307,11 @@ class PETScCallbackBuilder:
         )
         self._struct_params.extend(irs_formrhs.iet.parameters)
 
+        # from IPython import embed; embed()
+
+        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
+        # formrhs_callback = Uxreplace(subs).visit(formrhs_callback)
+  
         return formrhs_callback
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
@@ -317,7 +330,9 @@ class PETScCallbackBuilder:
         dm_get_local_info = petsc_call(
             'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
         )
-
+        # params = derive_parameters(body)
+        # struct = PETScStruct('formrhs', params, liveness='eager')
+        # from IPython import embed; embed()
         struct = build_petsc_struct(body, 'formrhs', liveness='eager')
 
         dm_get_app_context = petsc_call(
@@ -345,16 +360,17 @@ class PETScCallbackBuilder:
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
         # Replace data with pointer to data in struct
+        # from IPython import embed; embed()
         subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
-
+        # from IPython import embed; embed()
         return formrhs_body
 
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
         target = injectsolve.expr.rhs.target
 
         dmda = objs['da_so_%s' % target.space_order]
-
+        # from IPython import embed; embed()
         rhs_call = petsc_call(rhs_callback.name, None)
 
         dm_local_to_global_x = petsc_call(
