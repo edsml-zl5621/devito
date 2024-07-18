@@ -15,7 +15,7 @@ class PETScCallbackBuilder:
     Build IET routines to generate PETSc callback functions.
     """
     def __new__(cls, rcompile=None, **kwargs):
-        obj = super().__new__(cls)
+        obj = object.__new__(cls)
         obj.rcompile = rcompile
         obj._efuncs = OrderedDict()
         obj._struct_params = []

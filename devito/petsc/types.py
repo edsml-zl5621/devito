@@ -10,7 +10,7 @@ from devito.types.array import ArrayBasic
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction, Symbol
 from devito.finite_differences.tools import fd_weights_registry
-from devito.tools import dtype_to_ctype, Reconstructable
+from devito.tools import dtype_to_ctype, Reconstructable, sympy_mutex
 from devito.symbolics import FieldFromComposite, Byref
 
 
