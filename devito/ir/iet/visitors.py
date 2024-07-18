@@ -193,6 +193,7 @@ class CGen(Visitor):
         Convert ctypes.Struct -> cgen.Structure.
         """
         ctype = obj._C_ctype
+        # from IPython import embed; embed()
         try:
             while issubclass(ctype, ctypes._Pointer):
                 ctype = ctype._type_
@@ -215,7 +216,7 @@ class CGen(Visitor):
             fields = obj.fields
         except AttributeError:
             fields = (None,)*len(ctype._fields_)
-
+        # from IPython import embed; embed()
         entries = []
         for i, (n, ct) in zip(fields, ctype._fields_):
             try:
@@ -225,7 +226,7 @@ class CGen(Visitor):
                 if ct is c_restrict_void_p:
                     cstr = '%srestrict' % cstr
                 entries.append(c.Value(cstr, n))
-
+        # from IPython import embed; embed()
         return c.Struct(ctype.__name__, entries)
 
     def _gen_value(self, obj, mode=1, masked=()):
@@ -1282,6 +1283,7 @@ class Uxreplace(Transformer):
                           else_body=else_body)
 
     def visit_PointerCast(self, o):
+        # from IPython import embed; embed()
         function = self.mapper.get(o.function, o.function)
         obj = self.mapper.get(o.obj, o.obj)
         return o._rebuild(function=function, obj=obj)
