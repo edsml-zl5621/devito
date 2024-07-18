@@ -4,7 +4,7 @@ import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody)
 from devito.symbolics import Byref, FieldFromPointer, Macro
-from devito.petsc.types import PETScArray, PETScStruct
+from devito.petsc.types import PETScStruct
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
 from devito.petsc.utils import petsc_call
@@ -60,11 +60,12 @@ class PETScCallbackBuilder:
 
         return matvec_callback, formfunc_callback, formrhs_callback
 
-    def make_matvec(self, rhs, objs, solver_objs):
-        target = rhs.expr.rhs.target
+    def make_matvec(self, injectsolve, objs, solver_objs):
+        target = injectsolve.expr.rhs.target
         # Compile matvec `eqns` into an IET via recursive compilation
-        irs_matvec, _ = self.rcompile(rhs.expr.rhs.matvecs, options={'mpi': False})
-        body_matvec = self.create_matvec_body(target, irs_matvec.uiet.body,
+        irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
+                                      options={'mpi': False})
+        body_matvec = self.create_matvec_body(injectsolve, irs_matvec.uiet.body,
                                               solver_objs, objs)
 
         matvec_callback = PETScCallable(
@@ -78,21 +79,15 @@ class PETScCallbackBuilder:
 
         return matvec_callback
 
-    def create_matvec_body(self, target, body, solver_objs, objs):
-        dmda = objs['da_so_%s' % target.space_order]
+    def create_matvec_body(self, injectsolve, body, solver_objs, objs):
+        linsolveexpr = injectsolve.expr.rhs
+
+        dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
         struct = build_petsc_struct(body, 'matvec', liveness='eager')
 
-        # There will be 2 PETScArrays within the body
-        petsc_arrays = [i for i in FindSymbols('indexedbases').visit(body)
-                        if isinstance(i.function, PETScArray)]
-
-        # There will only be one PETScArray that is written to within this body and
-        # one PETScArray which corresponds to the 'seed' vector
-        petsc_arr_write, = [i for i in FindSymbols('writes').visit(body)
-                            if isinstance(i.function, PETScArray)]
-        petsc_arr_seed, = [i.function for i in petsc_arrays if
-                           i.function != petsc_arr_write.function]
+        y_matvec = linsolveexpr.arrays['y_matvec']
+        x_matvec = linsolveexpr.arrays['x_matvec']
 
         mat_get_dm = petsc_call('MatGetDM', [solver_objs['Jac'], Byref(dmda)])
 
@@ -118,11 +113,11 @@ class PETScCallbackBuilder:
         )
 
         vec_get_array_y = petsc_call(
-            'VecGetArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)]
+            'VecGetArray', [solver_objs['Y_local'], Byref(y_matvec._C_symbol)]
         )
 
         vec_get_array_x = petsc_call(
-            'VecGetArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)]
+            'VecGetArray', [solver_objs['X_local'], Byref(x_matvec._C_symbol)]
         )
 
         dm_get_local_info = petsc_call(
@@ -130,11 +125,11 @@ class PETScCallbackBuilder:
         )
 
         vec_restore_array_y = petsc_call(
-            'VecRestoreArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)]
+            'VecRestoreArray', [solver_objs['Y_local'], Byref(y_matvec._C_symbol)]
         )
 
         vec_restore_array_x = petsc_call(
-            'VecRestoreArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)]
+            'VecRestoreArray', [solver_objs['X_local'], Byref(x_matvec._C_symbol)]
         )
 
         dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
@@ -180,11 +175,12 @@ class PETScCallbackBuilder:
 
         return matvec_body
 
-    def make_formfunc(self, rhs, objs, solver_objs):
-        target = rhs.expr.rhs.target
+    def make_formfunc(self, injectsolve, objs, solver_objs):
+        target = injectsolve.expr.rhs.target
         # Compile formfunc `eqns` into an IET via recursive compilation
-        irs_formfunc, _ = self.rcompile(rhs.expr.rhs.formfuncs, options={'mpi': False})
-        body_formfunc = self.create_formfunc_body(target, irs_formfunc.uiet.body,
+        irs_formfunc, _ = self.rcompile(injectsolve.expr.rhs.formfuncs,
+                                        options={'mpi': False})
+        body_formfunc = self.create_formfunc_body(injectsolve, irs_formfunc.uiet.body,
                                                   solver_objs, objs)
 
         formfunc_callback = PETScCallable(
@@ -196,21 +192,15 @@ class PETScCallbackBuilder:
 
         return formfunc_callback
 
-    def create_formfunc_body(self, target, body, solver_objs, objs):
-        dmda = objs['da_so_%s' % target.space_order]
+    def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
+        linsolveexpr = injectsolve.expr.rhs
+
+        dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
         struct = build_petsc_struct(body, 'formfunc', liveness='eager')
 
-        # There will be 2 PETScArrays within the body
-        petsc_arrays = [i for i in FindSymbols('indexedbases').visit(body)
-                        if isinstance(i.function, PETScArray)]
-
-        # There will only be one PETScArray that is written to within this body and
-        # one PETScArray which corresponds to the 'seed' vector
-        petsc_arr_write, = [i for i in FindSymbols('writes').visit(body)
-                            if isinstance(i.function, PETScArray)]
-        petsc_arr_seed, = [i.function for i in petsc_arrays
-                           if i.function != petsc_arr_write.function]
+        y_formfunc = linsolveexpr.arrays['y_formfunc']
+        x_formfunc = linsolveexpr.arrays['x_formfunc']
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
@@ -236,11 +226,11 @@ class PETScCallbackBuilder:
         )
 
         vec_get_array_y = petsc_call(
-            'VecGetArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)]
+            'VecGetArray', [solver_objs['Y_local'], Byref(y_formfunc._C_symbol)]
         )
 
         vec_get_array_x = petsc_call(
-            'VecGetArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)]
+            'VecGetArray', [solver_objs['X_local'], Byref(x_formfunc._C_symbol)]
         )
 
         dm_get_local_info = petsc_call(
@@ -248,11 +238,11 @@ class PETScCallbackBuilder:
         )
 
         vec_restore_array_y = petsc_call(
-            'VecRestoreArray', [solver_objs['Y_local'], Byref(petsc_arr_write._C_symbol)]
+            'VecRestoreArray', [solver_objs['Y_local'], Byref(y_formfunc._C_symbol)]
         )
 
         vec_restore_array_x = petsc_call(
-            'VecRestoreArray', [solver_objs['X_local'], Byref(petsc_arr_seed._C_symbol)]
+            'VecRestoreArray', [solver_objs['X_local'], Byref(x_formfunc._C_symbol)]
         )
 
         dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
@@ -263,14 +253,13 @@ class PETScCallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
-        formfunc_body = CallableBody(List(body=[
-            body,
-            vec_restore_array_y,
-            vec_restore_array_x,
-            dm_local_to_global_begin,
-            dm_local_to_global_end]),
-            init=tuple([petsc_func_begin_user]),
-            stacks=(
+        body = [body,
+                vec_restore_array_y,
+                vec_restore_array_x,
+                dm_local_to_global_begin,
+                dm_local_to_global_end]
+
+        stacks = (
             snes_get_dm,
             dm_get_app_context,
             dm_get_local_xvec,
@@ -279,7 +268,13 @@ class PETScCallbackBuilder:
             dm_get_local_yvec,
             vec_get_array_y,
             vec_get_array_x,
-            dm_get_local_info),
+            dm_get_local_info
+        )
+
+        formfunc_body = CallableBody(
+            List(body=body),
+            init=tuple([petsc_func_begin_user]),
+            stacks=stacks,
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
         # Replace data with pointer to data in struct
@@ -305,16 +300,16 @@ class PETScCallbackBuilder:
         return formrhs_callback
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
-        target = injectsolve.expr.rhs.target
+        linsolveexpr = injectsolve.expr.rhs
 
-        dmda = objs['da_so_%s' % target.space_order]
+        dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
-        arr = injectsolve.expr.lhs.function
+        b_arr = linsolveexpr.arrays['b_tmp']
 
         vec_get_array = petsc_call(
-            'VecGetArray', [solver_objs['b_local'], Byref(arr._C_symbol)]
+            'VecGetArray', [solver_objs['b_local'], Byref(b_arr._C_symbol)]
         )
 
         dm_get_local_info = petsc_call(
@@ -328,7 +323,7 @@ class PETScCallbackBuilder:
         )
 
         vec_restore_array = petsc_call(
-            'VecRestoreArray', [solver_objs['b_local'], Byref(arr._C_symbol)]
+            'VecRestoreArray', [solver_objs['b_local'], Byref(b_arr._C_symbol)]
         )
 
         body = [body,
