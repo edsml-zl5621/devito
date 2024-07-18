@@ -24,10 +24,7 @@ def get_petsc_dir():
         petsc_dir = os.environ.get(i)
         if petsc_dir:
             return petsc_dir
-    raise ValueError(
-        'Environment variable PETSC_DIR is not set. '
-        'Set it to the PETSc directory.'
-    )
+    return None
 
 
 @memoized_func
@@ -37,10 +34,7 @@ def get_petsc_arch():
         petsc_arch = os.environ.get(i)
         if petsc_arch:
             return petsc_arch
-    raise ValueError(
-        'Environment variable PETSC_ARCH is not set. '
-        'Set it to the configuration of PETSc you wish to use.'
-    )
+    return None
 
 
 def core_metadata():
