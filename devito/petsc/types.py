@@ -257,11 +257,16 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
 
     __rargs__ = ('expr',)
 <<<<<<< HEAD
+<<<<<<< HEAD
     __rkwargs__ = ('target', 'solver_parameters', 'matvecs',
                    'formfuncs', 'formrhs', 'arrays')
 =======
     __rkwargs__ = ('target', 'solver_parameters', 'matvecs', 'formfuncs', 'formrhs')
 >>>>>>> 29ada0831 (compiler: form rhs in callback function and remove manual petsc casts)
+=======
+    __rkwargs__ = ('target', 'solver_parameters', 'matvecs',
+                   'formfuncs', 'formrhs', 'arrays')
+>>>>>>> b50c18397 (compiler: Clean up access to petsc arrays in each callback)
 
     defaults = {
         'ksp_type': 'gmres',
@@ -274,10 +279,14 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
 
     def __new__(cls, expr, target=None, solver_parameters=None,
 <<<<<<< HEAD
+<<<<<<< HEAD
                 matvecs=None, formfuncs=None, formrhs=None, arrays=None, **kwargs):
 =======
                 matvecs=None, formfuncs=None, formrhs=None, **kwargs):
 >>>>>>> 29ada0831 (compiler: form rhs in callback function and remove manual petsc casts)
+=======
+                matvecs=None, formfuncs=None, formrhs=None, arrays=None, **kwargs):
+>>>>>>> b50c18397 (compiler: Clean up access to petsc arrays in each callback)
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -294,9 +303,13 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         obj._formfuncs = formfuncs
         obj._formrhs = formrhs
 <<<<<<< HEAD
+<<<<<<< HEAD
         obj._arrays = arrays
 =======
 >>>>>>> 29ada0831 (compiler: form rhs in callback function and remove manual petsc casts)
+=======
+        obj._arrays = arrays
+>>>>>>> b50c18397 (compiler: Clean up access to petsc arrays in each callback)
         return obj
 
     def __repr__(self):
@@ -340,10 +353,17 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         return self._formrhs
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     @property
     def formrhs(self):
         return self._formrhs
 =======
+=======
+    @property
+    def arrays(self):
+        return self._arrays
+
+>>>>>>> b50c18397 (compiler: Clean up access to petsc arrays in each callback)
     func = Reconstructable._rebuild
 
 
