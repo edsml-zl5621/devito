@@ -297,6 +297,8 @@ class PETScCallbackBuilder:
                 solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global']
             )
         )
+        self._struct_params.extend(irs_formrhs.iet.parameters)
+
         return formrhs_callback
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
