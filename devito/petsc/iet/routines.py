@@ -77,7 +77,8 @@ class PETScCallbackBuilder:
                 solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global']
             )
         )
-        self._struct_params.extend(irs_matvec.iet.parameters)
+        # from IPython import embed; embed()
+        # self._struct_params.extend(irs_matvec.iet.parameters)
 
         return matvec_callback
 
@@ -175,6 +176,8 @@ class PETScCallbackBuilder:
         subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
         matvec_body = Uxreplace(subs).visit(matvec_body)
 
+        self._struct_params.extend(struct.usr_ctx)
+
         return matvec_body
 
     def make_formfunc(self, injectsolve, objs, solver_objs):
@@ -190,7 +193,7 @@ class PETScCallbackBuilder:
             parameters=(solver_objs['snes'], solver_objs['X_global'],
                         solver_objs['Y_global']), unused_parameters=(solver_objs['dummy'])
         )
-        self._struct_params.extend(irs_formfunc.iet.parameters)
+        # self._struct_params.extend(irs_formfunc.iet.parameters)
 
         return formfunc_callback
 
@@ -283,6 +286,8 @@ class PETScCallbackBuilder:
         subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
         formfunc_body = Uxreplace(subs).visit(formfunc_body)
 
+        self._struct_params.extend(struct.usr_ctx)
+
         return formfunc_body
 
     def make_formrhs(self, injectsolve, objs, solver_objs):
@@ -318,7 +323,7 @@ class PETScCallbackBuilder:
                 solver_objs['snes'], solver_objs['b_local']
             )
         )
-        self._struct_params.extend(irs_formrhs.iet.parameters)
+        # self._struct_params.extend(irs_formrhs.iet.parameters)
 
         # from IPython import embed; embed()
 
@@ -372,6 +377,8 @@ class PETScCallbackBuilder:
         # from IPython import embed; embed()
         subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
+
+        self._struct_params.extend(struct.usr_ctx)
  
         return formrhs_body
 
