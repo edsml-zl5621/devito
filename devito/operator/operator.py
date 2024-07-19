@@ -198,7 +198,7 @@ class Operator(Callable):
 
         # Lower the input expressions into an IET
         irs, byproduct = cls._lower(expressions, profiler=profiler, **kwargs)
-        # from IPython import embed; embed()
+
         # Make it an actual Operator
         op = Callable.__new__(cls, **irs.iet.args)
         Callable.__init__(op, **op.args)
