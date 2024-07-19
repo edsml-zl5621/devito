@@ -560,9 +560,8 @@ class Operator(Callable):
         Process runtime arguments passed to ``.apply()` and derive
         default values for any remaining arguments.
         """
-        tmp = self._known_arguments
-        # from IPython import embed; embed()
-        # from IPython import embed; embed()
+        # tmp = self._known_arguments
+
         # Sanity check -- all user-provided keywords must be known to the Operator
         if not configuration['ignore-unknowns']:
             for k, v in kwargs.items():
@@ -576,18 +575,18 @@ class Operator(Callable):
         edges = [(i, i.parent) for i in self.dimensions
                  if i.is_Derived and i.parent in set(nodes)]
         toposort = DAG(nodes, edges).topological_sort()
-        # from IPython import embed; embed()
+
         futures = {}
         for d in reversed(toposort):
             if set(d._arg_names).intersection(kwargs):
                 futures.update(d._arg_values(self._dspace[d], args={}, **kwargs))
-        # from IPython import embed; embed()
+
         # Prepare to process data-carriers
         args = kwargs['args'] = ReducerMap()
         kwargs['metadata'] = self.threads_info
-        # from IPython import embed; embed()
+
         overrides, defaults = split(self.input, lambda p: p.name in kwargs)
-        # from IPython import embed; embed()
+
         # Process data-carrier overrides
         for p in overrides:
             args.update(p._arg_values(**kwargs))
@@ -596,7 +595,7 @@ class Operator(Callable):
             except ValueError:
                 raise ValueError("Override `%s` is incompatible with overrides `%s`" %
                                  (p, [i for i in overrides if i.name in args]))
-        # from IPython import embed; embed()
+
         # Process data-carrier defaults
         for p in defaults:
             if p.name in args:
@@ -621,7 +620,7 @@ class Operator(Callable):
                                      (p, k, v, k, args[k], p))
 
         args = kwargs['args'] = args.reduce_all()
-        # from IPython import embed; embed()
+
         # DiscreteFunctions may be created from CartesianDiscretizations, which in
         # turn could be Grids or SubDomains. Both may provide arguments
         discretizations = {getattr(kwargs[p.name], 'grid', None) for p in overrides}
@@ -651,16 +650,15 @@ class Operator(Callable):
         # An ArgumentsMap carries additional metadata that may be used by
         # the subsequent phases of the arguments processing
         args = kwargs['args'] = ArgumentsMap(args, grid, self)
-        # from IPython import embed; embed()
+
         # Process Dimensions
         for d in reversed(toposort):
             args.update(d._arg_values(self._dspace[d], grid, **kwargs))
-        # from IPython import embed; embed()
+
         # Process Objects
         for o in self.objects:
-            # from IPython import embed; embed()
             args.update(o._arg_values(grid=grid, **kwargs))
-        # from IPython import embed; embed()
+
         # Purge `kwargs`
         kwargs.pop('args')
         kwargs.pop('metadata')
@@ -669,7 +667,7 @@ class Operator(Callable):
         # one or more calls to third-party library functions, there could still be
         # at this point unprocessed arguments (e.g., scalars)
         args.update({k: v for k, v in kwargs.items() if k not in args})
-        # from IPython import embed; embed()
+
         # Sanity check
         for p in self.parameters:
             p._arg_check(args, self._dspace[p], am=self._access_modes.get(p),
@@ -687,10 +685,10 @@ class Operator(Callable):
             except AttributeError:
                 # User-provided floats/ndarray obviously do not have `_arg_finalize`
                 args.update(p._arg_finalize(args, alias=p))
-
+        # from IPython import embed; embed()
         # Execute autotuning and adjust arguments accordingly
         args.update(self._autotune(args, autotune or configuration['autotuning']))
-        # from IPython import embed; embed()
+
         return args
 
     def _postprocess_errors(self, retval):
@@ -902,7 +900,8 @@ class Operator(Callable):
         # Invoke kernel function with args
         arg_values = [args[p.name] for p in self.parameters]
         try:
-            cfunction = self.cfunction
+            cfunction = self.cfunction  # 0x7fba48710730
+            # from IPython import embed; embed()
             with self._profiler.timer_on('apply', comm=args.comm):
                 retval = cfunction(*arg_values)
         except ctypes.ArgumentError as e:
