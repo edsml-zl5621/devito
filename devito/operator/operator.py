@@ -33,8 +33,7 @@ from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
 from devito.petsc.iet.passes import lower_petsc
 from devito.petsc.clusters import petsc_lift
-from devito.petsc.utils import generate_petsc_dimensions
-from devito.petsc.types import PETScStruct
+from devito.petsc.utils import derive_callback_dimensions, derive_callback_inputs
 
 __all__ = ['Operator']
 
@@ -199,7 +198,7 @@ class Operator(Callable):
 
         # Lower the input expressions into an IET
         irs, byproduct = cls._lower(expressions, profiler=profiler, **kwargs)
-
+        # from IPython import embed; embed()
         # Make it an actual Operator
         op = Callable.__new__(cls, **irs.iet.args)
         Callable.__init__(op, **op.args)
@@ -475,16 +474,17 @@ class Operator(Callable):
 
         # Wrap the IET with an EntryFunction (a special Callable representing
         # the entry point of the generated library)
+        # from IPython import embed; embed()
         parameters = derive_parameters(uiet, True)
         iet = EntryFunction(name, uiet, 'int', parameters, ())
 
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
-
+        # from IPython import embed; embed()
         lower_petsc(graph, **kwargs)
 
         graph = cls._specialize_iet(graph, **kwargs)
-
+        # from IPython import embed; embed()
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced
@@ -515,9 +515,9 @@ class Operator(Callable):
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
 
-        petsc_dims = generate_petsc_dimensions(self._func_table)
+        callback_dims = derive_callback_dimensions(self._func_table)
 
-        ret.update(d for d in dimensions if d.is_PerfKnob or d in petsc_dims)
+        ret.update(d for d in dimensions if d.is_PerfKnob or d in callback_dims)
 
         ret = tuple(sorted(ret, key=attrgetter('name')))
 
@@ -525,13 +525,8 @@ class Operator(Callable):
 
     @cached_property
     def input(self):
-        try:
-            ctx, = [ctx for ctx in self.parameters if isinstance(ctx, PETScStruct)]
-            extra = tuple(ctx.usr_ctx)
-            return tuple(i for i in self.parameters+extra if i.is_Input)
-        except ValueError:
-            pass
-        return tuple(i for i in self.parameters if i.is_Input)
+        callback_params = derive_callback_inputs(self.parameters)
+        return tuple(i for i in self.parameters+callback_params if i.is_Input)
 
     @cached_property
     def temporaries(self):
@@ -561,7 +556,7 @@ class Operator(Callable):
         default values for any remaining arguments.
         """
         # tmp = self._known_arguments
-
+        # from IPython import embed; embed()
         # Sanity check -- all user-provided keywords must be known to the Operator
         if not configuration['ignore-unknowns']:
             for k, v in kwargs.items():
@@ -675,7 +670,7 @@ class Operator(Callable):
         for d in self.dimensions:
             if d.is_Derived:
                 d._arg_check(args, self._dspace[p])
-        # from IPython import embed; embed()
+
         # Turn arguments into a format suitable for the generated code
         # E.g., instead of NumPy arrays for Functions, the generated code expects
         # pointers to ctypes.Struct
@@ -685,7 +680,7 @@ class Operator(Callable):
             except AttributeError:
                 # User-provided floats/ndarray obviously do not have `_arg_finalize`
                 args.update(p._arg_finalize(args, alias=p))
-        # from IPython import embed; embed()
+
         # Execute autotuning and adjust arguments accordingly
         args.update(self._autotune(args, autotune or configuration['autotuning']))
 
@@ -710,6 +705,7 @@ class Operator(Callable):
     def _known_arguments(self):
         """The arguments that can be passed to ``apply`` when running the Operator."""
         ret = set()
+        # from IPython import embed; embed()
         for i in self.input:
             ret.update(i._arg_names)
             try:
@@ -720,14 +716,17 @@ class Operator(Callable):
             ret.update(d._arg_names)
         # from IPython import embed; embed()
 
-        try:
-            ctx, = [ctx for ctx in self.parameters if isinstance(ctx, PETScStruct)]
-            extra = tuple(ctx.usr_ctx)
-            ret.update(p.name for p in self.parameters + extra)
-            return frozenset(ret)
-        except ValueError:
-            ret.update(p.name for p in self.parameters)
-            return frozenset(ret)
+        # try:
+        #     ctx, = [ctx for ctx in self.parameters if isinstance(ctx, PETScStruct)]
+        #     extra = tuple(ctx.usr_ctx)
+        #     ret.update(p.name for p in self.parameters + extra)
+        #     return frozenset(ret)
+        # except ValueError:
+        #     ret.update(p.name for p in self.parameters)
+        #     return frozenset(ret)
+
+        ret.update(p.name for p in self.parameters)
+        return frozenset(ret)
 
     def _autotune(self, args, setup):
         """Auto-tuning to improve runtime performance."""
