@@ -77,7 +77,6 @@ class PETScCallbackBuilder:
                 solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global']
             )
         )
-
         self._struct_params.extend(irs_matvec.iet.parameters)
 
         return matvec_callback
@@ -306,18 +305,23 @@ class PETScCallbackBuilder:
         #     )
         # )
 
+        # formrhs_callback = Callable(
+        #     'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
+        #     parameters=(
+        #         solver_objs['Jac'], solver_objs['X_local'], solver_objs['x_global']
+        #     )
+        # )
+
         formrhs_callback = Callable(
             'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
             parameters=(
-                solver_objs['Jac'], solver_objs['X_local'], solver_objs['x_global']
+                solver_objs['snes'], solver_objs['b_local']
             )
         )
         self._struct_params.extend(irs_formrhs.iet.parameters)
 
         # from IPython import embed; embed()
 
-        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
-        # formrhs_callback = Uxreplace(subs).visit(formrhs_callback)
   
         return formrhs_callback
 
@@ -375,8 +379,8 @@ class PETScCallbackBuilder:
         target = injectsolve.expr.rhs.target
 
         dmda = objs['da_so_%s' % target.space_order]
-        # from IPython import embed; embed()
-        rhs_call = petsc_call(rhs_callback.name, None)
+
+        rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
 
         dm_local_to_global_x = petsc_call(
             'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',

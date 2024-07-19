@@ -392,31 +392,11 @@ class PETScStruct(CompositeObject):
     func = Reconstructable._rebuild
 =======
     def _arg_values(self, **kwargs):
-        # tmpargs.update(p._arg_finalize(args, alias=p))
-        # args.update(p._arg_finalize(args, alias=p))
-        # from IPython import embed; embed()
         values = super()._arg_values(**kwargs)
         for i in self.usr_ctx:
-            # tmp = i._arg_finalize(kwargs['args'], alias=i)
-            # from IPython import embed; embed()
             setattr(values[self.name]._obj, i.name, kwargs['args'][i.name])
         return values
-
-    # def _arg_finalize(self, args, **kwargs):
- 
-    #     # values = super()._arg_finalize(args, **kwargs)
-    #     values = {}
-    #     for i in self.usr_ctx:
-    #         values.update(i._arg_finalize(args, alias=i))
-    #         # tmp = i._arg_finalize(kwargs['args'], alias=i)
-    #         # for k, v in tmp.items():
-    #         #     setattr(values[self.name]._obj, k, v)
-    #         # setattr(values[self.name]._obj, i.name, kwargs['args'][i.name])
-    #     # from IPython import embed; embed() # 0x7b3c25258730
-    #     print(values)
-    #     return values
     
-
     @property
     def liveness(self):
         return self._liveness
