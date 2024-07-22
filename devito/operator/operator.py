@@ -514,6 +514,8 @@ class Operator(Callable):
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
 
+        # NOTE: Should these dimensions be integrated into self._dimensions instead?
+        # In which case they would get picked up before this
         struct_dims = derive_callback_dims(self._func_table)
 
         ret.update(d for d in dimensions if d.is_PerfKnob or d in struct_dims)

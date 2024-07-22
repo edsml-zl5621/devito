@@ -45,7 +45,6 @@ class PETScCallbackBuilder:
             [solver_objs['snes'], Null,
              FormFunctionCallback(formfunc_callback.name, void, void), Null]
         )
-        # from IPython import embed; embed()
         runsolve = self.runsolve(solver_objs, objs, formrhs_callback, injectsolve)
 
         return matvec_operation, formfunc_operation, runsolve
@@ -285,7 +284,7 @@ class PETScCallbackBuilder:
 
     def make_formrhs(self, injectsolve, objs, solver_objs):
         target = injectsolve.expr.rhs.target
-        # Compile matvec `eqns` into an IET via recursive compilation
+        # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
                                        options={'mpi': False})
         body_formrhs = self.create_formrhs_body(injectsolve, irs_formrhs.uiet.body,
