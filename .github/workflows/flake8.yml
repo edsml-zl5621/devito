@@ -10,7 +10,6 @@ on:
    push:
      branches:
        - master
-       - enable-opt
    pull_request:
      branches:
        - master
