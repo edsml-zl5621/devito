@@ -8,7 +8,7 @@ def petsc_lift(clusters):
     Lift the iteration space surrounding each PETSc equation to create
     distinct iteration loops.
     # TODO: Can probably remove this now due to recursive compilation, but
-    # leaving it for now.
+    # leaving it for now, in case I need it for coupled systems of PDEs with PETSc etc.
     """
     processed = []
     for c in clusters:

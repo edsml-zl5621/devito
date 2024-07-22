@@ -33,7 +33,7 @@ from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
 from devito.petsc.iet.passes import lower_petsc
 from devito.petsc.clusters import petsc_lift
-from devito.petsc.utils import derive_callback_dimensions, derive_callback_inputs
+from devito.petsc.utils import derive_callback_dims, derive_struct_inputs
 
 __all__ = ['Operator']
 
@@ -514,9 +514,9 @@ class Operator(Callable):
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
 
-        callback_dims = derive_callback_dimensions(self._func_table)
+        struct_dims = derive_callback_dims(self._func_table)
 
-        ret.update(d for d in dimensions if d.is_PerfKnob or d in callback_dims)
+        ret.update(d for d in dimensions if d.is_PerfKnob or d in struct_dims)
 
         ret = tuple(sorted(ret, key=attrgetter('name')))
 
@@ -524,8 +524,8 @@ class Operator(Callable):
 
     @cached_property
     def input(self):
-        callback_params = derive_callback_inputs(self.parameters)
-        return tuple(i for i in self.parameters+callback_params if i.is_Input)
+        struct_params = derive_struct_inputs(self.parameters)
+        return tuple(i for i in self.parameters+struct_params if i.is_Input)
 
     @cached_property
     def temporaries(self):
@@ -710,7 +710,6 @@ class Operator(Callable):
                 pass
         for d in self.dimensions:
             ret.update(d._arg_names)
-
         ret.update(p.name for p in self.parameters)
         return frozenset(ret)
 
@@ -876,7 +875,6 @@ class Operator(Callable):
         >>> op = Operator(Eq(u3.forward, u3 + 1))
         >>> summary = op.apply(time_M=10)
         """
-        # from IPython import embed; embed()
         # Build the arguments list to invoke the kernel function
         with self._profiler.timer_on('arguments'):
             args = self.arguments(**kwargs)
