@@ -474,17 +474,16 @@ class Operator(Callable):
 
         # Wrap the IET with an EntryFunction (a special Callable representing
         # the entry point of the generated library)
-        # from IPython import embed; embed()
         parameters = derive_parameters(uiet, True)
         iet = EntryFunction(name, uiet, 'int', parameters, ())
 
         # Lower IET to a target-specific IET
         graph = Graph(iet, **kwargs)
-        # from IPython import embed; embed()
+
         lower_petsc(graph, **kwargs)
 
         graph = cls._specialize_iet(graph, **kwargs)
-        # from IPython import embed; embed()
+
         # Instrument the IET for C-level profiling
         # Note: this is postponed until after _specialize_iet because during
         # specialization further Sections may be introduced
@@ -555,8 +554,6 @@ class Operator(Callable):
         Process runtime arguments passed to ``.apply()` and derive
         default values for any remaining arguments.
         """
-        # tmp = self._known_arguments
-        # from IPython import embed; embed()
         # Sanity check -- all user-provided keywords must be known to the Operator
         if not configuration['ignore-unknowns']:
             for k, v in kwargs.items():
@@ -657,7 +654,7 @@ class Operator(Callable):
         # Purge `kwargs`
         kwargs.pop('args')
         kwargs.pop('metadata')
-        
+
         # In some "lower-level" Operators implementing a random piece of C, such as
         # one or more calls to third-party library functions, there could still be
         # at this point unprocessed arguments (e.g., scalars)
@@ -705,7 +702,6 @@ class Operator(Callable):
     def _known_arguments(self):
         """The arguments that can be passed to ``apply`` when running the Operator."""
         ret = set()
-        # from IPython import embed; embed()
         for i in self.input:
             ret.update(i._arg_names)
             try:
@@ -714,16 +710,6 @@ class Operator(Callable):
                 pass
         for d in self.dimensions:
             ret.update(d._arg_names)
-        # from IPython import embed; embed()
-
-        # try:
-        #     ctx, = [ctx for ctx in self.parameters if isinstance(ctx, PETScStruct)]
-        #     extra = tuple(ctx.usr_ctx)
-        #     ret.update(p.name for p in self.parameters + extra)
-        #     return frozenset(ret)
-        # except ValueError:
-        #     ret.update(p.name for p in self.parameters)
-        #     return frozenset(ret)
 
         ret.update(p.name for p in self.parameters)
         return frozenset(ret)
@@ -734,7 +720,6 @@ class Operator(Callable):
 
     def arguments(self, **kwargs):
         """Arguments to run the Operator."""
-        # from IPython import embed; embed()
         args = self._prepare_arguments(**kwargs)
         # Check all arguments are present
         for p in self.parameters:
@@ -899,8 +884,7 @@ class Operator(Callable):
         # Invoke kernel function with args
         arg_values = [args[p.name] for p in self.parameters]
         try:
-            cfunction = self.cfunction  # 0x7fba48710730
-            # from IPython import embed; embed()
+            cfunction = self.cfunction
             with self._profiler.timer_on('apply', comm=args.comm):
                 retval = cfunction(*arg_values)
         except ctypes.ArgumentError as e:

@@ -3,7 +3,7 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           derive_parameters, Callable)
+                           Callable)
 from devito.symbolics import Byref, FieldFromPointer, Macro
 from devito.petsc.types import PETScStruct
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
@@ -59,9 +59,7 @@ class PETScCallbackBuilder:
         self._efuncs[formfunc_callback.name] = formfunc_callback
         self._efuncs[formrhs_callback.name] = formrhs_callback
 
-        # from IPython import embed; embed()
-
-        return matvec_callback, formfunc_callback, formrhs_callback, 
+        return matvec_callback, formfunc_callback, formrhs_callback
 
     def make_matvec(self, injectsolve, objs, solver_objs):
         target = injectsolve.expr.rhs.target
@@ -77,9 +75,6 @@ class PETScCallbackBuilder:
                 solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global']
             )
         )
-        # from IPython import embed; embed()
-        # self._struct_params.extend(irs_matvec.iet.parameters)
-
         return matvec_callback
 
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
@@ -193,8 +188,6 @@ class PETScCallbackBuilder:
             parameters=(solver_objs['snes'], solver_objs['X_global'],
                         solver_objs['Y_global']), unused_parameters=(solver_objs['dummy'])
         )
-        # self._struct_params.extend(irs_formfunc.iet.parameters)
-
         return formfunc_callback
 
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
@@ -297,25 +290,6 @@ class PETScCallbackBuilder:
                                        options={'mpi': False})
         body_formrhs = self.create_formrhs_body(injectsolve, irs_formrhs.uiet.body,
                                                 solver_objs, objs)
-    
-        # from IPython import embed; embed()
-        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
-        # formrhs_callback = Uxreplace(subs).visit(formrhs_callback)
-
-        # TODO: CHANGE THE PARAMETERS HERE 
-        # formrhs_callback = PETScCallable(
-        #     'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
-        #     parameters=(
-        #         solver_objs['snes'], solver_objs['b_local']
-        #     )
-        # )
-
-        # formrhs_callback = Callable(
-        #     'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
-        #     parameters=(
-        #         solver_objs['Jac'], solver_objs['X_local'], solver_objs['x_global']
-        #     )
-        # )
 
         formrhs_callback = Callable(
             'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
@@ -323,11 +297,7 @@ class PETScCallbackBuilder:
                 solver_objs['snes'], solver_objs['b_local']
             )
         )
-        # self._struct_params.extend(irs_formrhs.iet.parameters)
 
-        # from IPython import embed; embed()
-
-  
         return formrhs_callback
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
@@ -374,12 +344,11 @@ class PETScCallbackBuilder:
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
         # Replace data with pointer to data in struct
-        # from IPython import embed; embed()
         subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
         self._struct_params.extend(struct.usr_ctx)
- 
+
         return formrhs_body
 
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
