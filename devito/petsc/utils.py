@@ -26,6 +26,7 @@ def get_petsc_dir():
         petsc_dir = os.environ.get(i)
         if petsc_dir:
             return petsc_dir
+    # TODO: Raise error if PETSC_DIR is not set
     return None
 
 
@@ -36,6 +37,7 @@ def get_petsc_arch():
         petsc_arch = os.environ.get(i)
         if petsc_arch:
             return petsc_arch
+    # TODO: Raise error if PETSC_ARCH is not set
     return None
 
 

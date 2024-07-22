@@ -394,7 +394,7 @@ class PETScStruct(CompositeObject):
         for i in self.usr_ctx:
             setattr(values[self.name]._obj, i.name, kwargs['args'][i.name])
         return values
-    
+
     @property
     def liveness(self):
         return self._liveness
@@ -407,9 +407,13 @@ class PETScStruct(CompositeObject):
     def _mem_internal_lazy(self):
         return self._liveness == 'lazy'
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> 29ada0831 (compiler: form rhs in callback function and remove manual petsc casts)
 =======
     
+=======
+
+>>>>>>> 9d611239f (compiler: Fix derive_callback_inputs)
     @property
     def fields(self):
         return self._usr_ctx
