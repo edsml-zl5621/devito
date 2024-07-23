@@ -1,14 +1,14 @@
 from ctypes import byref
-
 import sympy
 
 from devito.tools import Pickable, as_tuple, sympy_mutex
 from devito.types.args import ArgProvider
 from devito.types.caching import Uncached
-from devito.types.basic import Basic
+from devito.types.basic import Basic, LocalType
 from devito.types.utils import CtypesFactory
 
-__all__ = ['Object', 'LocalObject', 'CompositeObject']
+
+__all__ = ['Object', 'LocalObject', 'CompositeObject', 'CCompositeObject']
 
 
 class AbstractObject(Basic, sympy.Basic, Pickable):
@@ -138,6 +138,7 @@ class CompositeObject(Object):
         dtype = CtypesFactory.generate(pname, pfields)
         value = self.__value_setup__(dtype, value)
         super().__init__(name, dtype, value)
+        self._pname = pname
 
     def __value_setup__(self, dtype, value):
         return value or byref(dtype._type_())
@@ -148,14 +149,14 @@ class CompositeObject(Object):
 
     @property
     def pname(self):
-        return self.dtype._type_.__name__
+        return self._pname
 
     @property
     def fields(self):
         return [i for i, _ in self.pfields]
 
 
-class LocalObject(AbstractObject):
+class LocalObject(AbstractObject, LocalType):
 
     """
     Object with derived type defined inside an Operator.
@@ -192,10 +193,6 @@ class LocalObject(AbstractObject):
         return (super()._hashable_content() +
                 self.cargs +
                 (self.initvalue, self.liveness, self.is_global))
-
-    @property
-    def liveness(self):
-        return self._liveness
 
     @property
     def is_global(self):
@@ -235,21 +232,28 @@ class LocalObject(AbstractObject):
         """
         return None
 
-    _C_modifier = None
-    """
-    A modifier added to the LocalObject's C declaration when the object appears
-    in a function signature. For example, a subclass might define `_C_modifier = '&'`
-    to impose pass-by-reference semantics.
-    """
-
     @property
-    def _mem_internal_eager(self):
-        return self._liveness == 'eager'
-
-    @property
-    def _mem_internal_lazy(self):
-        return self._liveness == 'lazy'
+    def _C_free_priority(self):
+        return float('inf')
 
     @property
     def _mem_global(self):
         return self._is_global
+
+
+class CCompositeObject(CompositeObject, LocalType):
+
+    """
+    Object with composite type (e.g., a C struct) defined in C.
+    """
+
+    __rargs__ = ('name', 'pname', 'pfields')
+
+    def __init__(self, name, pname, pfields, liveness='lazy'):
+        super().__init__(name, pname, pfields)
+        assert liveness in ['eager', 'lazy']
+        self._liveness = liveness
+
+    @property
+    def dtype(self):
+        return self._dtype._type_

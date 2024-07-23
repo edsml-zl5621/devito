@@ -6,23 +6,25 @@ from sympy import Expr
 
 from devito.tools import (Reconstructable, as_tuple, c_restrict_void_p,
                           dtype_to_ctype, dtypes_vector_mapper, is_integer)
-from devito.types.basic import AbstractFunction
+from devito.types.basic import AbstractFunction, LocalType
 from devito.types.utils import CtypesFactory, DimensionTuple
 
 __all__ = ['Array', 'ArrayMapped', 'ArrayObject', 'PointerArray', 'Bundle',
            'ComponentAccess', 'Bag']
 
 
-class ArrayBasic(AbstractFunction):
+class ArrayBasic(AbstractFunction, LocalType):
 
     is_ArrayBasic = True
 
     __rkwargs__ = AbstractFunction.__rkwargs__ + ('is_const', 'liveness')
 
     def __init_finalize__(self, *args, **kwargs):
-
-        self._liveness = kwargs.setdefault('liveness', 'lazy')
         super().__init_finalize__(*args, **kwargs)
+
+        self._liveness = kwargs.get('liveness', 'lazy')
+        assert self._liveness in ['eager', 'lazy']
+
         self._is_const = kwargs.get('is_const', False)
 
     @classmethod
@@ -57,18 +59,6 @@ class ArrayBasic(AbstractFunction):
     @property
     def is_const(self):
         return self._is_const
-
-    @property
-    def liveness(self):
-        return self._liveness
-
-    @property
-    def _mem_internal_eager(self):
-        return self._liveness == 'eager'
-
-    @property
-    def _mem_internal_lazy(self):
-        return self._liveness == 'lazy'
 
 
 class Array(ArrayBasic):
@@ -125,8 +115,8 @@ class Array(ArrayBasic):
 
     is_Array = True
 
-    __rkwargs__ = (AbstractFunction.__rkwargs__ +
-                   ('dimensions', 'liveness', 'scope', 'initvalue'))
+    __rkwargs__ = (ArrayBasic.__rkwargs__ +
+                   ('dimensions', 'scope', 'initvalue'))
 
     def __new__(cls, *args, **kwargs):
         kwargs.update({'options': {'evaluate': False}})

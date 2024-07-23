@@ -121,9 +121,9 @@ def test_petsc_solve():
 
     callable_roots = [meta_call.root for meta_call in op._func_table.values()]
 
-    matvec_callback = [root for root in callable_roots if root.name == 'MyMatShellMult_f']
+    matvec_callback = [root for root in callable_roots if root.name == 'MyMatShellMult_0']
 
-    formrhs_callback = [root for root in callable_roots if root.name == 'FormRHS_f']
+    formrhs_callback = [root for root in callable_roots if root.name == 'FormRHS_0']
 
     action_expr = FindNodes(Expression).visit(matvec_callback[0])
     rhs_expr = FindNodes(Expression).visit(formrhs_callback[0])
@@ -195,8 +195,6 @@ def test_petsc_cast():
     arr3 = PETScArray(name='arr3', dimensions=g1.dimensions,
                       shape=g1.shape, space_order=4)
 
-    # Casts will be explictly generated and placed at specific locations in the C code,
-    # specifically after various other PETSc calls have been executed.
     cast0 = PointerCast(arr0)
     cast1 = PointerCast(arr1)
     cast2 = PointerCast(arr2)
@@ -441,14 +439,14 @@ def test_callback_arguments():
     with switchconfig(openmp=False):
         op = Operator(petsc1)
 
-    mv = op._func_table['MyMatShellMult_f1'].root
-    ff = op._func_table['FormFunction_f1'].root
+    mv = op._func_table['MyMatShellMult_0'].root
+    ff = op._func_table['FormFunction_0'].root
 
     assert len(mv.parameters) == 3
     assert len(ff.parameters) == 4
 
-    assert str(mv.parameters) == '(J_f1, X_global_f1, Y_global_f1)'
-    assert str(ff.parameters) == '(snes_f1, X_global_f1, Y_global_f1, dummy_f1)'
+    assert str(mv.parameters) == '(J_0, X_global_0, Y_global_0)'
+    assert str(ff.parameters) == '(snes_0, X_global_0, Y_global_0, dummy_0)'
 
 
 @skipif('petsc')
@@ -485,7 +483,7 @@ def test_petsc_struct():
 
 
 @skipif('petsc')
-@pytest.mark.parallel(mode=1)
+@pytest.mark.parallel(mode=[2, 4, 8])
 def test_apply(mode):
 
     grid = Grid(shape=(13, 13), dtype=np.float64)
@@ -499,7 +497,7 @@ def test_apply(mode):
     petsc = PETScSolve(eqn, pn)
 
     # Build the op
-    with switchconfig(openmp=False):
+    with switchconfig(openmp=False, mpi=True):
         op = Operator(petsc)
 
     # Check the Operator runs without errors. Not verifying output for
@@ -528,10 +526,10 @@ def test_petsc_frees():
     frees = op.body.frees
 
     # Check the frees appear in the following order
-    assert str(frees[0]) == 'PetscCall(VecDestroy(&(b_global_f)));'
-    assert str(frees[1]) == 'PetscCall(VecDestroy(&(x_global_f)));'
-    assert str(frees[2]) == 'PetscCall(MatDestroy(&(J_f)));'
-    assert str(frees[3]) == 'PetscCall(SNESDestroy(&(snes_f)));'
+    assert str(frees[0]) == 'PetscCall(VecDestroy(&(b_global_0)));'
+    assert str(frees[1]) == 'PetscCall(VecDestroy(&(x_global_0)));'
+    assert str(frees[2]) == 'PetscCall(MatDestroy(&(J_0)));'
+    assert str(frees[3]) == 'PetscCall(SNESDestroy(&(snes_0)));'
     assert str(frees[4]) == 'PetscCall(DMDestroy(&(da_so_2)));'
 
 
@@ -551,5 +549,101 @@ def test_calls_to_callbacks():
 
     ccode = str(op.ccode)
 
-    assert '(void (*)(void))MyMatShellMult_f' in ccode
-    assert 'PetscCall(SNESSetFunction(snes_f,NULL,FormFunction_f,NULL));' in ccode
+    assert '(void (*)(void))MyMatShellMult_0' in ccode
+    assert 'PetscCall(SNESSetFunction(snes_0,NULL,FormFunction_0,NULL));' in ccode
+
+
+@skipif('petsc')
+def test_start_ptr():
+    """
+    Verify that a pointer to the start of the memory address is correctly
+    generated for TimeFunction objects. This pointer should indicate the
+    beginning of the multidimensional array that will be overwritten at
+    the current time step.
+    This functionality is crucial for VecReplaceArray operations, as it ensures
+    that the correct memory location is accessed and modified during each time step.
+    """
+    grid = Grid((11, 11))
+    u1 = TimeFunction(name='u1', grid=grid, space_order=2, dtype=np.float32)
+    eq1 = Eq(u1.dt, u1.laplace, subdomain=grid.interior)
+    petsc1 = PETScSolve(eq1, u1.forward)
+
+    with switchconfig(openmp=False):
+        op1 = Operator(petsc1)
+
+    # Verify the case with modulo time stepping
+    assert 'float * start_ptr_0 = t1*localsize_0 + (float *)(u1_vec->data);' in str(op1)
+
+    # Verify the case with no modulo time stepping
+    u2 = TimeFunction(name='u2', grid=grid, space_order=2, dtype=np.float32, save=5)
+    eq2 = Eq(u2.dt, u2.laplace, subdomain=grid.interior)
+    petsc2 = PETScSolve(eq2, u2.forward)
+
+    with switchconfig(openmp=False):
+        op2 = Operator(petsc2)
+
+    assert 'float * start_ptr_0 = (time + 1)*localsize_0 + ' + \
+        '(float *)(u2_vec->data);' in str(op2)
+
+
+@skipif('petsc')
+def test_time_loop():
+    """
+    Verify the following:
+    - Modulo dimensions are correctly assigned and updated in the PETSc struct
+    at each time step.
+    - Only assign/update the modulo dimensions required by any of the
+    PETSc callback functions.
+    """
+    grid = Grid((11, 11))
+
+    # Modulo time stepping
+    u1 = TimeFunction(name='u1', grid=grid, space_order=2)
+    v1 = Function(name='v1', grid=grid, space_order=2)
+    eq1 = Eq(v1.laplace, u1)
+    petsc1 = PETScSolve(eq1, v1)
+    op1 = Operator(petsc1)
+    body1 = str(op1.body)
+    rhs1 = str(op1._func_table['FormRHS_0'].root.ccode)
+
+    assert 'ctx.t0 = t0' in body1
+    assert 'ctx.t1 = t1' not in body1
+    assert 'formrhs->t0' in rhs1
+    assert 'formrhs->t1' not in rhs1
+
+    # Non-modulo time stepping
+    u2 = TimeFunction(name='u2', grid=grid, space_order=2, save=5)
+    v2 = Function(name='v2', grid=grid, space_order=2, save=5)
+    eq2 = Eq(v2.laplace, u2)
+    petsc2 = PETScSolve(eq2, v2)
+    op2 = Operator(petsc2)
+    body2 = str(op2.body)
+    rhs2 = str(op2._func_table['FormRHS_0'].root.ccode)
+
+    assert 'ctx.time = time' in body2
+    assert 'formrhs->time' in rhs2
+
+    # Modulo time stepping with more than one time step
+    # used in one of the callback functions
+    eq3 = Eq(v1.laplace, u1 + u1.forward)
+    petsc3 = PETScSolve(eq3, v1)
+    op3 = Operator(petsc3)
+    body3 = str(op3.body)
+    rhs3 = str(op3._func_table['FormRHS_0'].root.ccode)
+
+    assert 'ctx.t0 = t0' in body3
+    assert 'ctx.t1 = t1' in body3
+    assert 'formrhs->t0' in rhs3
+    assert 'formrhs->t1' in rhs3
+
+    # Multiple petsc solves within the same time loop
+    v2 = Function(name='v2', grid=grid, space_order=2)
+    eq4 = Eq(v1.laplace, u1)
+    petsc4 = PETScSolve(eq4, v1)
+    eq5 = Eq(v2.laplace, u1)
+    petsc5 = PETScSolve(eq5, v2)
+    op4 = Operator(petsc4 + petsc5)
+    body4 = str(op4.body)
+
+    assert 'ctx.t0 = t0' in body4
+    assert body4.count('ctx.t0 = t0') == 1
