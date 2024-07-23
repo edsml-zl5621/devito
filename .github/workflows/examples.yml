@@ -10,7 +10,7 @@ on:
   push:
     branches:
       - master
-      - enable-opt
+      - time_loop_branch
   pull_request:
     branches:
       - master

@@ -134,7 +134,7 @@ def test_callback_cgen():
     class FunctionPtr(Callback):
         @property
         def callback_form(self):
-            param_types = ', '.join([str(t) for t in 
+            param_types = ', '.join([str(t) for t in
                                      self.param_types])
             return "(%s (*)(%s))%s" % (self.retval, param_types, self.name)
 
