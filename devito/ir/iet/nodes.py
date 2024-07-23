@@ -1,6 +1,7 @@
 """The Iteration/Expression Tree (IET) hierarchy."""
 
 import abc
+import ctypes
 import inspect
 from functools import cached_property
 from collections import OrderedDict, namedtuple
@@ -28,7 +29,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback']
+           'CallableBody', 'Transfer', 'Callback', 'FixedArgsCallable']
 
 # First-class IET nodes
 
@@ -758,6 +759,15 @@ class Callable(Node):
         return self.all_parameters
 
 
+class FixedArgsCallable(Callable):
+
+    """
+    A Callable class that enforces a fixed function signature.
+    """
+
+    pass
+
+
 class CallableBody(MultiTraversable):
 
     """
@@ -1036,8 +1046,8 @@ class Dereference(ExprStmt, Node):
     The following cases are supported:
 
         * `pointer` is a PointerArray or TempFunction, and `pointee` is an Array.
-        * `pointer` is an ArrayObject representing a pointer to a C struct, and
-          `pointee` is a field in `pointer`.
+        * `pointer` is an ArrayObject or CCompositeObject representing a pointer
+           to a C struct, and `pointee` is a field in `pointer`.
     """
 
     is_Dereference = True
@@ -1056,13 +1066,14 @@ class Dereference(ExprStmt, Node):
 
     @property
     def expr_symbols(self):
-        ret = [self.pointer.indexed]
+        ret = []
         if self.pointer.is_PointerArray or self.pointer.is_TempFunction:
-            ret.append(self.pointee.indexed)
+            ret.extend([self.pointer.indexed, self.pointee.indexed])
             ret.extend(flatten(i.free_symbols for i in self.pointee.symbolic_shape[1:]))
             ret.extend(self.pointer.free_symbols)
         else:
-            ret.append(self.pointee._C_symbol)
+            assert issubclass(self.pointer._C_ctype, ctypes._Pointer)
+            ret.extend([self.pointer._C_symbol, self.pointee._C_symbol])
         return tuple(filter_ordered(ret))
 
     @property
