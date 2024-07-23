@@ -4,10 +4,11 @@ import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody)
 from devito.symbolics import Byref, FieldFromPointer, Macro
-from devito.petsc.types import PETScStruct
+from devito.types import CCompositeObject
+from devito.petsc.types.array import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
-from devito.petsc.utils import petsc_call
+from devito.petsc.iet.utils import petsc_call
 
 
 class PETScCallbackBuilder:
@@ -166,7 +167,7 @@ class PETScCallbackBuilder:
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
         # Replace data with pointer to data in struct
-        subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
         matvec_body = Uxreplace(subs).visit(matvec_body)
 
         self._struct_params.extend(struct.usr_ctx)
@@ -274,7 +275,7 @@ class PETScCallbackBuilder:
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
         # Replace data with pointer to data in struct
-        subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
         formfunc_body = Uxreplace(subs).visit(formfunc_body)
 
         self._struct_params.extend(struct.usr_ctx)
@@ -340,9 +341,9 @@ class PETScCallbackBuilder:
             init=tuple([petsc_func_begin_user]),
             stacks=stacks,
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
-
+        # from IPython import embed; embed()
         # Replace data with pointer to data in struct
-        subs = {i: FieldFromPointer(i, struct) for i in struct.usr_ctx}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
         self._struct_params.extend(struct.usr_ctx)
@@ -385,11 +386,15 @@ class PETScCallbackBuilder:
 
 def build_petsc_struct(iet, name, liveness):
     # Place all context data required by the shell routines
-    # into a PETScStruct
+    # into a struct
     basics = FindSymbols('basics').visit(iet)
-    avoid = FindSymbols('dimensions|indexedbases|writes').visit(iet)
-    usr_ctx = [data for data in basics if data not in avoid]
-    return PETScStruct(name, usr_ctx, liveness=liveness)
+    # from IPython
+    petsc_indexed_bases = [i for i in FindSymbols('indexedbases').visit(iet) if isinstance(i.function, PETScArray)]
+    avoid = FindSymbols('dimensions|writes').visit(iet)
+    usr_ctx = [data.function for data in basics if data not in avoid+petsc_indexed_bases]
+    # usr_ctx = [i for i in usr_ctx if not isinstance(i.function, PETScArray)]
+    # from IPython import embed; embed()
+    return CCompositeObject(name, usr_ctx, liveness=liveness)
 
 
 Null = Macro('NULL')

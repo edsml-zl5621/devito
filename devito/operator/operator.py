@@ -33,7 +33,6 @@ from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer, CompositeObject)
 from devito.petsc.iet.passes import lower_petsc, sort_frees
 from devito.petsc.clusters import petsc_lift
-from devito.petsc.utils import derive_callback_dims, derive_struct_inputs
 
 __all__ = ['Operator']
 
@@ -532,9 +531,9 @@ class Operator(Callable):
 
     @cached_property
     def input(self):
-        struct_params = derive_struct_inputs(self.parameters)
-        return tuple(i for i in self.parameters+struct_params if i.is_Input)
-        # return tuple(i for i in self.parameters if i.is_Input)
+        # struct_params = derive_struct_inputs(self.parameters)
+        # return tuple(i for i in self.parameters+struct_params if i.is_Input)
+        return tuple(i for i in self.parameters if i.is_Input)
 
     @cached_property
     def temporaries(self):
@@ -713,8 +712,6 @@ class Operator(Callable):
         """The arguments that can be passed to ``apply`` when running the Operator."""
         ret = set()
         for i in self.input:
-            # if isinstance(i, CompositeObject):
-            #     ret.update(ctx.name for ctx in i.fields if ctx.is_Input)
             ret.update(i._arg_names)
             try:
                 ret.update(i.grid._arg_names)
@@ -722,9 +719,6 @@ class Operator(Callable):
                 pass
         for d in self.dimensions:
             ret.update(d._arg_names)
-        # for o in self.objects:
-        #     if isinstance(o, CompositeObject):
-        #         ret.update(ctx.name for ctx in o.fields)
         ret.update(p.name for p in self.parameters)
         return frozenset(ret)
 

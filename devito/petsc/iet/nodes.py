@@ -1,4 +1,4 @@
-from devito.ir.iet import Expression, Callback, FixedSignatureCallable
+from devito.ir.iet import Expression, Callback, FixedArgsCallable
 from devito.ir.equations import OpInjectSolve
 
 
@@ -18,7 +18,7 @@ class InjectSolveDummy(LinearSolverExpression):
         super().__init__(expr, pragmas=pragmas, operation=operation)
     
 
-class PETScCallable(FixedSignatureCallable):
+class PETScCallable(FixedArgsCallable):
    pass
 
 
@@ -38,3 +38,13 @@ class FormFunctionCallback(Callback):
 # Mapping special Eq operations to their corresponding IET Expression subclass types.
 # These operations correspond to subclasses of Eq utilised within PETScSolve.
 petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
+
+
+# def petsc_call(specific_call, call_args):
+#     general_call = 'PetscCall'
+#     return Call(general_call, [Call(specific_call, arguments=call_args)])
+
+
+# def petsc_call_mpi(specific_call, call_args):
+#     general_call = 'PetscCallMPI'
+#     return Call(general_call, [Call(specific_call, arguments=call_args)])

@@ -208,6 +208,7 @@ for base_name, base_dtype in mapper.items():
 
 def ctypes_to_cstr(ctype, toarray=None):
     """Translate ctypes types into C strings."""
+    # from IPython import embed; embed()
     if ctype in ctypes_vector_mapper.values():
         retval = ctype.__name__
     elif isinstance(ctype, CustomDtype):
@@ -230,7 +231,6 @@ def ctypes_to_cstr(ctype, toarray=None):
         retval = '%s[%d]' % (ctypes_to_cstr(ctype._type_, toarray), ctype._length_)
     elif ctype.__name__.startswith('c_'):
         name = ctype.__name__[2:]
-
         # A primitive datatype
         # FIXME: Is there a better way of extracting the C typename ?
         # Here, we're following the ctypes convention that each basic type has

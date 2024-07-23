@@ -3,7 +3,7 @@ from functools import partial, singledispatch, wraps
 
 from devito.ir.iet import (Call, ExprStmt, Iteration, SyncSpot, AsyncCallable,
                            FindNodes, FindSymbols, MapNodes, MetaCall, Transformer,
-                           EntryFunction, FixedSignatureCallable, Uxreplace,
+                           EntryFunction, FixedArgsCallable, Uxreplace,
                            derive_parameters)
 from devito.ir.support import SymbolRegistry
 from devito.mpi.distributed import MPINeighborhood
@@ -602,7 +602,7 @@ def update_args(root, efuncs, dag):
 
         foo(..., z) : root(x, z)
     """
-    if isinstance(root, FixedSignatureCallable):
+    if isinstance(root, FixedArgsCallable):
         return efuncs
 
     # The parameters/arguments lists may have changed since a pass may have:

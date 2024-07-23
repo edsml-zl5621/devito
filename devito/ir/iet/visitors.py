@@ -24,7 +24,8 @@ from devito.tools import (GenericVisitor, as_tuple, ctypes_to_cstr, filter_order
                           c_restrict_void_p, sorted_priority)
 from devito.types.basic import AbstractFunction, Basic
 from devito.types import (ArrayObject, CompositeObject, Dimension, Pointer,
-                          IndexedData, DeviceMap)
+                          IndexedData, DeviceMap, CCompositeObject)
+# from devito.petsc.types import CCompositeObject
 
 
 __all__ = ['FindApplications', 'FindNodes', 'FindSections', 'FindSymbols',
@@ -241,7 +242,7 @@ class CGen(Visitor):
         """
         qualifiers = [v for k, v in self._qualifiers_mapper.items()
                       if getattr(obj.function, k, False) and v not in masked]
-
+        # from IPython import embed; embed()
         if (obj._mem_stack or obj._mem_constant) and mode == 1:
             strtype = obj._C_typedata
             strshape = ''.join('[%s]' % ccode(i) for i in obj.symbolic_shape)
@@ -651,7 +652,7 @@ class CGen(Visitor):
         if mode == 'all':
             xfilter1 = xfilter0
         else:
-            public_types = (AbstractFunction, CompositeObject)
+            public_types = (AbstractFunction, CompositeObject, CCompositeObject)
             if mode == 'public':
                 xfilter1 = lambda i: xfilter0(i) and isinstance(i, public_types)
             else:
@@ -669,6 +670,7 @@ class CGen(Visitor):
                 continue
             typedecls.extend([self._gen_struct_decl(j) for j in i.root.parameters
                               if xfilter(j)])
+            # from IPython import embed; embed()
         typedecls = filter_sorted(typedecls, key=lambda i: i.tpname)
 
         return typedecls
@@ -1279,8 +1281,24 @@ class Uxreplace(Transformer):
                           else_body=else_body)
 
     def visit_PointerCast(self, o):
+        # from IPython import embed; embed()
         function = self.mapper.get(o.function, o.function)
         obj = self.mapper.get(o.obj, o.obj)
+
+        # from IPython import embed; embed()
+        # new_symbolic_shape = ()
+        # for i in function.symbolic_shape:
+        #     try:
+        #         pointer = self.mapper.get(i.pointer, i.pointer)
+        #         new_symbolic_shape += (i._rebuild(pointer=pointer),)
+        #     except AttributeError:
+        #         new_symbolic_shape += (i,)
+
+        #     pointer = self.mapper.get(castshape.pointer, castshape.pointer)
+        #     new_castshape += (castshape._rebuild(pointer=pointer),)
+        # function = function._rebuild(symbolic_shape=new_symbolic_shape, function=None)
+        # castshape_function = o.castshape[0].function._C_symbol
+        # from IPython import embed; embed()
         return o._rebuild(function=function, obj=obj)
 
     def visit_Dereference(self, o):

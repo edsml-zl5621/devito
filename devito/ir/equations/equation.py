@@ -9,7 +9,9 @@ from devito.ir.support import (GuardFactor, Interval, IntervalGroup, IterationSp
 from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import Eq, Inc, ReduceMax, ReduceMin
-from devito.petsc.types import InjectSolveEq
+from devito.types.equation import InjectSolveEq
+# from devito.petsc.types.equation import InjectSolveEq
+# from devito.petsc.iet.nodes import InjectSolveDummy
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
            'OpInjectSolve']
@@ -121,6 +123,9 @@ OpInc = Operation('+')
 OpMax = Operation('max')
 OpMin = Operation('min')
 OpInjectSolve = Operation('solve')
+# Mapping special Eq operations to their corresponding IET Expression subclass types.
+# These operations correspond to subclasses of Eq utilised within PETScSolve.
+# petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
 
 
 class LoweredEq(IREq):
