@@ -28,7 +28,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'FixedSignatureCallable']
+           'CallableBody', 'Transfer', 'Callback', 'FixedArgsCallable']
 
 # First-class IET nodes
 
@@ -750,7 +750,7 @@ class Callable(Node):
         return self.all_parameters
     
 
-class FixedSignatureCallable(Callable):
+class FixedArgsCallable(Callable):
     pass
 
 

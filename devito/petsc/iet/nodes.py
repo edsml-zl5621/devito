@@ -1,4 +1,4 @@
-from devito.ir.iet import Expression, Callback, FixedSignatureCallable
+from devito.ir.iet import Expression, Callback, FixedArgsCallable
 from devito.ir.equations import OpInjectSolve
 
 
@@ -18,7 +18,7 @@ class InjectSolveDummy(LinearSolverExpression):
         super().__init__(expr, pragmas=pragmas, operation=operation)
     
 
-class PETScCallable(FixedSignatureCallable):
+class PETScCallable(FixedArgsCallable):
    pass
 
 
