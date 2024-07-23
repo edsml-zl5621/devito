@@ -86,6 +86,8 @@ class PETScCallbackBuilder:
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
+        body = drop_callbackexpr(body)
+
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
         body = uxreplace_time(body, solver_objs)
@@ -213,6 +215,8 @@ class PETScCallbackBuilder:
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
+        body = drop_callbackexpr(body)
+
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
         body = uxreplace_time(body, solver_objs)
@@ -330,6 +334,8 @@ class PETScCallbackBuilder:
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
+
+        body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 

@@ -615,11 +615,7 @@ def test_petsc_struct():
 
 
 @skipif('petsc')
-<<<<<<< HEAD
 @pytest.mark.parallel(mode=[2, 4, 8])
-=======
-@pytest.mark.parallel(mode=1)
->>>>>>> 5ab58fee8 (dsl: Dispatch to sympy.Add not both Add and EvalDerivative)
 def test_apply(mode):
 
     grid = Grid(shape=(13, 13), dtype=np.float64)

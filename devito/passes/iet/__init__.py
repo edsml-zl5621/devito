@@ -8,4 +8,3 @@ from .asynchrony import *  # noqa
 from .instrument import *  # noqa
 from .languages import *  # noqa
 from .errors import *  # noqa
-from .petsc import *  # noqa
