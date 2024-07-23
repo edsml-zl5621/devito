@@ -20,8 +20,6 @@ class ArrayBasic(AbstractFunction, LocalType):
     __rkwargs__ = AbstractFunction.__rkwargs__ + ('is_const', 'liveness')
 
     def __init_finalize__(self, *args, **kwargs):
-
-        self._liveness = kwargs.setdefault('liveness', 'lazy')
         super().__init_finalize__(*args, **kwargs)
 
         self._liveness = kwargs.get('liveness', 'lazy')
@@ -61,18 +59,6 @@ class ArrayBasic(AbstractFunction, LocalType):
     @property
     def is_const(self):
         return self._is_const
-
-    @property
-    def liveness(self):
-        return self._liveness
-
-    @property
-    def _mem_internal_eager(self):
-        return self._liveness == 'eager'
-
-    @property
-    def _mem_internal_lazy(self):
-        return self._liveness == 'lazy'
 
 
 class Array(ArrayBasic):
