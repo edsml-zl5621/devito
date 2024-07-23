@@ -1,14 +1,9 @@
 import os
 
-from devito.ir.equations import OpInjectSolve
 from devito.tools import memoized_func
 from devito.ir.iet import Call, FindSymbols
-from devito.petsc.iet.nodes import PETScCallable, InjectSolveDummy
+from devito.petsc.iet.nodes import PETScCallable
 from devito.petsc.types import PETScStruct
-
-# Mapping special Eq operations to their corresponding IET Expression subclass types.
-# These operations correspond to subclasses of Eq utilised within PETScSolve.
-petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
 
 
 solver_mapper = {

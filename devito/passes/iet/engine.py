@@ -3,7 +3,7 @@ from functools import partial, singledispatch, wraps
 
 from devito.ir.iet import (Call, ExprStmt, Iteration, SyncSpot, AsyncCallable,
                            FindNodes, FindSymbols, MapNodes, MetaCall, Transformer,
-                           EntryFunction, ThreadCallable, Uxreplace,
+                           EntryFunction, FixedSignatureCallable, Uxreplace,
                            derive_parameters)
 from devito.ir.support import SymbolRegistry
 from devito.mpi.distributed import MPINeighborhood
@@ -16,6 +16,7 @@ from devito.types import (Array, Bundle, CompositeObject, Lock, IncrDimension,
 from devito.types.args import ArgProvider
 from devito.types.dense import DiscreteFunction
 from devito.types.dimension import AbstractIncrDimension, BlockDimension
+
 
 __all__ = ['Graph', 'iet_pass', 'iet_visit']
 
@@ -601,7 +602,7 @@ def update_args(root, efuncs, dag):
 
         foo(..., z) : root(x, z)
     """
-    if isinstance(root, ThreadCallable):
+    if isinstance(root, FixedSignatureCallable):
         return efuncs
 
     # The parameters/arguments lists may have changed since a pass may have:

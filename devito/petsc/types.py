@@ -13,8 +13,6 @@ from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import dtype_to_ctype, Reconstructable, sympy_mutex
 from devito.symbolics import FieldFromComposite, Byref
 
-from devito.petsc.utils import petsc_call
-
 
 class DM(LocalObject):
     """
@@ -36,7 +34,7 @@ class DM(LocalObject):
 
     @property
     def _C_free(self):
-        # from devito.petsc.utils import petsc_call
+        from devito.petsc.utils import petsc_call
         return petsc_call('DMDestroy', [Byref(self.function)])
 
 
@@ -48,7 +46,7 @@ class Mat(LocalObject):
 
     @property
     def _C_free(self):
-        # from devito.petsc.utils import petsc_call
+        from devito.petsc.utils import petsc_call
         return petsc_call('MatDestroy', [Byref(self.function)])
 
 
@@ -67,7 +65,7 @@ class GlobalVec(LocalObject):
 
     @property
     def _C_free(self):
-        # from devito.petsc.utils import petsc_call
+        from devito.petsc.utils import petsc_call
         return petsc_call('VecDestroy', [Byref(self.function)])
 
 
@@ -95,7 +93,7 @@ class SNES(LocalObject):
 
     @property
     def _C_free(self):
-        # from devito.petsc.utils import petsc_call
+        from devito.petsc.utils import petsc_call
         return petsc_call('SNESDestroy', [Byref(self.function)])
 
 
@@ -373,6 +371,8 @@ class PETScStruct(CompositeObject):
 
     __rargs__ = ('name', 'usr_ctx')
     __rkwargs__ = ('liveness',)
+
+    # is_Input = True
 
     def __init__(self, name, usr_ctx, liveness='lazy'):
         pfields = [(i._C_name, dtype_to_ctype(i.dtype))

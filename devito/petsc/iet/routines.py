@@ -2,8 +2,7 @@ from collections import OrderedDict
 
 import cgen as c
 
-from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           Callable)
+from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody)
 from devito.symbolics import Byref, FieldFromPointer, Macro
 from devito.petsc.types import PETScStruct
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
@@ -185,7 +184,7 @@ class PETScCallbackBuilder:
         formfunc_callback = PETScCallable(
             'FormFunction_%s' % target.name, body_formfunc, retval=objs['err'],
             parameters=(solver_objs['snes'], solver_objs['X_global'],
-                        solver_objs['Y_global']), unused_parameters=(solver_objs['dummy'])
+                        solver_objs['Y_global'], solver_objs['dummy'])
         )
         return formfunc_callback
 
@@ -290,7 +289,7 @@ class PETScCallbackBuilder:
         body_formrhs = self.create_formrhs_body(injectsolve, irs_formrhs.uiet.body,
                                                 solver_objs, objs)
 
-        formrhs_callback = Callable(
+        formrhs_callback = PETScCallable(
             'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
             parameters=(
                 solver_objs['snes'], solver_objs['b_local']

@@ -30,7 +30,7 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tup
                           flatten, filter_sorted, frozendict, is_integer,
                           split, timed_pass, timed_region, contains_val)
 from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
-                          disk_layer)
+                          disk_layer, CompositeObject)
 from devito.petsc.iet.passes import lower_petsc, sort_frees
 from devito.petsc.clusters import petsc_lift
 from devito.petsc.utils import derive_callback_dims, derive_struct_inputs
@@ -519,10 +519,13 @@ class Operator(Callable):
 
         # NOTE: Should these dimensions be integrated into self._dimensions instead?
         # In which case they would get picked up before this
-        struct_dims = derive_callback_dims(self._func_table)
+        # struct_dims = derive_callback_dims(self._func_table)
 
-        ret.update(d for d in dimensions if d.is_PerfKnob or d in struct_dims)
-
+        # ret.update(d for d in dimensions if d.is_PerfKnob or d in struct_dims)
+        # ret.update(d for d in dimensions if d.is_PerfKnob)
+        # from IPython import embed; embed()
+        ret.update(d for d in dimensions)
+   
         ret = tuple(sorted(ret, key=attrgetter('name')))
 
         return ret
@@ -531,6 +534,7 @@ class Operator(Callable):
     def input(self):
         struct_params = derive_struct_inputs(self.parameters)
         return tuple(i for i in self.parameters+struct_params if i.is_Input)
+        # return tuple(i for i in self.parameters if i.is_Input)
 
     @cached_property
     def temporaries(self):
@@ -592,13 +596,14 @@ class Operator(Callable):
             except ValueError:
                 raise ValueError("Override `%s` is incompatible with overrides `%s`" %
                                  (p, [i for i in overrides if i.name in args]))
-
+        # from IPython import embed; embed()
         # Process data-carrier defaults
         for p in defaults:
             if p.name in args:
                 # E.g., SubFunctions
                 continue
             for k, v in p._arg_values(**kwargs).items():
+                # from IPython import embed; embed()
                 if k not in args:
                     args[k] = v
                 elif k in futures:
@@ -708,6 +713,8 @@ class Operator(Callable):
         """The arguments that can be passed to ``apply`` when running the Operator."""
         ret = set()
         for i in self.input:
+            # if isinstance(i, CompositeObject):
+            #     ret.update(ctx.name for ctx in i.fields if ctx.is_Input)
             ret.update(i._arg_names)
             try:
                 ret.update(i.grid._arg_names)
@@ -715,6 +722,9 @@ class Operator(Callable):
                 pass
         for d in self.dimensions:
             ret.update(d._arg_names)
+        # for o in self.objects:
+        #     if isinstance(o, CompositeObject):
+        #         ret.update(ctx.name for ctx in o.fields)
         ret.update(p.name for p in self.parameters)
         return frozenset(ret)
 

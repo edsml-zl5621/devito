@@ -1,6 +1,5 @@
-from devito.ir.iet import Expression, Callable, Callback
+from devito.ir.iet import Expression, Callback, FixedSignatureCallable
 from devito.ir.equations import OpInjectSolve
-from devito.tools import as_tuple
 
 
 class LinearSolverExpression(Expression):
@@ -17,17 +16,10 @@ class InjectSolveDummy(LinearSolverExpression):
     """
     def __init__(self, expr, pragmas=None, operation=OpInjectSolve):
         super().__init__(expr, pragmas=pragmas, operation=operation)
+    
 
-
-class PETScCallable(Callable):
-    def __init__(self, name, body, retval=None, parameters=None,
-                 prefix=None, unused_parameters=None):
-        super().__init__(name, body, retval, parameters, prefix)
-        self._unused_parameters = as_tuple(unused_parameters)
-
-    @property
-    def unused_parameters(self):
-        return self._unused_parameters
+class PETScCallable(FixedSignatureCallable):
+   pass
 
 
 class MatVecCallback(Callback):
@@ -41,3 +33,8 @@ class FormFunctionCallback(Callback):
     @property
     def callback_form(self):
         return "%s" % self.name
+
+
+# Mapping special Eq operations to their corresponding IET Expression subclass types.
+# These operations correspond to subclasses of Eq utilised within PETScSolve.
+petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
