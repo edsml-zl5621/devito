@@ -43,11 +43,13 @@ class CtypesFactory:
 
     @classmethod
     def generate(cls, pname, pfields):
+        # from IPython import embed; embed()
         key = (pname, tuple(pfields))
         try:
             return cls.cache[key]
         except KeyError:
             dtype = POINTER(type(pname, (Structure,), {'_fields_': pfields}))
+            # dtype = type(pname, (Structure,), {'_fields_': pfields})
             return cls.cache.setdefault(key, dtype)
 
 

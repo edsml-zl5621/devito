@@ -3,7 +3,7 @@ import os
 from devito.tools import memoized_func
 from devito.ir.iet import Call, FindSymbols
 from devito.petsc.iet.nodes import PETScCallable
-from devito.petsc.types import PETScStruct
+from devito.petsc.types import P_PETScStruct
 
 
 solver_mapper = {

@@ -1,10 +1,16 @@
 import sympy
+<<<<<<< HEAD
+=======
+from functools import cached_property
+import numpy as np
+from ctypes import POINTER, Structure
+>>>>>>> dbcad5cc3 (compiler: Create a struct that can be defined in Python)
 
 <<<<<<< HEAD
 from devito.tools import Reconstructable, sympy_mutex
 =======
 from devito.tools import CustomDtype
-from devito.types import LocalObject, Eq, CompositeObject
+from devito.types import LocalObject, Eq, CompositeObject, Object
 from devito.types.utils import DimensionTuple
 from devito.types.array import ArrayBasic
 from devito.finite_differences import Differentiable
@@ -367,7 +373,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     func = Reconstructable._rebuild
 
 
-class PETScStruct(CompositeObject):
+class P_PETScStruct(CompositeObject):
 
     __rargs__ = ('name', 'usr_ctx')
     __rkwargs__ = ('liveness',)
@@ -385,8 +391,18 @@ class PETScStruct(CompositeObject):
         self._liveness = liveness
 
     @property
+<<<<<<< HEAD
     def arrays(self):
         return self._arrays
+=======
+    def usr_ctx(self):
+        return self._usr_ctx
+    
+    @property
+    def _C_ctype(self):
+        return POINTER(type(self._C_structname, (Structure,),
+                            {'_fields_': self.pfields}))
+>>>>>>> dbcad5cc3 (compiler: Create a struct that can be defined in Python)
 
 <<<<<<< HEAD
     func = Reconstructable._rebuild
@@ -426,4 +442,59 @@ class PETScStruct(CompositeObject):
     @property
     def fields(self):
         return self._usr_ctx
+<<<<<<< HEAD
 >>>>>>> 41157b0bc (compiler: Place dataobj pointers inside ctx struct)
+=======
+    
+
+class C_PETScStruct(Object):
+
+    """
+    Object with composite type (e.g., a C struct) defined in C.
+    """
+
+    __rargs__ = ('name', 'usr_ctx')
+    __rkwargs__ = ('liveness',)
+
+    def __init__(self, name, usr_ctx, value=None, liveness='lazy'):
+        pfields = [(i._C_name, dtype_to_ctype(i.dtype))
+                       for i in usr_ctx if isinstance(i, AbstractSymbol)]
+        dtype = POINTER(type('MatContext', (Structure,), {'_fields_': pfields}))
+        super().__init__(name, dtype, value)
+        self._pfields = pfields
+        self._usr_ctx = usr_ctx
+
+        assert liveness in ['eager', 'lazy']
+        self._liveness = liveness
+
+    @property
+    def pfields(self):
+        return self._pfields
+
+    # @property
+    # def pname(self):
+    #     return self.pname
+
+    @property
+    def usr_ctx(self):
+        return self._usr_ctx
+
+    @property
+    def liveness(self):
+        return self._liveness
+
+    @property
+    def _mem_internal_eager(self):
+        return self._liveness == 'eager'
+
+    @property
+    def _mem_internal_lazy(self):
+        return self._liveness == 'lazy'
+
+    @property
+    def fields(self):
+        return [i for i, _ in self.pfields]
+
+
+
+>>>>>>> dbcad5cc3 (compiler: Create a struct that can be defined in Python)
