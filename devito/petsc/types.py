@@ -13,6 +13,8 @@ from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import dtype_to_ctype, Reconstructable, sympy_mutex
 from devito.symbolics import FieldFromComposite, Byref
 
+from devito.petsc.utils import petsc_call
+
 
 class DM(LocalObject):
     """
@@ -34,9 +36,8 @@ class DM(LocalObject):
 
     @property
     def _C_free(self):
-        from devito.petsc.utils import petsc_call
-        destroy = petsc_call('DMDestroy', [Byref(self.function)])
-        return destroy
+        # from devito.petsc.utils import petsc_call
+        return petsc_call('DMDestroy', [Byref(self.function)])
 
 
 class Mat(LocalObject):
@@ -47,9 +48,8 @@ class Mat(LocalObject):
 
     @property
     def _C_free(self):
-        from devito.petsc.utils import petsc_call
-        destroy = petsc_call('MatDestroy', [Byref(self.function)])
-        return destroy
+        # from devito.petsc.utils import petsc_call
+        return petsc_call('MatDestroy', [Byref(self.function)])
 
 
 class LocalVec(LocalObject):
@@ -67,9 +67,8 @@ class GlobalVec(LocalObject):
 
     @property
     def _C_free(self):
-        from devito.petsc.utils import petsc_call
-        destroy = petsc_call('VecDestroy', [Byref(self.function)])
-        return destroy
+        # from devito.petsc.utils import petsc_call
+        return petsc_call('VecDestroy', [Byref(self.function)])
 
 
 class PetscMPIInt(LocalObject):
@@ -96,9 +95,8 @@ class SNES(LocalObject):
 
     @property
     def _C_free(self):
-        from devito.petsc.utils import petsc_call
-        destroy = petsc_call('SNESDestroy', [Byref(self.function)])
-        return destroy
+        # from devito.petsc.utils import petsc_call
+        return petsc_call('SNESDestroy', [Byref(self.function)])
 
 
 class PC(LocalObject):
