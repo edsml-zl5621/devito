@@ -1052,6 +1052,7 @@ class Dereference(ExprStmt, Node):
 
     @property
     def expr_symbols(self):
+        # from IPython import embed; embed()
         ret = [self.pointer.indexed]
         if self.pointer.is_PointerArray or self.pointer.is_TempFunction:
             ret.append(self.pointee.indexed)

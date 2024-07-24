@@ -2,10 +2,12 @@ from collections import OrderedDict
 
 import cgen as c
 
-from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody)
+from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
+                           DummyExpr, Dereference)
 from devito.symbolics import Byref, FieldFromPointer, Macro
 from devito.types import CCompositeObject
-from devito.petsc.types.array import PETScArray
+from devito.types.basic import AbstractFunction
+from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
 from devito.petsc.iet.utils import petsc_call
@@ -167,10 +169,10 @@ class PETScCallbackBuilder:
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
         # Replace data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         matvec_body = Uxreplace(subs).visit(matvec_body)
 
-        self._struct_params.extend(struct.usr_ctx)
+        self._struct_params.extend(struct.fields)
 
         return matvec_body
 
@@ -275,10 +277,10 @@ class PETScCallbackBuilder:
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
         # Replace data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         formfunc_body = Uxreplace(subs).visit(formfunc_body)
 
-        self._struct_params.extend(struct.usr_ctx)
+        self._struct_params.extend(struct.fields)
 
         return formfunc_body
 
@@ -334,19 +336,29 @@ class PETScCallbackBuilder:
             dm_get_app_context,
             vec_get_array,
             dm_get_local_info,
+            Dereference(struct.fields[-5], struct.function)
         )
 
+        # tmp = DummyExpr(struct.fields[-5]._C_symbol, struct.fields[-5]._C_symbol)
+
+        # standalones = tuple([DummyExpr(i._C_ctype, FieldFromPointer(i._C_symbol, struct)) for i in struct.fields if isinstance(i.function, AbstractFunction)])
+        # standalones = [Dereference(i._C_symbol, struct) for i in 
+        #                struct.fields if isinstance(i.function, AbstractFunction)]
+        # from IPython import embed; embed()
         formrhs_body = CallableBody(
             List(body=[body]),
             init=tuple([petsc_func_begin_user]),
+            # standalones=tuple(standalones),
             stacks=stacks,
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
         # from IPython import embed; embed()
+
+
         # Replace data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.usr_ctx}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields if not isinstance(i.function, AbstractFunction)}
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
-        self._struct_params.extend(struct.usr_ctx)
+        self._struct_params.extend(struct.fields)
 
         return formrhs_body
 
@@ -394,7 +406,7 @@ def build_petsc_struct(iet, name, liveness):
     usr_ctx = [data.function for data in basics if data not in avoid+petsc_indexed_bases]
     # usr_ctx = [i for i in usr_ctx if not isinstance(i.function, PETScArray)]
     # from IPython import embed; embed()
-    return CCompositeObject(name, usr_ctx, liveness=liveness)
+    return CCompositeObject(name=name, fields=usr_ctx, npthreads=4, liveness=liveness)
 
 
 Null = Macro('NULL')

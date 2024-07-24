@@ -1,4 +1,5 @@
 from ctypes import byref, Structure, POINTER
+from functools import cached_property
 
 import sympy
 
@@ -7,6 +8,8 @@ from devito.types.args import ArgProvider
 from devito.types.caching import Uncached
 from devito.types.basic import Basic
 from devito.types.utils import CtypesFactory
+from devito.types.array import ArrayObject, ArrayBasic
+from devito.types.dimension import CustomDimension
 
 __all__ = ['Object', 'LocalObject', 'CompositeObject', 'CCompositeObject']
 
@@ -255,41 +258,121 @@ class LocalObject(AbstractObject):
         return self._is_global
     
 
-class CCompositeObject(LocalObject):
+# working
+# class CCompositeObject(LocalObject):
 
-    """
-    Represents a composite type (e.g., a C struct) defined in C.
-    """
+#     """
+#     Represents a composite type (e.g., a C struct) defined in C.
+#     """
 
-    __rargs__ = ('name', 'usr_ctx')
-    __rkwargs__ = ('liveness',)
+#     __rargs__ = ('name', 'fields')
+#     __rkwargs__ = ('liveness',)
 
-    def __init__(self, name, usr_ctx, liveness='lazy'):
-        # pfields = [(i._C_name, dtype_to_ctype(i.dtype))
-        #                for i in usr_ctx if isinstance(i, Basic)]
-        # ctype = dtype_to_ctype(i.dtype)
-        pfields = [(i._C_name, i._C_ctype)
-                       for i in usr_ctx]
-        # from IPython import embed; embed()
-        self.__class__.dtype = type('MatContext', (Structure,), {'_fields_': pfields})
-        super().__init__(name, cargs=None, initvalue=None, liveness=liveness)
-        self._pfields = pfields
-        self._usr_ctx = usr_ctx
+#     def __init__(self, name, fields, liveness='lazy'):
+#         pfields = [(i._C_name, i._C_ctype) for i in fields]
+#         self.__class__.dtype = type('MatContext', (Structure,), {'_fields_': pfields})
+#         super().__init__(name, cargs=None, initvalue=None, liveness=liveness)
+#         self._pfields = pfields
+#         self._fields = fields
 
-        # assert liveness in ['eager', 'lazy']
-        # self._liveness = liveness
+#     @property
+#     def pfields(self):
+#         return self._pfields
 
-    @property
-    def pfields(self):
-        return self._pfields
-
-    @property
-    def usr_ctx(self):
-        return self._usr_ctx
+#     @property
+#     def fields(self):
+#         return self._fields
     
-    @property
-    def _C_ctype(self):
-        return POINTER(self.dtype) if self.liveness == \
-            'eager' else self.dtype
+#     @property
+#     def _C_ctype(self):
+#         return POINTER(self.dtype) if self.liveness == \
+#             'eager' else self.dtype
 
-    _C_modifier = ' *'
+#     _C_modifier = ' *'
+    
+
+
+class CCompositeObject(ArrayObject):
+
+    # Not a performance-sensitive object
+    _data_alignment = False
+
+    @classmethod
+    def __indices_setup__(cls, **kwargs):
+        try:
+            return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
+        except KeyError:
+            nthreads = kwargs['npthreads']
+            dim = CustomDimension(name='wi', symbolic_size=nthreads)
+            return (dim,), (dim,)
+
+    @property
+    def dim(self):
+        assert len(self.dimensions) == 1
+        return self.dimensions[0]
+
+    @property
+    def npthreads(self):
+        return self.dim.symbolic_size
+
+    @property
+    def index(self):
+        if self.size == 1:
+            return 0
+        else:
+            return self.dim
+
+
+
+# class CCompositeObject(ArrayObject):
+
+#     @classmethod
+#     def __dtype_setup__(cls, **kwargs):
+#         pname = kwargs.get('pname', 't%s' % kwargs['name'])
+#         pfields = cls.__pfields_setup__(**kwargs)
+#         return type(pname, (Structure,), {'_fields_': pfields})
+    
+#     @classmethod
+#     def __indices_setup__(cls, **kwargs):
+#         try:
+#             return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
+#         except KeyError:
+#             # num = kwargs['num']
+#             dim = CustomDimension(name='wi', symbolic_size=5)
+#             return (dim,), (dim,)
+    
+#     _C_modifier = ' *'
+
+
+    # __rargs__ = ('name', 'usr_ctx')
+    # __rkwargs__ = ('liveness',)
+
+    # def __init__(self, name, usr_ctx, liveness='lazy'):
+    #     # pfields = [(i._C_name, dtype_to_ctype(i.dtype))
+    #     #                for i in usr_ctx if isinstance(i, Basic)]
+    #     # ctype = dtype_to_ctype(i.dtype)
+    #     pfields = [(i._C_name, i._C_ctype)
+    #                    for i in usr_ctx]
+    #     # from IPython import embed; embed()
+    #     self.__class__.dtype = type('MatContext', (Structure,), {'_fields_': pfields})
+    #     super().__init__(name, cargs=None, initvalue=None, liveness=liveness)
+    #     self._pfields = pfields
+    #     self._usr_ctx = usr_ctx
+
+    #     # assert liveness in ['eager', 'lazy']
+    #     # self._liveness = liveness
+
+    # @property
+    # def pfields(self):
+    #     return self._pfields
+
+    # @property
+    # def usr_ctx(self):
+    #     return self._usr_ctx
+    
+    # @property
+    # def _C_ctype(self):
+    #     return POINTER(self.dtype) if self.liveness == \
+    #         'eager' else self.dtype
+
+    # _C_modifier = ' *'
