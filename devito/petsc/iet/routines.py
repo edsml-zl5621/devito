@@ -5,8 +5,7 @@ import cgen as c
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody)
 from devito.symbolics import Byref, FieldFromPointer, Macro
 from devito.types import CCompositeObject
-# from devito.petsc.types.object import CCompositeObject
-from devito.petsc.types.types import PETScArray
+from devito.petsc.types.array import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
 from devito.petsc.iet.utils import petsc_call
