@@ -1,4 +1,4 @@
-from ctypes import byref
+from ctypes import byref, Structure, POINTER
 
 import sympy
 
@@ -8,7 +8,7 @@ from devito.types.caching import Uncached
 from devito.types.basic import Basic
 from devito.types.utils import CtypesFactory
 
-__all__ = ['Object', 'LocalObject', 'CompositeObject']
+__all__ = ['Object', 'LocalObject', 'CompositeObject', 'CCompositeObject']
 
 
 class AbstractObject(Basic, sympy.Basic, Pickable):
@@ -253,3 +253,43 @@ class LocalObject(AbstractObject):
     @property
     def _mem_global(self):
         return self._is_global
+    
+
+class CCompositeObject(LocalObject):
+
+    """
+    Represents a composite type (e.g., a C struct) defined in C.
+    """
+
+    __rargs__ = ('name', 'usr_ctx')
+    __rkwargs__ = ('liveness',)
+
+    def __init__(self, name, usr_ctx, liveness='lazy'):
+        # pfields = [(i._C_name, dtype_to_ctype(i.dtype))
+        #                for i in usr_ctx if isinstance(i, Basic)]
+        # ctype = dtype_to_ctype(i.dtype)
+        pfields = [(i._C_name, i._C_ctype)
+                       for i in usr_ctx]
+        # from IPython import embed; embed()
+        self.__class__.dtype = type('MatContext', (Structure,), {'_fields_': pfields})
+        super().__init__(name, cargs=None, initvalue=None, liveness=liveness)
+        self._pfields = pfields
+        self._usr_ctx = usr_ctx
+
+        # assert liveness in ['eager', 'lazy']
+        # self._liveness = liveness
+
+    @property
+    def pfields(self):
+        return self._pfields
+
+    @property
+    def usr_ctx(self):
+        return self._usr_ctx
+    
+    @property
+    def _C_ctype(self):
+        return POINTER(self.dtype) if self.liveness == \
+            'eager' else self.dtype
+
+    _C_modifier = ' *'
