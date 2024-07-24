@@ -25,7 +25,6 @@ class DM(LocalObject):
 
     @property
     def _C_free(self):
-        # from devito.petsc.utils import petsc_call
         return petsc_call('DMDestroy', [Byref(self.function)])
 
 
@@ -37,7 +36,6 @@ class Mat(LocalObject):
 
     @property
     def _C_free(self):
-        # from devito.petsc.utils import petsc_call
         return petsc_call('MatDestroy', [Byref(self.function)])
 
 
@@ -56,7 +54,6 @@ class GlobalVec(LocalObject):
 
     @property
     def _C_free(self):
-        # from devito.petsc.utils import petsc_call
         return petsc_call('VecDestroy', [Byref(self.function)])
 
 
@@ -84,7 +81,6 @@ class SNES(LocalObject):
 
     @property
     def _C_free(self):
-        # from devito.petsc.utils import petsc_call
         return petsc_call('SNESDestroy', [Byref(self.function)])
 
 
