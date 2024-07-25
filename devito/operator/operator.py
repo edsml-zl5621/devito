@@ -516,13 +516,6 @@ class Operator(Callable):
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
 
-        # NOTE: Should these dimensions be integrated into self._dimensions instead?
-        # In which case they would get picked up before this
-        # struct_dims = derive_callback_dims(self._func_table)
-
-        # ret.update(d for d in dimensions if d.is_PerfKnob or d in struct_dims)
-        # ret.update(d for d in dimensions if d.is_PerfKnob)
-        # from IPython import embed; embed()
         ret.update(d for d in dimensions)
 
         ret = tuple(sorted(ret, key=attrgetter('name')))
@@ -531,8 +524,6 @@ class Operator(Callable):
 
     @cached_property
     def input(self):
-        # struct_params = derive_struct_inputs(self.parameters)
-        # return tuple(i for i in self.parameters+struct_params if i.is_Input)
         return tuple(i for i in self.parameters if i.is_Input)
 
     @cached_property
@@ -595,14 +586,13 @@ class Operator(Callable):
             except ValueError:
                 raise ValueError("Override `%s` is incompatible with overrides `%s`" %
                                  (p, [i for i in overrides if i.name in args]))
-        # from IPython import embed; embed()
+
         # Process data-carrier defaults
         for p in defaults:
             if p.name in args:
                 # E.g., SubFunctions
                 continue
             for k, v in p._arg_values(**kwargs).items():
-                # from IPython import embed; embed()
                 if k not in args:
                     args[k] = v
                 elif k in futures:
