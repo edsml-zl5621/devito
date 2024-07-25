@@ -1052,7 +1052,7 @@ class Dereference(ExprStmt, Node):
 
     @property
     def expr_symbols(self):
-        ret = [self.pointer]
+        ret = [self.pointer.indexed]
         if self.pointer.is_PointerArray or self.pointer.is_TempFunction:
             ret.append(self.pointee.indexed)
             ret.extend(flatten(i.free_symbols for i in self.pointee.symbolic_shape[1:]))
