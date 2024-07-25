@@ -241,7 +241,7 @@ class CGen(Visitor):
         """
         qualifiers = [v for k, v in self._qualifiers_mapper.items()
                       if getattr(obj.function, k, False) and v not in masked]
-        # from IPython import embed; embed()
+
         if (obj._mem_stack or obj._mem_constant) and mode == 1:
             strtype = obj._C_typedata
             strshape = ''.join('[%s]' % ccode(i) for i in obj.symbolic_shape)
@@ -669,7 +669,6 @@ class CGen(Visitor):
                 continue
             typedecls.extend([self._gen_struct_decl(j) for j in i.root.parameters
                               if xfilter(j)])
-            # from IPython import embed; embed()
         typedecls = filter_sorted(typedecls, key=lambda i: i.tpname)
 
         return typedecls

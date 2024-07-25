@@ -17,7 +17,6 @@ from devito.types.args import ArgProvider
 from devito.types.dense import DiscreteFunction
 from devito.types.dimension import AbstractIncrDimension, BlockDimension
 
-
 __all__ = ['Graph', 'iet_pass', 'iet_visit']
 
 
