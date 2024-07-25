@@ -16,10 +16,10 @@ class InjectSolveDummy(LinearSolverExpression):
     """
     def __init__(self, expr, pragmas=None, operation=OpInjectSolve):
         super().__init__(expr, pragmas=pragmas, operation=operation)
-    
+
 
 class PETScCallable(FixedArgsCallable):
-   pass
+    pass
 
 
 class MatVecCallback(Callback):

@@ -748,7 +748,7 @@ class Callable(Node):
     @property
     def defines(self):
         return self.all_parameters
-    
+
 
 class FixedArgsCallable(Callable):
     pass
@@ -1052,8 +1052,7 @@ class Dereference(ExprStmt, Node):
 
     @property
     def expr_symbols(self):
-        # from IPython import embed; embed()
-        ret = [self.pointer.indexed]
+        ret = [self.pointer]
         if self.pointer.is_PointerArray or self.pointer.is_TempFunction:
             ret.append(self.pointee.indexed)
             ret.extend(flatten(i.free_symbols for i in self.pointee.symbolic_shape[1:]))
