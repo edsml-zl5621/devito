@@ -3,7 +3,7 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           DummyExpr, Dereference)
+                           Dereference)
 from devito.symbolics import Byref, FieldFromPointer, Macro
 from devito.types import CCompositeObject
 from devito.types.basic import AbstractFunction
@@ -162,10 +162,13 @@ class PETScCallbackBuilder:
             dm_get_local_info
         )
 
+        dereference_funcs = [Dereference(i, struct) for i in
+                             struct.fields if isinstance(i.function, AbstractFunction)]
+
         matvec_body = CallableBody(
             List(body=body),
             init=tuple([petsc_func_begin_user]),
-            stacks=stacks,
+            stacks=stacks+tuple(dereference_funcs),
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
         # Replace data with pointer to data in struct
@@ -270,10 +273,13 @@ class PETScCallbackBuilder:
             dm_get_local_info
         )
 
+        dereference_funcs = [Dereference(i, struct) for i in
+                             struct.fields if isinstance(i.function, AbstractFunction)]
+
         formfunc_body = CallableBody(
             List(body=body),
             init=tuple([petsc_func_begin_user]),
-            stacks=stacks,
+            stacks=stacks+tuple(dereference_funcs),
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
         # Replace data with pointer to data in struct
@@ -335,27 +341,21 @@ class PETScCallbackBuilder:
             snes_get_dm,
             dm_get_app_context,
             vec_get_array,
-            dm_get_local_info,
-            Dereference(struct.fields[-5], struct.function)
+            dm_get_local_info
         )
 
-        # tmp = DummyExpr(struct.fields[-5]._C_symbol, struct.fields[-5]._C_symbol)
+        dereference_funcs = [Dereference(i, struct) for i in
+                             struct.fields if isinstance(i.function, AbstractFunction)]
 
-        # standalones = tuple([DummyExpr(i._C_ctype, FieldFromPointer(i._C_symbol, struct)) for i in struct.fields if isinstance(i.function, AbstractFunction)])
-        # standalones = [Dereference(i._C_symbol, struct) for i in 
-        #                struct.fields if isinstance(i.function, AbstractFunction)]
-        # from IPython import embed; embed()
         formrhs_body = CallableBody(
             List(body=[body]),
             init=tuple([petsc_func_begin_user]),
-            # standalones=tuple(standalones),
-            stacks=stacks,
+            stacks=stacks+tuple(dereference_funcs),
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
-        # from IPython import embed; embed()
-
 
         # Replace data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields if not isinstance(i.function, AbstractFunction)}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
+                i in struct.fields if not isinstance(i.function, AbstractFunction)}
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
         self._struct_params.extend(struct.fields)
@@ -397,16 +397,14 @@ class PETScCallbackBuilder:
 
 
 def build_petsc_struct(iet, name, liveness):
-    # Place all context data required by the shell routines
-    # into a struct
+    # Place all context data required by the shell routines into a struct
     basics = FindSymbols('basics').visit(iet)
-    # from IPython
-    petsc_indexed_bases = [i for i in FindSymbols('indexedbases').visit(iet) if isinstance(i.function, PETScArray)]
+    petsc_indexed_bases = [i for i in FindSymbols('indexedbases').visit(iet)
+                           if isinstance(i.function, PETScArray)]
     avoid = FindSymbols('dimensions|writes').visit(iet)
-    usr_ctx = [data.function for data in basics if data not in avoid+petsc_indexed_bases]
-    # usr_ctx = [i for i in usr_ctx if not isinstance(i.function, PETScArray)]
-    # from IPython import embed; embed()
-    return CCompositeObject(name=name, fields=usr_ctx, npthreads=4, liveness=liveness)
+    fields = [data.function for data in basics if data not in avoid+petsc_indexed_bases]
+    return CCompositeObject(name=name, pname='MatContext',
+                            fields=fields, liveness=liveness)
 
 
 Null = Macro('NULL')

@@ -30,7 +30,7 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tup
                           flatten, filter_sorted, frozendict, is_integer,
                           split, timed_pass, timed_region, contains_val)
 from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
-                          disk_layer, CompositeObject)
+                          disk_layer)
 from devito.petsc.iet.passes import lower_petsc, sort_frees
 from devito.petsc.clusters import petsc_lift
 
@@ -524,7 +524,7 @@ class Operator(Callable):
         # ret.update(d for d in dimensions if d.is_PerfKnob)
         # from IPython import embed; embed()
         ret.update(d for d in dimensions)
-   
+
         ret = tuple(sorted(ret, key=attrgetter('name')))
 
         return ret
