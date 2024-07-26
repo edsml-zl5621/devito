@@ -136,15 +136,12 @@ class CompositeObject(Object):
 
     def __init__(self, name, pname, pfields, value=None):
         dtype = CtypesFactory.generate(pname, pfields)
-        # self._dtype = dtype
         value = self.__value_setup__(dtype, value)
         super().__init__(name, dtype, value)
-        # self.dtype = POINTER(dtype)
+        self._pname = pname
 
     def __value_setup__(self, dtype, value):
-        # from IPython import embed; embed()
         return value or byref(dtype._type_())
-        # return value
 
     @property
     def pfields(self):
@@ -152,15 +149,11 @@ class CompositeObject(Object):
 
     @property
     def pname(self):
-        return self.dtype._type_.__name__
+        return self._pname
 
     @property
     def fields(self):
         return [i for i, _ in self.pfields]
-    
-    # @property
-    # def dtype(self):
-    #     return POINTER(self.dtype)
 
 
 class LocalObject(AbstractObject, LocalType):
@@ -243,27 +236,17 @@ class LocalObject(AbstractObject, LocalType):
         """
         return None
 
-    _C_modifier = None
     """
     A modifier added to the LocalObject's C declaration when the object appears
     in a function signature. For example, a subclass might define `_C_modifier = '&'`
     to impose pass-by-reference semantics.
     """
 
-    # @property
-    # def _mem_internal_eager(self):
-    #     return self._liveness == 'eager'
-
-    # @property
-    # def _mem_internal_lazy(self):
-    #     return self._liveness == 'lazy'
-
     @property
     def _mem_global(self):
         return self._is_global
 
     
-
 class CCompositeObject(CompositeObject, LocalType):
     
     __rargs__ = ('name', 'pname', 'pfields')
@@ -272,6 +255,10 @@ class CCompositeObject(CompositeObject, LocalType):
         super().__init__(name, pname, pfields)
         assert liveness in ['eager', 'lazy']
         self._liveness = liveness
+
+    @property
+    def dtype(self):
+        return self._dtype._type_
 
 
 class PETScStruct(CCompositeObject):
@@ -282,58 +269,14 @@ class PETScStruct(CCompositeObject):
         pfields = [(i._C_name, i._C_ctype) for i in fields]
         super().__init__(name, pname, pfields, liveness)
         self._fields = fields
-        # from IPython import embed; embed()
-        # self.dtype = POINTER(dtype)
 
     @property
     def fields(self):
         return self._fields
     
     @property
-    def dtype(self):
-        # from IPython import embed; embed()
-        return self._dtype._type_
+    def _C_ctype(self):
+        return POINTER(self.dtype) if self.liveness == \
+            'eager' else self.dtype
 
-    @property
-    def pname(self):
-        return self.dtype.__name__
-    
     _C_modifier = ' *'
-
-
-
-# class CCompositeObject(LocalObject):
-
-#     """
-#     Represents a struct defined in C.
-#     """
-
-#     __rargs__ = ('name', 'pname', 'fields')
-#     __rkwargs__ = ('liveness',)
-
-#     def __init__(self, name, pname, fields, liveness='lazy'):
-#         pfields = [(i._C_name, i._C_ctype) for i in fields]
-#         self.__class__.dtype = type(pname, (Structure,), {'_fields_': pfields})
-#         super().__init__(name, cargs=None, initvalue=None, liveness=liveness)
-#         self._pfields = pfields
-#         self._fields = fields
-#         self._pname = pname
-
-#     @property
-#     def pfields(self):
-#         return self._pfields
-
-#     @property
-#     def fields(self):
-#         return self._fields
-
-#     @property
-#     def pname(self):
-#         return self._pname
-
-#     @property
-#     def _C_ctype(self):
-#         return POINTER(self.dtype) if self.liveness == \
-#             'eager' else self.dtype
-
-#     _C_modifier = ' *'
