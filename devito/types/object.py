@@ -5,8 +5,9 @@ import sympy
 from devito.tools import Pickable, as_tuple, sympy_mutex
 from devito.types.args import ArgProvider
 from devito.types.caching import Uncached
-from devito.types.basic import Basic
+from devito.types.basic import Basic, LocalType
 from devito.types.utils import CtypesFactory
+
 
 __all__ = ['Object', 'LocalObject', 'CompositeObject']
 
@@ -155,7 +156,7 @@ class CompositeObject(Object):
         return [i for i, _ in self.pfields]
 
 
-class LocalObject(AbstractObject):
+class LocalObject(AbstractObject, LocalType):
 
     """
     Object with derived type defined inside an Operator.
@@ -192,10 +193,6 @@ class LocalObject(AbstractObject):
         return (super()._hashable_content() +
                 self.cargs +
                 (self.initvalue, self.liveness, self.is_global))
-
-    @property
-    def liveness(self):
-        return self._liveness
 
     @property
     def is_global(self):
@@ -241,14 +238,6 @@ class LocalObject(AbstractObject):
     in a function signature. For example, a subclass might define `_C_modifier = '&'`
     to impose pass-by-reference semantics.
     """
-
-    @property
-    def _mem_internal_eager(self):
-        return self._liveness == 'eager'
-
-    @property
-    def _mem_internal_lazy(self):
-        return self._liveness == 'lazy'
 
     @property
     def _mem_global(self):

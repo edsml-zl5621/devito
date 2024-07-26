@@ -262,6 +262,7 @@ class Basic(CodeSymbol):
     is_Bundle = False
     is_Object = False
     is_LocalObject = False
+    is_LocalType = False
 
     # Created by the user
     is_Input = False
@@ -1440,6 +1441,23 @@ class AbstractFunction(sympy.Function, Basic, Pickable, Evaluable):
             kwargs.pop('function')
 
         return args, kwargs
+
+
+class LocalType(Basic):
+
+    is_LocalType = True
+
+    @property
+    def liveness(self):
+        return self._liveness
+
+    @property
+    def _mem_internal_eager(self):
+        return self._liveness == 'eager'
+
+    @property
+    def _mem_internal_lazy(self):
+        return self._liveness == 'lazy'
 
 
 # Extended SymPy hierarchy follows, for essentially two reasons:
