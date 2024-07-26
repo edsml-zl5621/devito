@@ -8,7 +8,7 @@ from devito.types.basic import Basic, LocalType
 from devito.types.utils import CtypesFactory
 
 
-__all__ = ['Object', 'LocalObject', 'CompositeObject', 'CCompositeObject']
+__all__ = ['Object', 'LocalObject', 'CompositeObject', 'CCompositeObject', 'PETScStruct']
 
 
 class AbstractObject(Basic, sympy.Basic, Pickable):
@@ -136,11 +136,15 @@ class CompositeObject(Object):
 
     def __init__(self, name, pname, pfields, value=None):
         dtype = CtypesFactory.generate(pname, pfields)
+        # self._dtype = dtype
         value = self.__value_setup__(dtype, value)
         super().__init__(name, dtype, value)
+        # self.dtype = POINTER(dtype)
 
     def __value_setup__(self, dtype, value):
+        # from IPython import embed; embed()
         return value or byref(dtype._type_())
+        # return value
 
     @property
     def pfields(self):
@@ -153,6 +157,10 @@ class CompositeObject(Object):
     @property
     def fields(self):
         return [i for i, _ in self.pfields]
+    
+    # @property
+    # def dtype(self):
+    #     return POINTER(self.dtype)
 
 
 class LocalObject(AbstractObject, LocalType):
@@ -258,20 +266,40 @@ class LocalObject(AbstractObject, LocalType):
 
 class CCompositeObject(CompositeObject, LocalType):
     
+    __rargs__ = ('name', 'pname', 'pfields')
+
+    def __init__(self, name, pname, pfields, liveness='lazy'):
+        super().__init__(name, pname, pfields)
+        assert liveness in ['eager', 'lazy']
+        self._liveness = liveness
+
+
+class PETScStruct(CCompositeObject):
+
     __rargs__ = ('name', 'pname', 'fields')
 
     def __init__(self, name, pname, fields, liveness='lazy'):
         pfields = [(i._C_name, i._C_ctype) for i in fields]
-        # from IPython import embed; embed()
-        super().__init__(name, pname, pfields)
-        # from IPython import embed; embed()
-        assert liveness in ['eager', 'lazy']
-        self._liveness = liveness
+        super().__init__(name, pname, pfields, liveness)
         self._fields = fields
+        # from IPython import embed; embed()
+        # self.dtype = POINTER(dtype)
 
     @property
     def fields(self):
         return self._fields
+    
+    @property
+    def dtype(self):
+        # from IPython import embed; embed()
+        return self._dtype._type_
+
+    @property
+    def pname(self):
+        return self.dtype.__name__
+    
+    _C_modifier = ' *'
+
 
 
 # class CCompositeObject(LocalObject):

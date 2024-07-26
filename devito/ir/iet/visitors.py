@@ -651,7 +651,7 @@ class CGen(Visitor):
         if mode == 'all':
             xfilter1 = xfilter0
         else:
-            public_types = (AbstractFunction, CompositeObject, CCompositeObject)
+            public_types = (AbstractFunction, CompositeObject)
             if mode == 'public':
                 xfilter1 = lambda i: xfilter0(i) and isinstance(i, public_types)
             else:
