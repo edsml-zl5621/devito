@@ -3,7 +3,7 @@ from collections import OrderedDict
 from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, SyncSpot,
                            Section, HaloSpot, ExpressionBundle)
 from devito.tools import timed_pass
-from devito.petsc.types.types import LinearSolveExpr
+from devito.petsc.types import LinearSolveExpr
 from devito.petsc.iet.nodes import petsc_iet_mapper
 
 __all__ = ['iet_build']
