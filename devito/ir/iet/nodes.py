@@ -1052,7 +1052,7 @@ class Dereference(ExprStmt, Node):
 
     @property
     def expr_symbols(self):
-        if self.pointer.is_LocalObject:
+        if self.pointer.is_Object:
             ret = [self.pointer._C_symbol]
         else:
             ret = [self.pointer.indexed]

@@ -44,6 +44,7 @@ class CtypesFactory:
     @classmethod
     def generate(cls, pname, pfields):
         key = (pname, tuple(pfields))
+        # from IPython import embed; embed()
         try:
             return cls.cache[key]
         except KeyError:

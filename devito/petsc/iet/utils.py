@@ -13,5 +13,7 @@ def petsc_call_mpi(specific_call, call_args):
 
 
 def petsc_struct(name, fields, liveness='lazy'):
+    # pfields = [(i._C_name, i._C_ctype) for i in fields]
+    # from IPython import embed; embed()
     return CCompositeObject(name=name, pname='MatContext',
                             fields=fields, liveness=liveness)
