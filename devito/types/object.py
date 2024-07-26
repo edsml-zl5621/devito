@@ -4,7 +4,7 @@ import sympy
 from devito.tools import Pickable, as_tuple, sympy_mutex
 from devito.types.args import ArgProvider
 from devito.types.caching import Uncached
-from devito.types.basic import Basic
+from devito.types.basic import Basic, LocalType
 from devito.types.utils import CtypesFactory
 
 
@@ -155,7 +155,7 @@ class CompositeObject(Object):
         return [i for i, _ in self.pfields]
 
 
-class LocalObject(AbstractObject):
+class LocalObject(AbstractObject, LocalType):
 
     """
     Object with derived type defined inside an Operator.
@@ -193,9 +193,9 @@ class LocalObject(AbstractObject):
                 self.cargs +
                 (self.initvalue, self.liveness, self.is_global))
 
-    @property
-    def liveness(self):
-        return self._liveness
+    # @property
+    # def liveness(self):
+    #     return self._liveness
 
     @property
     def is_global(self):
@@ -242,51 +242,70 @@ class LocalObject(AbstractObject):
     to impose pass-by-reference semantics.
     """
 
-    @property
-    def _mem_internal_eager(self):
-        return self._liveness == 'eager'
+    # @property
+    # def _mem_internal_eager(self):
+    #     return self._liveness == 'eager'
 
-    @property
-    def _mem_internal_lazy(self):
-        return self._liveness == 'lazy'
+    # @property
+    # def _mem_internal_lazy(self):
+    #     return self._liveness == 'lazy'
 
     @property
     def _mem_global(self):
         return self._is_global
 
+    
 
-class CCompositeObject(LocalObject):
-
-    """
-    Represents a struct defined in C.
-    """
-
+class CCompositeObject(CompositeObject, LocalType):
+    
     __rargs__ = ('name', 'pname', 'fields')
-    __rkwargs__ = ('liveness',)
 
     def __init__(self, name, pname, fields, liveness='lazy'):
         pfields = [(i._C_name, i._C_ctype) for i in fields]
-        self.__class__.dtype = type(pname, (Structure,), {'_fields_': pfields})
-        super().__init__(name, cargs=None, initvalue=None, liveness=liveness)
-        self._pfields = pfields
+        # from IPython import embed; embed()
+        super().__init__(name, pname, pfields)
+        # from IPython import embed; embed()
+        assert liveness in ['eager', 'lazy']
+        self._liveness = liveness
         self._fields = fields
-        self._pname = pname
-
-    @property
-    def pfields(self):
-        return self._pfields
 
     @property
     def fields(self):
         return self._fields
 
-    @property
-    def pname(self):
-        return self._pname
 
-    @property
-    def _C_ctype(self):
-        return POINTER(self.dtype) if self.liveness == \
-            'eager' else self.dtype
+# class CCompositeObject(LocalObject):
 
-    _C_modifier = ' *'
+#     """
+#     Represents a struct defined in C.
+#     """
+
+#     __rargs__ = ('name', 'pname', 'fields')
+#     __rkwargs__ = ('liveness',)
+
+#     def __init__(self, name, pname, fields, liveness='lazy'):
+#         pfields = [(i._C_name, i._C_ctype) for i in fields]
+#         self.__class__.dtype = type(pname, (Structure,), {'_fields_': pfields})
+#         super().__init__(name, cargs=None, initvalue=None, liveness=liveness)
+#         self._pfields = pfields
+#         self._fields = fields
+#         self._pname = pname
+
+#     @property
+#     def pfields(self):
+#         return self._pfields
+
+#     @property
+#     def fields(self):
+#         return self._fields
+
+#     @property
+#     def pname(self):
+#         return self._pname
+
+#     @property
+#     def _C_ctype(self):
+#         return POINTER(self.dtype) if self.liveness == \
+#             'eager' else self.dtype
+
+#     _C_modifier = ' *'
