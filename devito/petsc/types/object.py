@@ -1,5 +1,5 @@
 from devito.tools import CustomDtype
-from devito.types import LocalObject
+from devito.types import LocalObject, CCompositeObject
 from devito.symbolics import Byref
 
 from devito.petsc.iet.utils import petsc_call
@@ -117,3 +117,19 @@ class PetscErrorCode(LocalObject):
 
 class DummyArg(LocalObject):
     dtype = CustomDtype('void', modifier='*')
+
+
+# class PETScStruct(CCompositeObject):
+
+#     __rargs__ = ('name', 'pname', 'fields')
+
+#     def __init__(self, name, pname, fields, liveness='lazy'):
+#         pfields = [(i._C_name, i._C_ctype) for i in fields]
+#         super().__init__(name, pname, pfields, liveness)
+#         self._fields = fields
+
+#     @property
+#     def fields(self):
+#         return self._fields
+
+
