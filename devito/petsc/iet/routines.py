@@ -5,12 +5,11 @@ import cgen as c
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference)
 from devito.symbolics import Byref, FieldFromPointer, Macro
-from devito.types import CCompositeObject
 from devito.types.basic import AbstractFunction
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
-from devito.petsc.iet.utils import petsc_call
+from devito.petsc.iet.utils import petsc_call, petsc_struct
 
 
 class PETScCallbackBuilder:
@@ -162,6 +161,7 @@ class PETScCallbackBuilder:
             dm_get_local_info
         )
 
+        # Dereference function data in struct
         dereference_funcs = [Dereference(i, struct) for i in
                              struct.fields if isinstance(i.function, AbstractFunction)]
 
@@ -171,7 +171,7 @@ class PETScCallbackBuilder:
             stacks=stacks+tuple(dereference_funcs),
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
-        # Replace data with pointer to data in struct
+        # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         matvec_body = Uxreplace(subs).visit(matvec_body)
 
@@ -273,6 +273,7 @@ class PETScCallbackBuilder:
             dm_get_local_info
         )
 
+        # Dereference function data in struct
         dereference_funcs = [Dereference(i, struct) for i in
                              struct.fields if isinstance(i.function, AbstractFunction)]
 
@@ -282,7 +283,7 @@ class PETScCallbackBuilder:
             stacks=stacks+tuple(dereference_funcs),
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
-        # Replace data with pointer to data in struct
+        # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         formfunc_body = Uxreplace(subs).visit(formfunc_body)
 
@@ -344,6 +345,7 @@ class PETScCallbackBuilder:
             dm_get_local_info
         )
 
+        # Dereference function data in struct
         dereference_funcs = [Dereference(i, struct) for i in
                              struct.fields if isinstance(i.function, AbstractFunction)]
 
@@ -353,7 +355,7 @@ class PETScCallbackBuilder:
             stacks=stacks+tuple(dereference_funcs),
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
 
-        # Replace data with pointer to data in struct
+        # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
                 i in struct.fields if not isinstance(i.function, AbstractFunction)}
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
@@ -399,12 +401,11 @@ class PETScCallbackBuilder:
 def build_petsc_struct(iet, name, liveness):
     # Place all context data required by the shell routines into a struct
     basics = FindSymbols('basics').visit(iet)
-    petsc_indexed_bases = [i for i in FindSymbols('indexedbases').visit(iet)
-                           if isinstance(i.function, PETScArray)]
-    avoid = FindSymbols('dimensions|writes').visit(iet)
-    fields = [data.function for data in basics if data not in avoid+petsc_indexed_bases]
-    return CCompositeObject(name=name, pname='MatContext',
-                            fields=fields, liveness=liveness)
+    avoid0 = [i for i in FindSymbols('indexedbases').visit(iet)
+              if isinstance(i.function, PETScArray)]
+    avoid1 = FindSymbols('dimensions|writes').visit(iet)
+    fields = [data.function for data in basics if data not in avoid0+avoid1]
+    return petsc_struct(name, fields, liveness)
 
 
 Null = Macro('NULL')

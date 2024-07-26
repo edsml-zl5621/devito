@@ -1032,8 +1032,8 @@ class Dereference(ExprStmt, Node):
     The following cases are supported:
 
         * `pointer` is a PointerArray or TempFunction, and `pointee` is an Array.
-        * `pointer` is an ArrayObject representing a pointer to a C struct, and
-          `pointee` is a field in `pointer`.
+        * `pointer` is an ArrayObject or CCompositeObject representing a pointer
+           to a C struct, and `pointee` is a field in `pointer`.
     """
 
     is_Dereference = True
@@ -1052,10 +1052,10 @@ class Dereference(ExprStmt, Node):
 
     @property
     def expr_symbols(self):
-        try:
+        if self.pointer.is_LocalObject:
+            ret = [self.pointer._C_symbol]
+        else:
             ret = [self.pointer.indexed]
-        except AttributeError:
-            ret = [self.pointer]
         if self.pointer.is_PointerArray or self.pointer.is_TempFunction:
             ret.append(self.pointee.indexed)
             ret.extend(flatten(i.free_symbols for i in self.pointee.symbolic_shape[1:]))
