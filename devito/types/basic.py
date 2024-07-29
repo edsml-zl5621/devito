@@ -1459,7 +1459,7 @@ class LocalType(Basic):
     @property
     def _mem_internal_lazy(self):
         return self._liveness == 'lazy'
-    
+
     _C_modifier = None
 
 

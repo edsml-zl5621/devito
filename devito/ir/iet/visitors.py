@@ -24,7 +24,7 @@ from devito.tools import (GenericVisitor, as_tuple, ctypes_to_cstr, filter_order
                           c_restrict_void_p, sorted_priority)
 from devito.types.basic import AbstractFunction, Basic
 from devito.types import (ArrayObject, CompositeObject, Dimension, Pointer,
-                          IndexedData, DeviceMap, CCompositeObject)
+                          IndexedData, DeviceMap)
 
 
 __all__ = ['FindApplications', 'FindNodes', 'FindSections', 'FindSymbols',
