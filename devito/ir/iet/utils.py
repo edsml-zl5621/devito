@@ -120,7 +120,7 @@ def derive_parameters(iet, drop_locals=False, ordering='default'):
     # Drop (to be) locally declared objects as well as global objects
     parameters = [p for p in parameters
                   if not (p._mem_internal_eager or p._mem_constant)]
-    # from IPython import embed; embed()
+
     # Maybe filter out all other compiler-generated objects
     if drop_locals:
         parameters = [p for p in parameters if not p.is_LocalType]

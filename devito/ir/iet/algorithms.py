@@ -4,7 +4,7 @@ from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, 
                            Section, HaloSpot, ExpressionBundle)
 from devito.tools import timed_pass
 from devito.petsc.types import LinearSolveExpr
-from devito.petsc.iet.nodes import petsc_iet_mapper
+from devito.petsc.iet.utils import petsc_iet_mapper
 
 __all__ = ['iet_build']
 
@@ -24,7 +24,6 @@ def iet_build(stree):
         elif i.is_Exprs:
             exprs = []
             for e in i.exprs:
-                # from IPython import embed; embed()
                 if e.is_Increment:
                     exprs.append(Increment(e))
                 elif isinstance(e.rhs, LinearSolveExpr):

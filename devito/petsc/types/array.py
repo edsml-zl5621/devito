@@ -10,7 +10,7 @@ from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import dtype_to_ctype
 from devito.symbolics import FieldFromComposite
 
-from devito.petsc.types.object import DM
+from .object import DM
 
 
 class PETScArray(ArrayBasic, Differentiable):

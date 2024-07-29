@@ -607,7 +607,7 @@ def update_args(root, efuncs, dag):
     # The parameters/arguments lists may have changed since a pass may have:
     # 1) introduced a new symbol
     new_params = derive_parameters(root, True)
-    # from IPython import embed; embed()
+
     # 2) defined a symbol for which no definition was available yet (e.g.
     # via a malloc, or a Dereference)
     defines = FindSymbols('defines').visit(root.body)
@@ -627,7 +627,7 @@ def update_args(root, efuncs, dag):
     # Must record the index, not the param itself, since a param may be
     # bound to whatever arg, possibly a generic SymPy expr
     drop_params = [root.parameters.index(a) for a in drop_params]
-    # from IPython import embed; embed()
+
     if not (new_params or drop_params):
         return efuncs
 

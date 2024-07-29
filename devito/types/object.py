@@ -1,4 +1,4 @@
-from ctypes import byref, Structure, POINTER
+from ctypes import byref
 import sympy
 
 from devito.tools import Pickable, as_tuple, sympy_mutex
@@ -8,7 +8,7 @@ from devito.types.basic import Basic, LocalType
 from devito.types.utils import CtypesFactory
 
 
-__all__ = ['Object', 'LocalObject', 'CompositeObject', 'CCompositeObject', 'PETScStruct']
+__all__ = ['Object', 'LocalObject', 'CompositeObject', 'CCompositeObject']
 
 
 class AbstractObject(Basic, sympy.Basic, Pickable):
@@ -194,10 +194,6 @@ class LocalObject(AbstractObject, LocalType):
                 self.cargs +
                 (self.initvalue, self.liveness, self.is_global))
 
-    # @property
-    # def liveness(self):
-    #     return self._liveness
-
     @property
     def is_global(self):
         return self._is_global
@@ -236,19 +232,17 @@ class LocalObject(AbstractObject, LocalType):
         """
         return None
 
-    """
-    A modifier added to the LocalObject's C declaration when the object appears
-    in a function signature. For example, a subclass might define `_C_modifier = '&'`
-    to impose pass-by-reference semantics.
-    """
-
     @property
     def _mem_global(self):
         return self._is_global
 
-    
+
 class CCompositeObject(CompositeObject, LocalType):
-    
+
+    """
+    Object with composite type (e.g., a C struct) defined in C.
+    """
+
     __rargs__ = ('name', 'pname', 'pfields')
 
     def __init__(self, name, pname, pfields, liveness='lazy'):
@@ -259,24 +253,3 @@ class CCompositeObject(CompositeObject, LocalType):
     @property
     def dtype(self):
         return self._dtype._type_
-
-
-class PETScStruct(CCompositeObject):
-
-    __rargs__ = ('name', 'pname', 'fields')
-
-    def __init__(self, name, pname, fields, liveness='lazy'):
-        pfields = [(i._C_name, i._C_ctype) for i in fields]
-        super().__init__(name, pname, pfields, liveness)
-        self._fields = fields
-
-    @property
-    def fields(self):
-        return self._fields
-    
-    @property
-    def _C_ctype(self):
-        return POINTER(self.dtype) if self.liveness == \
-            'eager' else self.dtype
-
-    _C_modifier = ' *'

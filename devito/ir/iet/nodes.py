@@ -751,6 +751,11 @@ class Callable(Node):
 
 
 class FixedArgsCallable(Callable):
+
+    """
+    A Callable class that enforces a fixed function signature.
+    """
+
     pass
 
 
@@ -1052,6 +1057,8 @@ class Dereference(ExprStmt, Node):
 
     @property
     def expr_symbols(self):
+        # TODO: Erick made a similar edit for NoDeclStruct so once merged,
+        # adjust accordingly
         if self.pointer.is_Object:
             ret = [self.pointer._C_symbol]
         else:
