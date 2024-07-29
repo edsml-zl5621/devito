@@ -197,7 +197,7 @@ class Operator(Callable):
 
         # Lower the input expressions into an IET
         irs, byproduct = cls._lower(expressions, profiler=profiler, **kwargs)
-        # from IPython import embed; embed()
+
         # Make it an actual Operator
         op = Callable.__new__(cls, **irs.iet.args)
         Callable.__init__(op, **op.args)
@@ -280,7 +280,7 @@ class Operator(Callable):
 
         # unbounded IET -> IET
         iet, byproduct = cls._lower_iet(uiet, **kwargs)
-        # from IPython import embed; embed()
+
         return IRs(expressions, clusters, stree, uiet, iet), byproduct
 
     @classmethod
@@ -496,7 +496,7 @@ class Operator(Callable):
 
         # If necessary, sort frees into a specific order
         sort_frees(graph)
-        # from IPython import embed; embed()
+
         return graph.root, graph
 
     # Read-only properties exposed to the outside world

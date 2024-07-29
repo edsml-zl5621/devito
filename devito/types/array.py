@@ -58,18 +58,6 @@ class ArrayBasic(AbstractFunction, LocalType):
     def is_const(self):
         return self._is_const
 
-    # @property
-    # def liveness(self):
-    #     return self._liveness
-
-    # @property
-    # def _mem_internal_eager(self):
-    #     return self._liveness == 'eager'
-
-    # @property
-    # def _mem_internal_lazy(self):
-    #     return self._liveness == 'lazy'
-
 
 class Array(ArrayBasic):
 
