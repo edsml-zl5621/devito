@@ -211,9 +211,6 @@ class CodePrinter(C99CodePrinter):
     def _print_Differentiable(self, expr):
         return "(%s)" % self._print(expr._expr)
 
-    def _print_PETScRHS(self, expr):
-        return "%s" % self._print(expr._expr)
-
     _print_EvalDerivative = C99CodePrinter._print_Add
 
     def _print_CallFromPointer(self, expr):
