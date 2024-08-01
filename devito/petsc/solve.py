@@ -7,7 +7,6 @@ from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.symbolics import uxreplace
 from devito.petsc.types import PETScArray, LinearSolveExpr, MatVecEq, RHSEq
 
 __all__ = ['PETScSolve']
@@ -35,7 +34,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Current assumption is that problem is linear and user has not provided
     # a jacobian. Hence, we can use F_target to form the jac-vec product
     matvecaction = MatVecEq(
-        y_matvec, LinearSolveExpr(uxreplace(F_target, {new_target: x_matvec}),
+        y_matvec, LinearSolveExpr(F_target.subs(target, x_matvec),
                                   target=target, solver_parameters=solver_parameters),
         subdomain=eq.subdomain)
 
