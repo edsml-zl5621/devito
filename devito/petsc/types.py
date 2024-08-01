@@ -233,64 +233,6 @@ class RHSEq(Eq):
     pass
 
 
-class MockEq(Eq):
-    """
-    Represents a mock/placeholder equation to ensure distinct iteration loops.
-
-    For example, the mat-vec action iteration loop is to be isolated from the
-    expression loop used to build the RHS of the linear system. This separation
-    facilitates the utilisation of the mat-vec iteration loop in callback functions
-    created at the IET level.
-    """
-    pass
-
-
-def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
-    # TODO: Add check for time dimensions and utilise implicit dimensions.
-
-    is_time_dep = any(dim.is_Time for dim in target.dimensions)
-    # TODO: Current assumption is rhs is part of pde that remains
-    # constant at each timestep. Need to insert function to extract this from eq.
-    y_matvec, x_matvec, b_tmp = [
-        PETScArray(name=f'{prefix}_{target.name}',
-                   dtype=target.dtype,
-                   dimensions=target.space_dimensions,
-                   shape=target.grid.shape,
-                   liveness='eager',
-                   halo=target.halo[1:] if is_time_dep else target.halo)
-        for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
-
-    # TODO: Extend to rearrange equation for implicit time stepping.
-    matvecaction = MatVecEq(y_matvec, LinearSolveExpr(eq.lhs.subs(target, x_matvec),
-                            target=target, solver_parameters=solver_parameters),
-                            subdomain=eq.subdomain)
-
-    # Part of pde that remains constant at each timestep
-    rhs = RHSEq(b_tmp, LinearSolveExpr(eq.rhs, target=target,
-                solver_parameters=solver_parameters), subdomain=eq.subdomain)
-
-    if not bcs:
-        return [matvecaction, rhs]
-
-    bcs_for_matvec = []
-    for bc in bcs:
-        # TODO: Insert code to distiguish between essential and natural
-        # boundary conditions since these are treated differently within
-        # the solver
-        # NOTE: May eventually remove the essential bcs from the solve
-        # (and move to rhs) but for now, they are included since this
-        # is not trivial to implement when using DMDA
-        # NOTE: Below is temporary -> Just using this as a palceholder for
-        # the actual BC implementation for the matvec callback
-        new_rhs = bc.rhs.subs(target, x_matvec)
-        bc_rhs = LinearSolveExpr(
-            new_rhs, target=target, solver_parameters=solver_parameters
-        )
-        bcs_for_matvec.append(MatVecEq(y_matvec, bc_rhs, subdomain=bc.subdomain))
-
-    return [matvecaction] + bcs_for_matvec + [rhs]
-
-
 class LinearSolveExpr(sympy.Function, Reconstructable):
 
     __rargs__ = ('expr',)
@@ -343,24 +285,6 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         return self._solver_parameters
 
     func = Reconstructable._rebuild
-
-
-def petsc_lift(clusters):
-    """
-    Lift the iteration space associated with each PETSc equation.
-    TODO: Potentially only need to lift the PETSc equations required
-    by the callback functions.
-    """
-    processed = []
-    for c in clusters:
-
-        ispace = c.ispace
-        if isinstance(c.exprs[0].rhs, LinearSolveExpr):
-            ispace = c.ispace.lift(c.exprs[0].rhs.target.dimensions)
-
-        processed.append(c.rebuild(ispace=ispace))
-
-    return processed
 
 
 class PETScStruct(CompositeObject):
