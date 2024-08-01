@@ -7,7 +7,6 @@ from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.symbolics import uxreplace
 from devito.petsc.types import PETScArray, LinearSolveExpr, MatVecEq, RHSEq
 
 __all__ = ['PETScSolve']
