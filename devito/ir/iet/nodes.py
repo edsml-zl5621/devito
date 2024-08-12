@@ -751,6 +751,11 @@ class Callable(Node):
 
 
 class FixedArgsCallable(Callable):
+
+    """
+    A Callable class that enforces a fixed function signature.
+    """
+
     pass
 
 
