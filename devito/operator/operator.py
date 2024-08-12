@@ -424,7 +424,6 @@ class Operator(Callable):
             * Derive sections for performance profiling
         """
         # Build a ScheduleTree from a sequence of Clusters
-
         stree = stree_build(clusters, **kwargs)
 
         stree = cls._specialize_stree(stree)
