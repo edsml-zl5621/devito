@@ -18,7 +18,7 @@ from devito.types import (Array, CustomDimension, Symbol as dSymbol, Scalar,
                           PointerArray, Lock, PThreadArray, SharedData, Timer,
                           DeviceID, NPThreads, ThreadID, TempFunction, Indirection,
                           FIndexed)
-from devito.types.basic import BoundSymbol
+from devito.types.basic import BoundSymbol, AbstractSymbol
 from devito.tools import EnrichedTuple
 from devito.symbolics import (IntDiv, ListInitializer, FieldFromPointer,
                               CallFromPointer, DefFunction)
@@ -28,6 +28,22 @@ from examples.seismic import (demo_model, AcquisitionGeometry,
 
 @pytest.mark.parametrize('pickle', [pickle0, pickle1])
 class TestBasic:
+
+    def test_abstractsymbol(self, pickle):
+        s0 = AbstractSymbol('s')
+        s1 = AbstractSymbol('s', nonnegative=True, integer=False)
+
+        pkl_s0 = pickle.dumps(s0)
+        pkl_s1 = pickle.dumps(s1)
+
+        new_s0 = pickle.loads(pkl_s0)
+        new_s1 = pickle.loads(pkl_s1)
+
+        assert s0.assumptions0 == new_s0.assumptions0
+        assert s1.assumptions0 == new_s1.assumptions0
+
+        assert s0 == new_s0
+        assert s1 == new_s1
 
     def test_constant(self, pickle):
         c = Constant(name='c')
@@ -864,7 +880,8 @@ class TestOperator:
         assert np.isclose(np.linalg.norm(ricker.data), np.linalg.norm(new_ricker.data))
         # FIXME: fails randomly when using data.flatten() AND numpy is using MKL
 
-    def test_usave_sampled(self, pickle):
+    @pytest.mark.parametrize('subs', [False, True])
+    def test_usave_sampled(self, pickle, subs):
         grid = Grid(shape=(10, 10, 10))
         u = TimeFunction(name="u", grid=grid, time_order=2, space_order=8)
 
@@ -884,7 +901,9 @@ class TestOperator:
 
         eqn = [stencil] + src_term
         eqn += [Eq(u0_save, u)]
-        op_fwd = Operator(eqn)
+
+        subs = grid.spacing_map if subs else {}
+        op_fwd = Operator(eqn, subs=subs)
 
         tmp_pickle_op_fn = "tmp_operator.pickle"
         pickle.dump(op_fwd, open(tmp_pickle_op_fn, "wb"))
