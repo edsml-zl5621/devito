@@ -485,7 +485,7 @@ def test_petsc_struct():
 
 
 @skipif('petsc')
-@pytest.mark.parallel(mode=1)
+@pytest.mark.parallel(mode=[2, 4, 8])
 def test_apply(mode):
 
     grid = Grid(shape=(13, 13), dtype=np.float64)
@@ -499,7 +499,7 @@ def test_apply(mode):
     petsc = PETScSolve(eqn, pn)
 
     # Build the op
-    with switchconfig(openmp=False):
+    with switchconfig(openmp=False, mpi=True):
         op = Operator(petsc)
 
     # Check the Operator runs without errors. Not verifying output for

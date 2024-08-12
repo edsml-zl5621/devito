@@ -87,12 +87,15 @@ def lower_petsc(iet, **kwargs):
 
     iet = Transformer(subs).visit(iet)
 
+    body = core+tuple(setup)+(BlankLine,)+iet.body.body
     body = iet.body._rebuild(
-        init=init, body=core+tuple(setup)+(BlankLine,)+iet.body.body
+        init=init, body=body,
+        frees=(c.Line("PetscCall(PetscFinalize());"),)
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
-    metadata.update({'efuncs': tuple(builder.efuncs.values())+(struct_callback,)})
+    efuncs = tuple(builder.efuncs.values())+(struct_callback,)
+    metadata.update({'efuncs': efuncs})
 
     return iet, metadata
 
