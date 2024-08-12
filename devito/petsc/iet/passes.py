@@ -88,7 +88,8 @@ def lower_petsc(iet, **kwargs):
     iet = Transformer(subs).visit(iet)
 
     body = iet.body._rebuild(
-        init=init, body=core+tuple(setup)+(BlankLine,)+iet.body.body
+        init=init, body=core+tuple(setup)+(BlankLine,)+iet.body.body,
+        frees=(c.Line("PetscCall(PetscFinalize());"),)
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
