@@ -8,16 +8,16 @@ from devito.ir.iet import (FindNodes, Transformer,
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.tools import filter_ordered
 from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec,
-                                GlobalVec, KSP, PC, SNES, PetscErrorCode, DummyArg)
+                                GlobalVec, KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
-from devito.petsc.iet.utils import petsc_call, petsc_call_mpi, petsc_struct
+from devito.petsc.iet.utils import petsc_call, petsc_call_mpi, petsc_struct, spatial_iteration_loops
 
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
-
+    # from IPython import embed; embed()
     # Check if PETScSolve was used
     petsc_nodes = FindNodes(InjectSolveDummy).visit(iet)
 
@@ -35,10 +35,7 @@ def lower_petsc(iet, **kwargs):
 
     # Create injectsolve mapper from the spatial iteration loops
     # (exclude time loop if present)
-    spatial_body = []
-    for tree in retrieve_iteration_tree(iet):
-        root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
-        spatial_body.append(root)
+    spatial_body = spatial_iteration_loops(iet)
     injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
                                   'groupby').visit(List(body=spatial_body))
 
@@ -127,7 +124,8 @@ def build_core_objects(target, **kwargs):
         'size': PetscMPIInt(name='size'),
         'comm': communicator,
         'err': PetscErrorCode(name='err'),
-        'grid': target.grid
+        'grid': target.grid,
+        'local_size': PetscInt(name='local_size')
     }
 
 
@@ -223,8 +221,8 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
     global_x = petsc_call('DMCreateGlobalVector',
                           [dmda, Byref(solver_objs['x_global'])])
 
-    local_x = petsc_call('DMCreateLocalVector',
-                         [dmda, Byref(solver_objs['x_local'])])
+    # local_x = petsc_call('DMCreateLocalVector',
+    #                      [dmda, Byref(solver_objs['x_local'])])
 
     global_b = petsc_call('DMCreateGlobalVector',
                           [dmda, Byref(solver_objs['b_global'])])
@@ -235,10 +233,10 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
     snes_get_ksp = petsc_call('SNESGetKSP',
                               [solver_objs['snes'], Byref(solver_objs['ksp'])])
 
-    vec_replace_array = petsc_call(
-        'VecReplaceArray', [solver_objs['x_local'],
-                            FieldFromPointer(target._C_field_data, target._C_symbol)]
-    )
+    # vec_replace_array = petsc_call(
+    #     'VecReplaceArray', [solver_objs['x_local'],
+    #                         FieldFromPointer(target._C_field_data, target._C_symbol)]
+    # )
 
     ksp_set_tols = petsc_call(
         'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
@@ -264,11 +262,11 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
         snes_set_jac,
         snes_set_type,
         global_x,
-        local_x,
+        # local_x,
         global_b,
         local_b,
         snes_get_ksp,
-        vec_replace_array,
+        # vec_replace_array,
         ksp_set_tols,
         ksp_set_type,
         ksp_get_pc,

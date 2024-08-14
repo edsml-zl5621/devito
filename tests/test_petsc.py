@@ -195,8 +195,6 @@ def test_petsc_cast():
     arr3 = PETScArray(name='arr3', dimensions=g1.dimensions,
                       shape=g1.shape, space_order=4)
 
-    # Casts will be explictly generated and placed at specific locations in the C code,
-    # specifically after various other PETSc calls have been executed.
     cast0 = PointerCast(arr0)
     cast1 = PointerCast(arr1)
     cast2 = PointerCast(arr2)
