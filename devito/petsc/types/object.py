@@ -67,6 +67,14 @@ class PetscMPIInt(LocalObject):
     dtype = CustomDtype('PetscMPIInt')
 
 
+class PetscInt(LocalObject):
+    """
+    PETSc datatype used to represent `int` parameters
+    to PETSc functions.
+    """
+    dtype = CustomDtype('PetscInt')
+
+
 class KSP(LocalObject):
     """
     PETSc KSP : Linear Systems Solvers.

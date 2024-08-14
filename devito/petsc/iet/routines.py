@@ -3,13 +3,15 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           Dereference)
-from devito.symbolics import Byref, FieldFromPointer, Macro
-from devito.types.basic import AbstractFunction
+                           Dereference, Callable, DummyExpr, PointerCast)
+from devito.symbolics import Byref, FieldFromPointer, Macro, Cast
+from devito.types.basic import AbstractFunction, Symbol
+from devito.types import LocalObject
+from devito.tools import ctypes_to_cstr, dtype_to_ctype, CustomDtype
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
-from devito.petsc.iet.utils import petsc_call, petsc_struct
+from devito.petsc.iet.utils import petsc_call, petsc_struct, spatial_iteration_loops
 
 
 class PETScCallbackBuilder:
@@ -300,7 +302,7 @@ class PETScCallbackBuilder:
         body_formrhs = self.create_formrhs_body(injectsolve, irs_formrhs.uiet.body,
                                                 solver_objs, objs)
 
-        formrhs_callback = PETScCallable(
+        formrhs_callback = Callable(
             'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
             parameters=(
                 solver_objs['snes'], solver_objs['b_local']
@@ -336,8 +338,7 @@ class PETScCallbackBuilder:
             'VecRestoreArray', [solver_objs['b_local'], Byref(b_arr._C_symbol)]
         )
 
-        body = [body,
-                vec_restore_array]
+        body = spatial_iteration_loops(body) + [vec_restore_array]
 
         stacks = (
             snes_get_dm,
@@ -373,6 +374,44 @@ class PETScCallbackBuilder:
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
 
+        local_x = petsc_call('DMCreateLocalVector',
+                         [dmda, Byref(solver_objs['x_local'])])
+    
+
+        if any(i.is_Time for i in target.dimensions):
+
+            target_time = injectsolve.expr.lhs
+            target_time = [i for i, d in zip(target_time.indices, target_time.dimensions) if d.is_Time]
+            assert len(target_time) == 1
+            target_time = target_time.pop()
+
+
+            ctype_str = ctypes_to_cstr(dtype_to_ctype(target.dtype))
+
+            class BarCast(Cast):
+                _base_typ = ctype_str
+
+            class StartPtr(LocalObject):
+                dtype = CustomDtype(ctype_str, modifier=' *')
+            from sympy import Mul
+            start_ptr = StartPtr('start_ptr')
+
+            # local_size = PetscInt('local_size')
+
+            vec_get_size = petsc_call('VecGetSize', [solver_objs['x_local'], Byref(objs['local_size'])])
+
+            expr = DummyExpr(start_ptr, BarCast(FieldFromPointer(target._C_field_data, target._C_symbol), ' *') + Mul(target_time._C_symbol,objs['local_size']._C_symbol), init=True)
+
+            vec_replace_array = [vec_get_size, expr, petsc_call(
+                        'VecReplaceArray', [solver_objs['x_local'],
+                                            start_ptr]
+                    )]
+        else:
+            vec_replace_array = petsc_call(
+                'VecReplaceArray', [solver_objs['x_local'],
+                                    FieldFromPointer(target._C_field_data, target._C_symbol)]
+            )
+
         dm_local_to_global_x = petsc_call(
             'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',
                                 solver_objs['x_global']]
@@ -392,6 +431,8 @@ class PETScCallbackBuilder:
         )
 
         calls = (rhs_call,
+                 local_x,
+                 vec_replace_array,
                  dm_local_to_global_x,
                  dm_local_to_global_b,
                  snes_solve,
