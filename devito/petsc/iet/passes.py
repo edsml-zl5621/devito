@@ -3,21 +3,21 @@ import cgen as c
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Transformer,
                            MapNodes, Iteration, List, BlankLine,
-                           filter_iterations, retrieve_iteration_tree,
                            Callable, CallableBody, DummyExpr, Call)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.tools import filter_ordered
-from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec,
-                                GlobalVec, KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt)
+from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
+                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
-from devito.petsc.iet.utils import petsc_call, petsc_call_mpi, petsc_struct, spatial_iteration_loops
+from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
+                                    spatial_iteration_loops)
 
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
-    # from IPython import embed; embed()
+
     # Check if PETScSolve was used
     petsc_nodes = FindNodes(InjectSolveDummy).visit(iet)
 
@@ -125,7 +125,7 @@ def build_core_objects(target, **kwargs):
         'comm': communicator,
         'err': PetscErrorCode(name='err'),
         'grid': target.grid,
-        'local_size': PetscInt(name='local_size')
+        'localsize': PetscInt(name='localsize')
     }
 
 

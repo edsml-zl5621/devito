@@ -265,10 +265,10 @@ class Operator(Callable):
         # This may be used by a compilation pass that constructs a new
         # expression for which a partial or complete lowering is desired
         kwargs['rcompile'] = cls._rcompile_wrapper(**kwargs)
-        # from IPython import embed; embed()
+
         # [Eq] -> [LoweredEq]
         expressions = cls._lower_exprs(expressions, **kwargs)
-        # from IPython import embed; embed()
+
         # [LoweredEq] -> [Clusters]
         clusters = cls._lower_clusters(expressions, **kwargs)
 
@@ -340,10 +340,10 @@ class Operator(Callable):
 
         # A second round of specialization is performed on evaluated expressions
         expressions = cls._specialize_exprs(expressions, **kwargs)
-        # from IPython import embed; embed()
+
         # "True" lowering (indexification, shifting, ...)
         expressions = lower_exprs(expressions, **kwargs)
-        # from IPython import embed; embed()
+
         # Turn user-defined SubDimensions into concrete SubDimensions,
         # in particular uniqueness across expressions is ensured
         expressions = concretize_subdims(expressions, **kwargs)
