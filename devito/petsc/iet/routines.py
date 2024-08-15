@@ -451,7 +451,7 @@ def time_dep_replace(injectsolve, target, solver_objs, objs):
     field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
     expr = DummyExpr(
         start_ptr, BarCast(field_from_ptr, ' *') +
-        Mul(target_time._C_symbol, objs['localsize']._C_symbol), init=True
+        Mul((target_time), objs['localsize']), init=True
     )
 
     vec_replace_array = petsc_call('VecReplaceArray', [solver_objs['x_local'], start_ptr])
