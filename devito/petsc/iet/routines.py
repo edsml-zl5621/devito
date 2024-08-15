@@ -447,8 +447,7 @@ def time_dep_replace(injectsolve, target, solver_objs, objs):
         'VecGetSize', [solver_objs['x_local'], Byref(objs['localsize'])]
     )
 
-    # TODO: What is the correct way to use Mul here? Sympy complains that this method
-    # is deprecated?
+    # TODO: What is the correct way to use Mul here? Devito Mul? Sympy Mul?
     field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
     expr = DummyExpr(
         start_ptr, BarCast(field_from_ptr, ' *') +

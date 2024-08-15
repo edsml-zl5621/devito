@@ -221,9 +221,6 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
     global_x = petsc_call('DMCreateGlobalVector',
                           [dmda, Byref(solver_objs['x_global'])])
 
-    # local_x = petsc_call('DMCreateLocalVector',
-    #                      [dmda, Byref(solver_objs['x_local'])])
-
     global_b = petsc_call('DMCreateGlobalVector',
                           [dmda, Byref(solver_objs['b_global'])])
 
@@ -232,11 +229,6 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
 
     snes_get_ksp = petsc_call('SNESGetKSP',
                               [solver_objs['snes'], Byref(solver_objs['ksp'])])
-
-    # vec_replace_array = petsc_call(
-    #     'VecReplaceArray', [solver_objs['x_local'],
-    #                         FieldFromPointer(target._C_field_data, target._C_symbol)]
-    # )
 
     ksp_set_tols = petsc_call(
         'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
@@ -262,11 +254,9 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
         snes_set_jac,
         snes_set_type,
         global_x,
-        # local_x,
         global_b,
         local_b,
         snes_get_ksp,
-        # vec_replace_array,
         ksp_set_tols,
         ksp_set_type,
         ksp_get_pc,
