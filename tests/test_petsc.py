@@ -564,7 +564,6 @@ def test_start_prt():
     that the correct memory location is accessed and modified during each time step.
     """
     grid = Grid((11, 11))
-    nt = 10
     u = TimeFunction(name='u', grid=grid, space_order=2, dtype=np.float32)
     eq = Eq(u.dt, u.laplace, subdomain=grid.interior)
     petsc = PETScSolve(eq, u.forward)
@@ -572,7 +571,7 @@ def test_start_prt():
     with switchconfig(openmp=False):
         op = Operator(petsc)
     # Verify the case with modulo time stepping
-
+    
 
 
     # Verify the case without modulo time stepping
