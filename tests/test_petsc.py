@@ -551,3 +551,29 @@ def test_calls_to_callbacks():
 
     assert '(void (*)(void))MyMatShellMult_f' in ccode
     assert 'PetscCall(SNESSetFunction(snes_f,NULL,FormFunction_f,NULL));' in ccode
+
+
+def test_start_prt():
+    """
+    Verify that a pointer to the start of the memory address is correctly
+    generated for TimeFunction objects. This pointer should indicate the
+    beginning of the multidimensional array that will be overwritten at
+    the current time step.
+
+    This functionality is crucial for VecReplaceArray operations, as it ensures
+    that the correct memory location is accessed and modified during each time step.
+    """
+    grid = Grid((11, 11))
+    nt = 10
+    u = TimeFunction(name='u', grid=grid, space_order=2, dtype=np.float32)
+    eq = Eq(u.dt, u.laplace, subdomain=grid.interior)
+    petsc = PETScSolve(eq, u.forward)
+
+    with switchconfig(openmp=False):
+        op = Operator(petsc)
+    # Verify the case with modulo time stepping
+
+
+
+    # Verify the case without modulo time stepping
+

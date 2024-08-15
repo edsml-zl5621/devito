@@ -19,9 +19,10 @@ class PETScCallbackBuilder:
     """
     Build IET routines to generate PETSc callback functions.
     """
-    def __new__(cls, rcompile=None, **kwargs):
+    def __new__(cls, rcompile=None, sregistry=None, **kwargs):
         obj = object.__new__(cls)
         obj.rcompile = rcompile
+        obj.sregistry = sregistry
         obj._efuncs = OrderedDict()
         obj._struct_params = []
 
@@ -261,7 +262,7 @@ class PETScCallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
-        body = [body,
+        body = [spatial_iteration_loops(body),
                 vec_restore_array_y,
                 vec_restore_array_x,
                 dm_local_to_global_begin,
@@ -305,7 +306,7 @@ class PETScCallbackBuilder:
         body_formrhs = self.create_formrhs_body(injectsolve, irs_formrhs.uiet.body,
                                                 solver_objs, objs)
 
-        formrhs_callback = Callable(
+        formrhs_callback = PETScCallable(
             'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
             parameters=(
                 solver_objs['snes'], solver_objs['b_local']
