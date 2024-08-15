@@ -42,7 +42,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     # Placeholder equation for inserting calls to the solver
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        F_target - b, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
+        b, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
         formfuncs=[formfunction], formrhs=[rhs], arrays=arrays,
     ), subdomain=eq.subdomain)
 
@@ -72,7 +72,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
 
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        F_target - b, target=target, solver_parameters=solver_parameters,
+        b, target=target, solver_parameters=solver_parameters,
         matvecs=[matvecaction]+bcs_for_matvec,
         formfuncs=[formfunction]+bcs_for_formfunc, formrhs=[rhs],
         arrays=arrays,

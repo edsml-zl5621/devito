@@ -18,6 +18,7 @@ def petsc_struct(name, fields, liveness='lazy'):
     return PETScStruct(name=name, pname='MatContext',
                        fields=fields, liveness=liveness)
 
+
 def spatial_iteration_loops(iet):
     spatial_body = []
     for tree in retrieve_iteration_tree(iet):
