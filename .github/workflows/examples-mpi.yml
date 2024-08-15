@@ -18,6 +18,7 @@ on:
     branches:
       - master
       - enable-opt
+      - time-loop
   pull_request:
     branches:
       - master
