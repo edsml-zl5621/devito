@@ -20,6 +20,7 @@ def petsc_struct(name, fields, liveness='lazy'):
 
 
 def spatial_iteration_loops(iet):
+    # from IPython import embed; embed()
     spatial_body = []
     for tree in retrieve_iteration_tree(iet):
         root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
