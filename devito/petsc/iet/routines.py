@@ -12,7 +12,7 @@ from devito.tools import ctypes_to_cstr, dtype_to_ctype, CustomDtype
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
-from devito.petsc.iet.utils import petsc_call, petsc_struct, spatial_iteration_loops
+from devito.petsc.iet.utils import petsc_call, petsc_struct, remove_time_loop
 
 
 class PETScCallbackBuilder:
@@ -70,7 +70,7 @@ class PETScCallbackBuilder:
         # Compile matvec `eqns` into an IET via recursive compilation
         irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
                                       options={'mpi': False})
-        body_matvec = self.create_matvec_body(injectsolve, irs_matvec.uiet.body,
+        body_matvec = self.create_matvec_body(injectsolve, List(body=irs_matvec.uiet.body),
                                               solver_objs, objs)
 
         matvec_callback = PETScCallable(
@@ -147,13 +147,13 @@ class PETScCallbackBuilder:
         # The 'casts' depend on the calls, so this order is necessary. By doing this,
         # I avoid having to manually construct the 'casts' and can allow Devito to handle
         # their construction. Are there any potential issues with this approach?
-        # from IPython import embed; embed()
-        body = [spatial_iteration_loops(body),
+        body = remove_time_loop(body)
+        body = body._rebuild(body=body.body + (
                 vec_restore_array_y,
                 vec_restore_array_x,
                 dm_local_to_global_begin,
-                dm_local_to_global_end]
-
+                dm_local_to_global_end))
+        
         stacks = (
             mat_get_dm,
             dm_get_app_context,
@@ -190,7 +190,7 @@ class PETScCallbackBuilder:
         # Compile formfunc `eqns` into an IET via recursive compilation
         irs_formfunc, _ = self.rcompile(injectsolve.expr.rhs.formfuncs,
                                         options={'mpi': False})
-        body_formfunc = self.create_formfunc_body(injectsolve, irs_formfunc.uiet.body,
+        body_formfunc = self.create_formfunc_body(injectsolve, List(body=irs_formfunc.uiet.body),
                                                   solver_objs, objs)
 
         formfunc_callback = PETScCallable(
@@ -261,11 +261,17 @@ class PETScCallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
-        body = [spatial_iteration_loops(body),
-                vec_restore_array_y,
+        body = remove_time_loop(body)
+        body = body._rebuild(body=body.body + (vec_restore_array_y,
                 vec_restore_array_x,
                 dm_local_to_global_begin,
-                dm_local_to_global_end]
+                dm_local_to_global_end))
+        
+        # body = [remove_time_loop(body),
+        #         vec_restore_array_y,
+        #         vec_restore_array_x,
+        #         dm_local_to_global_begin,
+        #         dm_local_to_global_end]
 
         stacks = (
             snes_get_dm,
@@ -302,7 +308,7 @@ class PETScCallbackBuilder:
         # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
                                        options={'mpi': False})
-        body_formrhs = self.create_formrhs_body(injectsolve, irs_formrhs.uiet.body,
+        body_formrhs = self.create_formrhs_body(injectsolve, List(body=irs_formrhs.uiet.body),
                                                 solver_objs, objs)
 
         formrhs_callback = PETScCallable(
@@ -341,7 +347,9 @@ class PETScCallbackBuilder:
             'VecRestoreArray', [solver_objs['b_local'], Byref(b_arr._C_symbol)]
         )
 
-        body = spatial_iteration_loops(body) + [vec_restore_array]
+        body = remove_time_loop(body)
+        body = body._rebuild(body=body.body + (vec_restore_array,))
+        # body = remove_time_loop(body) + [vec_restore_array]
 
         stacks = (
             snes_get_dm,
