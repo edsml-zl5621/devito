@@ -7,6 +7,7 @@ from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
+from devito.symbolics import retrieve_functions
 from devito.petsc.types import LinearSolveExpr, PETScArray
 
 
@@ -40,9 +41,14 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     rhs = Eq(arrays['b_tmp'], b, subdomain=eq.subdomain)
 
+    # Passed through main kernel and removed at iet level, used to generate
+    # correct time loop etc
+    dummy = retrieve_functions(F_target - b)
+    dummy = sum(set(dummy))
+
     # Placeholder equation for inserting calls to the solver
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        b, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
+        dummy, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
         formfuncs=[formfunction], formrhs=[rhs], arrays=arrays,
     ), subdomain=eq.subdomain)
 
@@ -72,7 +78,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
 
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        b, target=target, solver_parameters=solver_parameters,
+        dummy, target=target, solver_parameters=solver_parameters,
         matvecs=[matvecaction]+bcs_for_matvec,
         formfuncs=[formfunction]+bcs_for_formfunc, formrhs=[rhs],
         arrays=arrays,
