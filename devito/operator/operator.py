@@ -347,9 +347,9 @@ class Operator(Callable):
         # Turn user-defined SubDimensions into concrete SubDimensions,
         # in particular uniqueness across expressions is ensured
         expressions = concretize_subdims(expressions, **kwargs)
-
+        # from IPython import embed; embed()
         processed = [LoweredEq(i) for i in expressions]
-
+        # from IPython import embed; embed()
         return processed
 
     # Compilation -- Cluster level

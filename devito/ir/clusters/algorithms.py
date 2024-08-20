@@ -31,11 +31,11 @@ def clusterize(exprs, **kwargs):
     """
     # Initialization
     clusters = [Cluster(e, e.ispace) for e in exprs]
-
+    # from IPython import embed; embed()
     # Setup the IterationSpaces based on data dependence analysis
     clusters = impose_total_ordering(clusters)
     clusters = Schedule().process(clusters)
-    # from IPython import embed; embed()
+
     # Handle SteppingDimensions
     clusters = Stepper(**kwargs).process(clusters)
 

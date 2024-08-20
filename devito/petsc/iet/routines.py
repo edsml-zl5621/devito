@@ -147,7 +147,7 @@ class PETScCallbackBuilder:
         # The 'casts' depend on the calls, so this order is necessary. By doing this,
         # I avoid having to manually construct the 'casts' and can allow Devito to handle
         # their construction. Are there any potential issues with this approach?
-        body = remove_time_loop(body)
+        # body = remove_time_loop(body)
         body = body._rebuild(body=body.body + (
                 vec_restore_array_y,
                 vec_restore_array_x,
@@ -261,7 +261,7 @@ class PETScCallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
-        body = remove_time_loop(body)
+        # body = remove_time_loop(body)
         body = body._rebuild(body=body.body + (vec_restore_array_y,
                 vec_restore_array_x,
                 dm_local_to_global_begin,
@@ -347,7 +347,7 @@ class PETScCallbackBuilder:
             'VecRestoreArray', [solver_objs['b_local'], Byref(b_arr._C_symbol)]
         )
 
-        body = remove_time_loop(body)
+        # body = remove_time_loop(body)
         body = body._rebuild(body=body.body + (vec_restore_array,))
         # body = remove_time_loop(body) + [vec_restore_array]
 
