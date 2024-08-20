@@ -52,6 +52,9 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         formfuncs=[formfunction], formrhs=[rhs], arrays=arrays,
     ), subdomain=eq.subdomain)
 
+
+
+
     if not bcs:
         return [inject_solve]
 
