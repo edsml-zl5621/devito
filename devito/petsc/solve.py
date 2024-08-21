@@ -8,7 +8,7 @@ from devito.types import Eq
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.petsc.types import LinearSolveExpr, PETScArray
+from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
 
 
 __all__ = ['PETScSolve']
@@ -33,13 +33,13 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     # TODO: Current assumption is that problem is linear and user has not provided
     # a jacobian. Hence, we can use F_target to form the jac-vec product
-    matvecaction = Eq(arrays['y_matvec'], F_target.subs(target, arrays['x_matvec']),
+    matvecaction = Eq(arrays['y_matvec'], CallbackExpr(F_target.subs(target, arrays['x_matvec'])),
                       subdomain=eq.subdomain)
 
-    formfunction = Eq(arrays['y_formfunc'], F_target.subs(target, arrays['x_formfunc']),
+    formfunction = Eq(arrays['y_formfunc'], CallbackExpr(F_target.subs(target, arrays['x_formfunc'])),
                       subdomain=eq.subdomain)
 
-    rhs = Eq(arrays['b_tmp'], b, subdomain=eq.subdomain)
+    rhs = Eq(arrays['b_tmp'], CallbackExpr(b), subdomain=eq.subdomain)
 
     # Passed through main kernel and removed at iet level, used to generate
     # correct time loop etc
@@ -73,17 +73,24 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         # the actual BC implementation
         centre = centre_stencil(F_target, target)
         bcs_for_matvec.append(Eq(arrays['y_matvec'],
-                                 centre.subs(target, arrays['x_matvec']),
+                                 CallbackExpr(centre.subs(target, arrays['x_matvec'])),
                                  subdomain=bc.subdomain))
         bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
-                                   0., subdomain=bc.subdomain))
+                                   CallbackExpr(0.), subdomain=bc.subdomain))
         # NOTE: Temporary
-        bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
+        bcs_for_rhs.append(Eq(arrays['b_tmp'], CallbackExpr(0.), subdomain=bc.subdomain))
+
+    # inject_solve = InjectSolveEq(target, LinearSolveExpr(
+    #     dummy, target=target, solver_parameters=solver_parameters,
+    #     matvecs=[matvecaction]+bcs_for_matvec,
+    #     formfuncs=[formfunction]+bcs_for_formfunc, formrhs=[rhs],
+    #     arrays=arrays,
+    # ), subdomain=eq.subdomain)
 
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
         dummy, target=target, solver_parameters=solver_parameters,
         matvecs=[matvecaction]+bcs_for_matvec,
-        formfuncs=[formfunction]+bcs_for_formfunc, formrhs=[rhs],
+        formfuncs=[formfunction], formrhs=[rhs],
         arrays=arrays,
     ), subdomain=eq.subdomain)
 

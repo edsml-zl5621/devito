@@ -277,6 +277,7 @@ class Stepper(Queue):
         self.sregistry = sregistry
 
     def callback(self, clusters, prefix):
+        # from IPython import embed; embed()
         if not prefix:
             return clusters
 
