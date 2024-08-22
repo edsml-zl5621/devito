@@ -167,9 +167,10 @@ class PETScCallbackBuilder:
 
         matvec_body = CallableBody(
             List(body=body),
-            init=tuple([petsc_func_begin_user]),
+            init=(petsc_func_begin_user,),
             stacks=stacks+tuple(dereference_funcs),
-            retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
+            retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
+        )
 
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
@@ -279,9 +280,9 @@ class PETScCallbackBuilder:
 
         formfunc_body = CallableBody(
             List(body=body),
-            init=tuple([petsc_func_begin_user]),
+            init=(petsc_func_begin_user,),
             stacks=stacks+tuple(dereference_funcs),
-            retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
+            retstmt=(Call('PetscFunctionReturn', arguments=[0]),))
 
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
@@ -351,9 +352,10 @@ class PETScCallbackBuilder:
 
         formrhs_body = CallableBody(
             List(body=[body]),
-            init=tuple([petsc_func_begin_user]),
+            init=(petsc_func_begin_user,),
             stacks=stacks+tuple(dereference_funcs),
-            retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])]))
+            retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
+        )
 
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
