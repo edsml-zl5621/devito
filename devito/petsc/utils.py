@@ -51,3 +51,12 @@ def core_metadata():
         'lib_dirs': lib_dir,
         'ldflags': ('-Wl,-rpath,%s' % lib_dir)
     }
+
+
+
+# def parent_iter_dimensions(c, mapper):
+#     # from devito.petsc.types.types import CallbackExpr
+#     # if isinstance(c.exprs[0].rhs, CallbackExpr):
+#     #     return c.expr[0].rhs.parent_iter_mapper
+#     # else:
+#         return mapper

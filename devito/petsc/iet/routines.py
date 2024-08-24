@@ -69,13 +69,13 @@ class PETScCallbackBuilder:
         target = injectsolve.expr.rhs.target
         # Compile matvec `eqns` into an IET via recursive compilation
         # from IPython import embed; embed()
-        new_matvecs = []
-        for i in injectsolve.expr.rhs.matvecs:
-            tmp = i.rhs._rebuild(parent_ispace=injectsolve.expr.ispace)
-            tmp2 = i._rebuild(rhs=tmp)
-            new_matvecs.append(tmp2)
+        # new_matvecs = []
+        # for i in injectsolve.expr.rhs.matvecs:
+        #     tmp = i.rhs._rebuild(parent_iter_mapper=injectsolve.expr.ispace)
+        #     tmp2 = i._rebuild(rhs=tmp)
+        #     new_matvecs.append(tmp2)
         # from IPython import embed; embed()
-        irs_matvec, _ = self.rcompile(new_matvecs,
+        irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
                                       options={'mpi': False})
         body_matvec = self.create_matvec_body(injectsolve, List(body=irs_matvec.uiet.body),
                                               solver_objs, objs)

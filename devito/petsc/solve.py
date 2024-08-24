@@ -8,10 +8,52 @@ from devito.types import Eq
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
+from devito.petsc.types import LinearSolveExpr, PETScArray
+from devito.tools import Reconstructable, sympy_mutex
 
 
 __all__ = ['PETScSolve']
+
+
+
+class CallbackExpr(sympy.Function, Reconstructable):
+
+    __rargs__ = ('expr',)
+    __rkwargs__ = ('parent_iter_mapper',)
+
+    def __new__(cls, expr, parent_iter_mapper=None, **kwargs):
+
+        with sympy_mutex:
+            obj = sympy.Basic.__new__(cls, expr)
+        obj._expr = expr
+        obj._parent_iter_mapper = parent_iter_mapper
+        return obj
+
+    def __repr__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.expr)
+
+    __str__ = __repr__
+
+    def _sympystr(self, printer):
+        return str(self)
+
+    def __hash__(self):
+        return hash(self.expr)
+
+    def __eq__(self, other):
+        return (isinstance(other, CallbackExpr) and
+                self.expr == other.expr and
+                self.parent_iter_mapper == other.parent_iter_mapper)
+
+    @property
+    def expr(self):
+        return self._expr
+
+    @property
+    def parent_iter_mapper(self):
+        return self._parent_iter_mapper
+
+    func = Reconstructable._rebuild
 
 
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
@@ -45,16 +87,14 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # correct time loop etc
     dummy = retrieve_functions(F_target - b)
     dummy = sum(set(dummy))
-
+    # from IPython import embed; embed() 
     # Placeholder equation for inserting calls to the solver
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
         dummy, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
         formfuncs=[formfunction], formrhs=[rhs], arrays=arrays,
     ), subdomain=eq.subdomain)
 
-
-
-
+    # from IPython import embed; embed() 
     if not bcs:
         return [inject_solve]
 

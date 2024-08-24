@@ -185,11 +185,12 @@ class LoweredEq(IREq):
                 iterators.setdefault(d.parent, set())
             elif not d.is_Stencil:
                 iterators.setdefault(d, set())
+        # from IPython import embed; embed()
         # Construct the IterationSpace
         intervals = IntervalGroup([Interval(d) for d in iterators],
                                   relations=ordering.relations, mode='partial')
         ispace = IterationSpace(intervals, iterators)
-
+        # from IPython import embed; embed()
         # Construct the conditionals and replace the ConditionalDimensions in `expr`
         conditionals = {}
         for d in ordering:
