@@ -20,7 +20,7 @@ def lower_petsc(iet, **kwargs):
     # from IPython import embed; embed()
     # Check if PETScSolve was used
     petsc_nodes = FindNodes(InjectSolveDummy).visit(iet)
-
+    # from IPython import embed; embed()
     if not petsc_nodes:
         return iet, {}
 

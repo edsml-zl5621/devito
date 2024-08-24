@@ -85,41 +85,41 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     func = Reconstructable._rebuild
 
 
-class CallbackExpr(sympy.Function, Reconstructable):
+# class CallbackExpr(sympy.Function, Reconstructable):
 
-    __rargs__ = ('expr',)
-    __rkwargs__ = ('parent_ispace',)
+#     __rargs__ = ('expr',)
+#     __rkwargs__ = ('parent_iter_mapper',)
 
-    def __new__(cls, expr, parent_ispace=None, **kwargs):
+#     def __new__(cls, expr, parent_iter_mapper=None, **kwargs):
 
-        with sympy_mutex:
-            obj = sympy.Basic.__new__(cls, expr)
-        obj._expr = expr
-        obj._parent_ispace = parent_ispace
-        return obj
+#         with sympy_mutex:
+#             obj = sympy.Basic.__new__(cls, expr)
+#         obj._expr = expr
+#         obj._parent_iter_mapper = parent_iter_mapper
+#         return obj
 
-    def __repr__(self):
-        return "%s(%s)" % (self.__class__.__name__, self.expr)
+#     def __repr__(self):
+#         return "%s(%s)" % (self.__class__.__name__, self.expr)
 
-    __str__ = __repr__
+#     __str__ = __repr__
 
-    def _sympystr(self, printer):
-        return str(self)
+#     def _sympystr(self, printer):
+#         return str(self)
 
-    def __hash__(self):
-        return hash(self.expr)
+#     def __hash__(self):
+#         return hash(self.expr)
 
-    def __eq__(self, other):
-        return (isinstance(other, CallbackExpr) and
-                self.expr == other.expr and
-                self.parent_ispace == other.parent_ispace)
+#     def __eq__(self, other):
+#         return (isinstance(other, CallbackExpr) and
+#                 self.expr == other.expr and
+#                 self.parent_iter_mapper == other.parent_iter_mapper)
 
-    @property
-    def expr(self):
-        return self._expr
+#     @property
+#     def expr(self):
+#         return self._expr
 
-    @property
-    def parent_ispace(self):
-        return self._parent_ispace
+#     @property
+#     def parent_iter_mapper(self):
+#         return self._parent_iter_mapper
 
-    func = Reconstructable._rebuild
+#     func = Reconstructable._rebuild

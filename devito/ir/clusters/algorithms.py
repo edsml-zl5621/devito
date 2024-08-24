@@ -21,6 +21,8 @@ from devito.tools import (DefaultOrderedDict, Stamp, as_mapper, flatten,
                           is_integer, split, timed_pass, toposort)
 from devito.types import Array, Eq, Symbol
 from devito.types.dimension import BOTTOM, ModuloDimension
+# from devito.petsc.types import LinearSolveExpr
+# from devito.petsc.clusters import parent_iter_dimensions
 
 __all__ = ['clusterize']
 
@@ -277,7 +279,6 @@ class Stepper(Queue):
         self.sregistry = sregistry
 
     def callback(self, clusters, prefix):
-        # from IPython import embed; embed()
         if not prefix:
             return clusters
 
@@ -287,7 +288,7 @@ class Stepper(Queue):
         subiters = {i for i in subiters if i.is_Stepping}
         if not subiters:
             return clusters
-
+        # from IPython import embed; embed()
         # Collect the index access functions along `d`, e.g., `t + 1` where `t` is
         # a SteppingDimension for `d = time`
         mapper = DefaultOrderedDict(lambda: DefaultOrderedDict(set))
@@ -318,6 +319,10 @@ class Stepper(Queue):
 
                 mapper[size][si].update(iafs)
 
+                # from IPython imp
+
+                # mapper = parent_iter_dimensions(c, mapper)
+        # from IPython import embed; embed()
         # Construct the ModuloDimensions
         mds = []
         for size, v in mapper.items():
@@ -330,7 +335,6 @@ class Stepper(Queue):
                 siafs = sorted(iafs, key=key)
                 for iaf in siafs:
                     name = self.sregistry.make_name(prefix='t')
-                    # from IPython import embed; embed()
                     offset = uxreplace(iaf, {si: d.root})
                     mds.append(ModuloDimension(name, si, offset, size, origin=iaf))
 
@@ -698,3 +702,13 @@ def normalize_reductions_sparse(cluster, sregistry):
             processed.append(e)
 
     return cluster.rebuild(processed)
+
+
+
+
+# def parent_iter_dimensions(c, mapper):
+#     from devito.petsc.types.types import CallbackExpr
+#     if isinstance(c.exprs[0].rhs, CallbackExpr):
+#         return c.expr[0].rhs.parent_iter_mapper
+#     else:
+#         return mapper
