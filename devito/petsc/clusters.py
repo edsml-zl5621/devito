@@ -1,5 +1,5 @@
 from devito.tools import timed_pass
-from devito.petsc.types import LinearSolveExpr
+from devito.petsc.types import LinearSolveExpr, CallbackExpr
 
 
 @timed_pass()
@@ -13,28 +13,29 @@ def petsc_lift(clusters):
     processed = []
     # from IPython import embed; embed()
     for c in clusters:
-        # from IPython import embed; embed()
         if isinstance(c.exprs[0].rhs, LinearSolveExpr):
-            # from IPython import embed; embed()
-            # from IPython import embed; embed()
             ispace = c.ispace.lift(c.exprs[0].rhs.target.space_dimensions)
             processed.append(c.rebuild(ispace=ispace))
-        # elif isinstance(c.exprs[0].rhs, CallbackExpr):
-        #     # from IPython import embed; embed()
-        #     # ispace = c.ispace.project([c.exprs[0].ispace.dimensions[1:]])
-        #     # tmp = c.exprs[0].ispace.intervals.drop(c.exprs[0].ispace.dimensions[0])
-        #     # ispace = c.ispace.rebuild(intervals=tmp)
-        #     # from IPython import embed; embed()
-        #     processed.append(c)
+        elif isinstance(c.exprs[0].rhs, CallbackExpr):
+            time_dims = [d for d in c.ispace.intervals.dimensions if d.is_Time]
+            ispace = c.ispace.project(lambda d: d not in time_dims)
+            processed.append(c.rebuild(ispace=ispace))
+            # processed.append(c)
         else:
             processed.append(c)
 
     return processed
+    
 
+def attach_parent_modulo_dims(e, mds):
+    def rebuild_items(items):
+        return [i._rebuild(rhs=i.rhs._rebuild(parent_modulo_dims=mds)) for i in items]
 
-# def parent_iter_dimensions(c, mapper):
-#     # from devito.petsc.types.types import CallbackExpr
-#     # if isinstance(c.exprs[0].rhs, CallbackExpr):
-#     #     return c.expr[0].rhs.parent_iter_mapper
-#     # else:
-#         return mapper
+    linsolveexpr = e.rhs
+    if isinstance(linsolveexpr, LinearSolveExpr):
+        linsolveexpr._matvecs = rebuild_items(linsolveexpr.matvecs)
+        linsolveexpr._formfuncs = rebuild_items(linsolveexpr.formfuncs)
+        linsolveexpr._formrhs = rebuild_items(linsolveexpr.formrhs)
+
+    return e
+

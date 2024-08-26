@@ -21,8 +21,7 @@ from devito.tools import (DefaultOrderedDict, Stamp, as_mapper, flatten,
                           is_integer, split, timed_pass, toposort)
 from devito.types import Array, Eq, Symbol
 from devito.types.dimension import BOTTOM, ModuloDimension
-# from devito.petsc.types import LinearSolveExpr
-# from devito.petsc.clusters import parent_iter_dimensions
+from devito.petsc.clusters import attach_parent_modulo_dims
 
 __all__ = ['clusterize']
 
@@ -288,7 +287,7 @@ class Stepper(Queue):
         subiters = {i for i in subiters if i.is_Stepping}
         if not subiters:
             return clusters
-        # from IPython import embed; embed()
+        
         # Collect the index access functions along `d`, e.g., `t + 1` where `t` is
         # a SteppingDimension for `d = time`
         mapper = DefaultOrderedDict(lambda: DefaultOrderedDict(set))
@@ -319,10 +318,6 @@ class Stepper(Queue):
 
                 mapper[size][si].update(iafs)
 
-                # from IPython imp
-
-                # mapper = parent_iter_dimensions(c, mapper)
-        # from IPython import embed; embed()
         # Construct the ModuloDimensions
         mds = []
         for size, v in mapper.items():
@@ -337,6 +332,12 @@ class Stepper(Queue):
                     name = self.sregistry.make_name(prefix='t')
                     offset = uxreplace(iaf, {si: d.root})
                     mds.append(ModuloDimension(name, si, offset, size, origin=iaf))
+
+        from devito.petsc.types import CallbackExpr
+        if isinstance(c.exprs[0].rhs, CallbackExpr):
+            mds = c.exprs[0].rhs.parent_modulo_dims
+        else:
+            mds = mds
 
         # Replacement rule for ModuloDimensions
         def rule(size, e):
@@ -372,7 +373,8 @@ class Stepper(Queue):
 
                 func = partial(xreplace_indices, mapper=subs, key=key)
                 exprs = [e.apply(func) for e in exprs]
-
+                exprs = [attach_parent_modulo_dims(e, mds) for e in exprs]
+            # from IPython import embed; embed()
             ispace = IterationSpace(c.ispace.intervals, sub_iterators,
                                     c.ispace.directions)
 
