@@ -21,7 +21,7 @@ from devito.tools import (DefaultOrderedDict, Stamp, as_mapper, flatten,
                           is_integer, split, timed_pass, toposort)
 from devito.types import Array, Eq, Symbol
 from devito.types.dimension import BOTTOM, ModuloDimension
-from devito.petsc.clusters import attach_parent_modulo_dims
+from devito.petsc.clusters import override_modulo_dims
 
 __all__ = ['clusterize']
 
@@ -287,7 +287,7 @@ class Stepper(Queue):
         subiters = {i for i in subiters if i.is_Stepping}
         if not subiters:
             return clusters
-        
+
         # Collect the index access functions along `d`, e.g., `t + 1` where `t` is
         # a SteppingDimension for `d = time`
         mapper = DefaultOrderedDict(lambda: DefaultOrderedDict(set))
@@ -332,12 +332,10 @@ class Stepper(Queue):
                     name = self.sregistry.make_name(prefix='t')
                     offset = uxreplace(iaf, {si: d.root})
                     mds.append(ModuloDimension(name, si, offset, size, origin=iaf))
-
-        from devito.petsc.types import CallbackExpr
-        if isinstance(c.exprs[0].rhs, CallbackExpr):
+        try:
             mds = c.exprs[0].rhs.parent_modulo_dims
-        else:
-            mds = mds
+        except AttributeError:
+            pass
 
         # Replacement rule for ModuloDimensions
         def rule(size, e):
@@ -372,9 +370,8 @@ class Stepper(Queue):
                     sub_iterators[d].extend(v)
 
                 func = partial(xreplace_indices, mapper=subs, key=key)
-                exprs = [e.apply(func) for e in exprs]
-                exprs = [attach_parent_modulo_dims(e, mds) for e in exprs]
-            # from IPython import embed; embed()
+                exprs = [override_modulo_dims(e.apply(func), mds) for e in exprs]
+
             ispace = IterationSpace(c.ispace.intervals, sub_iterators,
                                     c.ispace.directions)
 
@@ -704,13 +701,3 @@ def normalize_reductions_sparse(cluster, sregistry):
             processed.append(e)
 
     return cluster.rebuild(processed)
-
-
-
-
-# def parent_iter_dimensions(c, mapper):
-#     from devito.petsc.types.types import CallbackExpr
-#     if isinstance(c.exprs[0].rhs, CallbackExpr):
-#         return c.expr[0].rhs.parent_iter_mapper
-#     else:
-#         return mapper

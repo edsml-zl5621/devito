@@ -570,9 +570,6 @@ def test_start_prt():
 
     with switchconfig(openmp=False):
         op = Operator(petsc)
+
     # Verify the case with modulo time stepping
-    
-
-
-    # Verify the case without modulo time stepping
-
+    assert 'float * start_ptr = t1*localsize + (float *)(u_vec->data);' in str(op)
