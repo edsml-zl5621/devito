@@ -4,10 +4,10 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-from devito.types import Eq
+from devito.types import Eq, Symbol
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
-from devito.symbolics import retrieve_functions
+from devito.symbolics import retrieve_functions, uxreplace
 from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
 
 
@@ -31,17 +31,27 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     b, F_target = separate_eqn(eq, target)
 
+    # from IPython import embed; embed()
+    dummy_time = Symbol('delta_t')
+    time_mapper = {target.time_dim: dummy_time}
+    # time_mapper = {}
+
     # TODO: Current assumption is that problem is linear and user has not provided
     # a jacobian. Hence, we can use F_target to form the jac-vec product
-    matvecaction = Eq(arrays['y_matvec'],
-                      CallbackExpr(F_target.subs(target, arrays['x_matvec'])),
+    subs_matvec = {target: arrays['x_matvec']}
+    subs_matvec.update(time_mapper)
+    callbackexpr = F_target.subs(subs_matvec)
+    # replaced = uxreplace(callbackexpr, time_mapper)
+    matvecaction = Eq(arrays['y_matvec'], callbackexpr,
                       subdomain=eq.subdomain)
 
+    subs_formfunc = {target: arrays['x_formfunc']}
+    subs_formfunc.update(time_mapper)
     formfunction = Eq(arrays['y_formfunc'],
-                      CallbackExpr(F_target.subs(target, arrays['x_formfunc'])),
+                      F_target.subs(subs_formfunc),
                       subdomain=eq.subdomain)
 
-    rhs = Eq(arrays['b_tmp'], CallbackExpr(b), subdomain=eq.subdomain)
+    rhs = Eq(arrays['b_tmp'], b.subs(time_mapper), subdomain=eq.subdomain)
 
     # Passed through main kernel and removed at iet level, used to generate
     # correct time loop etc
@@ -72,12 +82,12 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         # the actual BC implementation
         centre = centre_stencil(F_target, target)
         bcs_for_matvec.append(Eq(arrays['y_matvec'],
-                                 CallbackExpr(centre.subs(target, arrays['x_matvec'])),
+                                 centre.subs(subs_matvec),
                                  subdomain=bc.subdomain))
         bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
-                                   CallbackExpr(0.), subdomain=bc.subdomain))
+                                   0., subdomain=bc.subdomain))
         # NOTE: Temporary
-        bcs_for_rhs.append(Eq(arrays['b_tmp'], CallbackExpr(0.), subdomain=bc.subdomain))
+        bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
 
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
         dummy, target=target, solver_parameters=solver_parameters,

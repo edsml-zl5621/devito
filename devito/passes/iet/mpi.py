@@ -77,11 +77,12 @@ def _hoist_halospots(iet):
         return dep.write is not None and dep.write.is_reduction
 
     rules = [rule0, rule1]
-
+    # from IPython import embed; embed()
     # Precompute scopes to save time
     # TODO: Investigate
     scopes = {i: Scope([e.expr for e in v if not isinstance(e, Call)])
               for i, v in MapNodes().visit(iet).items()}
+    # scopes = {i: Scope([e.expr for e in v]) for i, v in MapNodes().visit(iet).items()}
 
     # Analysis
     hsmapper = {}

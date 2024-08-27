@@ -176,7 +176,7 @@ class Cpu64AdvOperator(Cpu64OperatorMixin, CoreOperator):
 
         # Reduce flops
         clusters = cse(clusters, sregistry, options)
-
+        from IPython import embed; embed()
         # Blocking to improve data locality
         if options['blocklazy']:
             clusters = blocking(clusters, sregistry, options)

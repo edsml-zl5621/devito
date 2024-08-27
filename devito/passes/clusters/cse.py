@@ -130,7 +130,7 @@ def _cse(maybe_exprs, make, min_cost=1, mode='default'):
 
     # At this point we may have useless temporaries (e.g., r0=r1). Let's drop them
     processed = _compact_temporaries(processed, exclude)
-
+    from IPython import embed; embed()
     return processed
 
 
