@@ -32,7 +32,7 @@ def clusterize(exprs, **kwargs):
     """
     # Initialization
     clusters = [Cluster(e, e.ispace) for e in exprs]
-    # from IPython import embed; embed()
+
     # Setup the IterationSpaces based on data dependence analysis
     clusters = impose_total_ordering(clusters)
     clusters = Schedule().process(clusters)
@@ -328,6 +328,7 @@ class Stepper(Queue):
                 # sorting offsets {-1, 0, 1} as {0, -1, 1} assigning -inf to 0
                 key = lambda i: -np.inf if i - si == 0 else (i - si)
                 siafs = sorted(iafs, key=key)
+
                 for iaf in siafs:
                     name = self.sregistry.make_name(prefix='t')
                     offset = uxreplace(iaf, {si: d.root})

@@ -118,7 +118,7 @@ def _lower_exprs(expressions, subs):
         # Handle Functions (typical case)
         mapper = {f: _lower_exprs(f.indexify(subs=dimension_map), subs)
                   for f in expr.find(AbstractFunction)}
-        # from IPython import embed; embed()
+
         # Handle Indexeds (from index notation)
         for i in retrieve_indexed(expr):
             f = i.function

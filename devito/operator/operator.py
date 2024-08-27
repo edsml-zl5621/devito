@@ -340,16 +340,16 @@ class Operator(Callable):
 
         # A second round of specialization is performed on evaluated expressions
         expressions = cls._specialize_exprs(expressions, **kwargs)
-        # from IPython import embed; embed()
+
         # "True" lowering (indexification, shifting, ...)
         expressions = lower_exprs(expressions, **kwargs)
-        # from IPython import embed; embed()
+
         # Turn user-defined SubDimensions into concrete SubDimensions,
         # in particular uniqueness across expressions is ensured
         expressions = concretize_subdims(expressions, **kwargs)
-        # from IPython import embed; embed()
+
         processed = [LoweredEq(i) for i in expressions]
-        # from IPython import embed; embed()
+
         return processed
 
     # Compilation -- Cluster level
