@@ -36,7 +36,7 @@ def clusterize(exprs, **kwargs):
     # Setup the IterationSpaces based on data dependence analysis
     clusters = impose_total_ordering(clusters)
     clusters = Schedule().process(clusters)
-
+    # from IPython import embed; embed()
     # Handle SteppingDimensions
     clusters = Stepper(**kwargs).process(clusters)
 
@@ -318,6 +318,11 @@ class Stepper(Queue):
 
                 mapper[size][si].update(iafs)
 
+        # try:
+        #     mapper = c.exprs[0].rhs.parent_modulo_dims
+        # except AttributeError:
+        #     pass
+
         # Construct the ModuloDimensions
         mds = []
         for size, v in mapper.items():
@@ -333,10 +338,10 @@ class Stepper(Queue):
                     name = self.sregistry.make_name(prefix='t')
                     offset = uxreplace(iaf, {si: d.root})
                     mds.append(ModuloDimension(name, si, offset, size, origin=iaf))
-        try:
-            mds = c.exprs[0].rhs.parent_modulo_dims
-        except AttributeError:
-            pass
+        # try:
+        #     mds = c.exprs[0].rhs.parent_modulo_dims
+        # except AttributeError:
+        #     pass
 
         # Replacement rule for ModuloDimensions
         def rule(size, e):
@@ -371,7 +376,9 @@ class Stepper(Queue):
                     sub_iterators[d].extend(v)
 
                 func = partial(xreplace_indices, mapper=subs, key=key)
-                exprs = [override_modulo_dims(e.apply(func), mds) for e in exprs]
+                exprs = [e.apply(func) for e in exprs]
+                # exprs = [override_modulo_dims(e.apply(func), mds) for e in exprs]
+                # exprs = [override_modulo_dims(e.apply(func), mapper) for e in exprs]
 
             ispace = IterationSpace(c.ispace.intervals, sub_iterators,
                                     c.ispace.directions)

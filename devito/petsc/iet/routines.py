@@ -182,8 +182,9 @@ class PETScCallbackBuilder:
         )
 
         # Replace non-function data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
-        matvec_body = Uxreplace(subs).visit(matvec_body)
+        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
+        # subs = {i._C_symbol: i._C_symbol for i in struct.fields}
+        matvec_body = Uxreplace({}).visit(matvec_body)
 
         self._struct_params.extend(struct.fields)
 
@@ -430,10 +431,14 @@ def build_petsc_struct(iet, name, liveness):
     # Place all context data required by the shell routines into a struct
     # TODO: Clean this search up
     basics = FindSymbols('basics').visit(iet)
+    # mod_dims = [i for i in FindSymbols('dimensions').visit(iet) if i.is_Modulo]
+
     avoid0 = [i for i in FindSymbols('indexedbases').visit(iet)
               if isinstance(i.function, PETScArray)]
-    avoid1 = FindSymbols('dimensions|writes').visit(iet)
+    # avoid1 = [i for i in FindSymbols('dimensions|writes').visit(iet) if i not in mod_dims]
+    avoid1 = [i for i in FindSymbols('dimensions|writes').visit(iet)]
     fields = [data.function for data in basics if data not in avoid0+avoid1]
+
     return petsc_struct(name, fields, liveness)
 
 

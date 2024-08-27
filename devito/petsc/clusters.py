@@ -15,11 +15,11 @@ def petsc_lift(clusters):
             ispace = c.ispace.lift(c.exprs[0].rhs.target.space_dimensions)
             processed.append(c.rebuild(ispace=ispace))
 
-        # Drop time-loop for expressions that appear in PETSc callback functions
-        elif isinstance(c.exprs[0].rhs, CallbackExpr):
-            time_dims = [d for d in c.ispace.intervals.dimensions if d.is_Time]
-            ispace = c.ispace.project(lambda d: d not in time_dims)
-            processed.append(c.rebuild(ispace=ispace))
+        # # Drop time-loop for expressions that appear in PETSc callback functions
+        # elif isinstance(c.exprs[0].rhs, CallbackExpr):
+        #     time_dims = [d for d in c.ispace.intervals.dimensions if d.is_Time]
+        #     ispace = c.ispace.project(lambda d: d not in time_dims)
+        #     processed.append(c.rebuild(ispace=ispace))
 
         else:
             processed.append(c)
