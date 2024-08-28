@@ -20,7 +20,7 @@ def lower_petsc(iet, **kwargs):
 
     # Check if PETScSolve was used
     petsc_nodes = FindNodes(InjectSolveDummy).visit(iet)
-
+    # from IPython import embed; embed()
     if not petsc_nodes:
         return iet, {}
 
@@ -271,9 +271,6 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
 
 
 def generate_struct_callback(struct):
-    # body = [DummyExpr(FieldFromPointer(i._C_symbol, struct),
-    #                   i._C_symbol) for i in struct.fields if i not in struct.modulo_dims]
-
     body = [DummyExpr(FieldFromPointer(i._C_symbol, struct),
                       i._C_symbol) for i in struct.fields]
     

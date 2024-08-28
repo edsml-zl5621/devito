@@ -21,7 +21,7 @@ from devito.tools import (DefaultOrderedDict, Stamp, as_mapper, flatten,
                           is_integer, split, timed_pass, toposort)
 from devito.types import Array, Eq, Symbol
 from devito.types.dimension import BOTTOM, ModuloDimension
-from devito.petsc.clusters import override_modulo_dims
+
 
 __all__ = ['clusterize']
 
@@ -339,7 +339,7 @@ class Stepper(Queue):
                     offset = uxreplace(iaf, {si: d.root})
                     mds.append(ModuloDimension(name, si, offset, size, origin=iaf))
 
-        from IPython import embed; embed()
+        # from IPython import embed; embed()
         # try:
         #     mds = c.exprs[0].rhs.parent_modulo_dims
         # except AttributeError:
