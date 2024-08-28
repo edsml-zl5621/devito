@@ -14,6 +14,13 @@ from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
 __all__ = ['PETScSolve']
 
 
+class MySpecialFunction(sympy.Function):
+    @classmethod
+    def eval(cls, true_rhs, t_plus_1, t):
+        # Custom evaluation rules (optional)
+        return None
+
+
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
@@ -31,6 +38,12 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
     b, F_target = separate_eqn(eq, target)
 
+
+    # Passed through main kernel and removed at iet level, used to generate
+    # correct time loop etc
+    dummy = set(retrieve_functions(F_target - b))
+    dummy_expr = sum(dummy)
+
     # from IPython import embed; embed()
     dummy_time = Symbol('delta_t')
     time_mapper = {target.time_dim: dummy_time}
@@ -39,28 +52,23 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     # TODO: Current assumption is that problem is linear and user has not provided
     # a jacobian. Hence, we can use F_target to form the jac-vec product
     subs_matvec = {target: arrays['x_matvec']}
-    subs_matvec.update(time_mapper)
-    callbackexpr = F_target.subs(subs_matvec)
+    # subs_matvec.update(time_mapper)
+    callbackexpr = CallbackExpr(MySpecialFunction(F_target.subs(subs_matvec), tuple(dummy)[0], tuple(dummy)[1]))
     # replaced = uxreplace(callbackexpr, time_mapper)
     matvecaction = Eq(arrays['y_matvec'], callbackexpr,
                       subdomain=eq.subdomain)
 
     subs_formfunc = {target: arrays['x_formfunc']}
-    subs_formfunc.update(time_mapper)
+    # subs_formfunc.update(time_mapper)
     formfunction = Eq(arrays['y_formfunc'],
                       F_target.subs(subs_formfunc),
                       subdomain=eq.subdomain)
 
-    rhs = Eq(arrays['b_tmp'], b.subs(time_mapper), subdomain=eq.subdomain)
-
-    # Passed through main kernel and removed at iet level, used to generate
-    # correct time loop etc
-    dummy = retrieve_functions(F_target - b)
-    dummy = sum(set(dummy))
+    rhs = Eq(arrays['b_tmp'], b, subdomain=eq.subdomain)
 
     # Placeholder equation for inserting calls to the solver
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        dummy, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
+        dummy_expr, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
         formfuncs=[formfunction], formrhs=[rhs], arrays=arrays,
     ), subdomain=eq.subdomain)
 
@@ -82,7 +90,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         # the actual BC implementation
         centre = centre_stencil(F_target, target)
         bcs_for_matvec.append(Eq(arrays['y_matvec'],
-                                 centre.subs(subs_matvec),
+                                 CallbackExpr(centre.subs(subs_matvec)),
                                  subdomain=bc.subdomain))
         bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
                                    0., subdomain=bc.subdomain))
@@ -90,7 +98,7 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
 
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        dummy, target=target, solver_parameters=solver_parameters,
+        dummy_expr, target=target, solver_parameters=solver_parameters,
         matvecs=[matvecaction]+bcs_for_matvec,
         formfuncs=[formfunction], formrhs=[rhs],
         arrays=arrays,

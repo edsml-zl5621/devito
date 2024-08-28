@@ -40,7 +40,7 @@ def transform_efuncs(efuncs):
     for key, efunc in efuncs.items():
         nodes = FindNodes(Expression).visit(efunc)
         mapper = {
-            expr: expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr))
+            expr: expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr.args[0]))
             for expr in nodes
             if isinstance(expr.expr.rhs, CallbackExpr)
         }

@@ -13,6 +13,7 @@ from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
 from devito.petsc.iet.utils import petsc_call, petsc_struct
+from devito.ir.support import SymbolRegistry
 
 
 class PETScCallbackBuilder:
@@ -69,7 +70,7 @@ class PETScCallbackBuilder:
         target = injectsolve.expr.rhs.target
         # Compile matvec `eqns` into an IET via recursive compilation
         irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
-                                      options={'mpi': False})
+                                      options={'mpi': False}, sregistry=SymbolRegistry())
         body_matvec = self.create_matvec_body(injectsolve,
                                               List(body=irs_matvec.uiet.body),
                                               solver_objs, objs)
@@ -192,7 +193,7 @@ class PETScCallbackBuilder:
         target = injectsolve.expr.rhs.target
         # Compile formfunc `eqns` into an IET via recursive compilation
         irs_formfunc, _ = self.rcompile(injectsolve.expr.rhs.formfuncs,
-                                        options={'mpi': False})
+                                        options={'mpi': False}, sregistry=SymbolRegistry())
         body_formfunc = self.create_formfunc_body(injectsolve,
                                                   List(body=irs_formfunc.uiet.body),
                                                   solver_objs, objs)
@@ -307,7 +308,7 @@ class PETScCallbackBuilder:
         target = injectsolve.expr.rhs.target
         # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
-                                       options={'mpi': False})
+                                       options={'mpi': False}, sregistry=SymbolRegistry())
         body_formrhs = self.create_formrhs_body(injectsolve,
                                                 List(body=irs_formrhs.uiet.body),
                                                 solver_objs, objs)

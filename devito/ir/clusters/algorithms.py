@@ -338,6 +338,8 @@ class Stepper(Queue):
                     name = self.sregistry.make_name(prefix='t')
                     offset = uxreplace(iaf, {si: d.root})
                     mds.append(ModuloDimension(name, si, offset, size, origin=iaf))
+
+        from IPython import embed; embed()
         # try:
         #     mds = c.exprs[0].rhs.parent_modulo_dims
         # except AttributeError:
@@ -377,7 +379,7 @@ class Stepper(Queue):
 
                 func = partial(xreplace_indices, mapper=subs, key=key)
                 exprs = [e.apply(func) for e in exprs]
-                # exprs = [override_modulo_dims(e.apply(func), mds) for e in exprs]
+                # exprs = [override_modulo_dims(e.apply(func), mapper) for e in exprs]
                 # exprs = [override_modulo_dims(e.apply(func), mapper) for e in exprs]
 
             ispace = IterationSpace(c.ispace.intervals, sub_iterators,
