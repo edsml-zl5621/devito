@@ -257,6 +257,7 @@ class Operator(Callable):
         Perform the lowering Expressions -> Clusters -> ScheduleTree -> IET.
         """
         # Create a symbol registry
+        # from IPython import embed; embed()
         kwargs.setdefault('sregistry', SymbolRegistry())
 
         expressions = as_tuple(expressions)
@@ -376,14 +377,12 @@ class Operator(Callable):
         # Build a sequence of Clusters from a sequence of Eqs
         clusters = clusterize(expressions, **kwargs)
 
-        # Lift iteration spaces surrounding PETSc equations to produce
-        # distinct iteration loops.
-        clusters = petsc_lift(clusters)
-
         # Operation count before specialization
         init_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)
 
         clusters = cls._specialize_clusters(clusters, **kwargs)
+
+        clusters = petsc_lift(clusters)
 
         # Operation count after specialization
         final_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)
@@ -1118,7 +1117,7 @@ def rcompile(expressions, kwargs, options, target=None):
 
     # Recursive profiling not supported -- would be a complete mess
     kwargs.pop('profiler', None)
-
+    # from IPython import embed; embed()
     return cls._lower(expressions, **kwargs)
 
 
