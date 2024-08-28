@@ -3,7 +3,7 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           Dereference, DummyExpr)
+                           Dereference, DummyExpr, BlankLine)
 from devito.symbolics import Byref, FieldFromPointer, Macro, Cast
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
@@ -183,9 +183,8 @@ class PETScCallbackBuilder:
         )
 
         # Replace non-function data with pointer to data in struct
-        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
-        # subs = {i._C_symbol: i._C_symbol for i in struct.fields}
-        matvec_body = Uxreplace({}).visit(matvec_body)
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
+        matvec_body = Uxreplace(subs).visit(matvec_body)
 
         self._struct_params.extend(struct.fields)
 
@@ -423,7 +422,8 @@ class PETScCallbackBuilder:
                  dm_local_to_global_x,
                  dm_local_to_global_b,
                  snes_solve,
-                 dm_global_to_local_x)
+                 dm_global_to_local_x,
+                 BlankLine)
 
         return calls
 
@@ -432,14 +432,13 @@ def build_petsc_struct(iet, name, liveness):
     # Place all context data required by the shell routines into a struct
     # TODO: Clean this search up
     basics = FindSymbols('basics').visit(iet)
-    # mod_dims = [i for i in FindSymbols('dimensions').visit(iet) if i.is_Modulo]
-
+    mod_dims = [i for i in FindSymbols('dimensions').visit(iet)
+                if i.is_Modulo]
     avoid0 = [i for i in FindSymbols('indexedbases').visit(iet)
               if isinstance(i.function, PETScArray)]
-    # avoid1 = [i for i in FindSymbols('dimensions|writes').visit(iet) if i not in mod_dims]
-    avoid1 = [i for i in FindSymbols('dimensions|writes').visit(iet)]
+    avoid1 = [i for i in FindSymbols('dimensions|writes').visit(iet)
+              if i not in mod_dims]
     fields = [data.function for data in basics if data not in avoid0+avoid1]
-
     return petsc_struct(name, fields, liveness)
 
 

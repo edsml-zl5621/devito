@@ -100,4 +100,10 @@ class CallbackExpr(BaseInfoExpr):
     @property
     def parent_modulo_dims(self):
         return self._parent_modulo_dims
+    
+
+class CallbackExprExpr(sympy.Function):
+    @classmethod
+    def eval(cls, true_rhs, *t_args):
+        return None
 
