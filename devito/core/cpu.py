@@ -157,15 +157,15 @@ class Cpu64AdvOperator(Cpu64OperatorMixin, CoreOperator):
 
         # Toposort+Fusion (the former to expose more fusion opportunities)
         clusters = fuse(clusters, toposort=True)
-
+        # from IPython import embed; embed()
         # Hoist and optimize Dimension-invariant sub-expressions
         clusters = cire(clusters, 'invariants', sregistry, options, platform)
         clusters = Lift().process(clusters)
-
+        # from IPython import embed; embed()
         # Blocking to improve data locality
         if options['blockeager']:
             clusters = blocking(clusters, sregistry, options)
-
+        # from IPython import embed; embed()
         # Reduce flops
         clusters = cire(clusters, 'sops', sregistry, options, platform)
         clusters = factorize(clusters)
@@ -173,10 +173,10 @@ class Cpu64AdvOperator(Cpu64OperatorMixin, CoreOperator):
 
         # The previous passes may have created fusion opportunities
         clusters = fuse(clusters)
-
+        # from IPython import embed; embed()
         # Reduce flops
         clusters = cse(clusters, sregistry, options)
-        from IPython import embed; embed()
+        # from IPython import embed; embed()
         # Blocking to improve data locality
         if options['blocklazy']:
             clusters = blocking(clusters, sregistry, options)
