@@ -85,18 +85,16 @@ def cire(clusters, mode, sregistry, options, platform):
     """
     # NOTE: Handle prematurely expanded derivatives -- current default on
     # several backends, but soon to become legacy
-    # from IPython import embed; embed()
     if mode == 'sops':
         if options['expand']:
             mode = 'eval-derivs'
         else:
             mode = 'index-derivs'
-    # from IPython import embed; embed()
+
     for cls in modes[mode]:
         transformer = cls(sregistry, options, platform)
 
         clusters = transformer.process(clusters)
-        # from IPython import embed; embed()
     return clusters
 
 
@@ -118,7 +116,6 @@ class CireTransformer:
 
     def _aliases_from_clusters(self, clusters, exclude, meta):
         exprs = flatten([c.exprs for c in clusters])
-        # from IPython import embed; embed()
         # [Clusters]_n -> [Schedule]_m
         variants = []
         for mapper in self._generate(exprs, exclude):
@@ -130,7 +127,6 @@ class CireTransformer:
             schedule = lower_aliases(aliases, meta, self.opt_maxpar)
 
             variants.append(Variant(schedule, pexprs))
-        # from IPython import embed; embed()
         if not variants:
             return []
 
@@ -162,7 +158,7 @@ class CireTransformer:
             processed.append(c.rebuild(exprs=cexprs, ispace=ispace))
 
         assert len(exprs) == 0
-        # from IPython import embed; embed()
+
         return processed
 
     def process(self, clusters):
@@ -266,7 +262,7 @@ class CireInvariants(CireTransformerLegacy, Queue):
                 processed = made + processed
 
                 xtracted.extend(made)
-        # from IPython import embed; embed()
+
         return processed
 
     def _lookup_key(self, c, d):
@@ -307,7 +303,6 @@ class CireInvariantsDivs(CireInvariants):
 
     def _generate(self, exprs, exclude):
         # E.g., extract `1/h_x`
-        # from IPython import embed; embed()
         rule = lambda e: e.is_Pow and (not e.exp.is_Number or e.exp < 0)
         cbk_search = lambda e: search(e, rule, 'all', 'bfs_first_hit')
         yield self._do_generate(exprs, exclude, cbk_search)

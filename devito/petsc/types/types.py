@@ -60,9 +60,11 @@ class LinearSolveExpr(BaseInfoExpr):
             for key, val in cls.defaults.items():
                 solver_parameters[key] = solver_parameters.get(key, val)
 
-        return super().__new__(cls, expr, target=target, solver_parameters=solver_parameters,
-                               matvecs=matvecs, formfuncs=formfuncs, formrhs=formrhs,
-                               arrays=arrays, **kwargs)
+        return super().__new__(
+            cls, expr, target=target, solver_parameters=solver_parameters,
+            matvecs=matvecs, formfuncs=formfuncs, formrhs=formrhs,
+            arrays=arrays, **kwargs
+        )
 
     @property
     def target(self):
@@ -89,21 +91,7 @@ class LinearSolveExpr(BaseInfoExpr):
         return self._arrays
 
 
-class CallbackExpr(BaseInfoExpr):
-    __rkwargs__ = ('parent_modulo_dims',)
-
-    def __new__(cls, expr, parent_modulo_dims=None, **kwargs):
-        return super().__new__(cls, expr,
-                               parent_modulo_dims=parent_modulo_dims,
-                               **kwargs)
-
-    @property
-    def parent_modulo_dims(self):
-        return self._parent_modulo_dims
-    
-
-class CallbackExprExpr(sympy.Function):
+class CallbackExpr(sympy.Function):
     @classmethod
     def eval(cls, true_rhs, *t_args):
         return None
-

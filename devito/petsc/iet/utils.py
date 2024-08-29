@@ -2,7 +2,9 @@ from devito.ir.iet.nodes import Call, Expression
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.ir.equations import OpInjectSolve
 from devito.ir.iet import (FindNodes, retrieve_iteration_tree,
-                           filter_iterations, Transformer)
+                           filter_iterations, Transformer, Iteration,
+                           DummyExpr, List)
+from devito.symbolics import FieldFromComposite
 
 
 def petsc_call(specific_call, call_args):
@@ -33,33 +35,31 @@ def spatial_iteration_loops(iet):
 petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
 
 
-# def transform_efuncs(efuncs):
-#     """
-#     TODO: Insert docstring once removed CallbackExprExpr
-#     """
-#     from devito.petsc.types import CallbackExpr
-#     new_efuncs = {}
-#     for key, efunc in efuncs.items():
-#         nodes = FindNodes(Expression).visit(efunc)
-#         mapper = {
-#             expr: expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr.args[0]))
-#             for expr in nodes
-#             if isinstance(expr.expr.rhs, CallbackExpr)
-#         }
-#         new_efuncs[key] = Transformer(mapper).visit(efunc)
-#     return new_efuncs
-
-
 def remove_CallbackExpr(body):
-    """
-    TODO: Insert docstring once removed CallbackExprExpr
-    """
     from devito.petsc.types import CallbackExpr
     nodes = FindNodes(Expression).visit(body)
     mapper = {
-        expr: expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr.args[0]))
+        expr: expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.args[0]))
         for expr in nodes
         if isinstance(expr.expr.rhs, CallbackExpr)
     }
     body = Transformer(mapper).visit(body)
     return body
+
+
+def init_time_iters(iet, struct):
+    # TODO: Fix for the case when you have more than one time-loop but only a
+    # petscsolve inside one of them -> in this case, you do not need to
+    # initialise the modulodims/iterdims for the other time-loops
+    time_iters = [i for i in FindNodes(Iteration).visit(iet) if i.dim.is_Time]
+
+    dimension_mapper = {}
+    for iter in time_iters:
+        common_dimensions = [dim for dim in iter.dimensions if dim in struct.fields]
+        common_dimensions = [DummyExpr(FieldFromComposite(struct, dim), dim)
+                             for dim in common_dimensions]
+        iter_new = iter._rebuild(nodes=List(body=tuple(common_dimensions)+iter.nodes))
+        dimension_mapper.update({iter: iter_new})
+
+    iet = Transformer(dimension_mapper).visit(iet)
+    return iet

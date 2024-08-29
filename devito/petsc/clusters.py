@@ -1,6 +1,5 @@
 from devito.tools import timed_pass
 from devito.petsc.types import LinearSolveExpr, CallbackExpr
-import sympy
 
 
 @timed_pass()
