@@ -37,7 +37,6 @@ def cse(cluster, sregistry, options, *args):
     Common sub-expressions elimination (CSE).
     """
     make = lambda: CTemp(name=sregistry.make_name(), dtype=cluster.dtype)
-
     exprs = _cse(cluster, make, min_cost=options['cse-min-cost'])
 
     return cluster.rebuild(exprs=exprs)

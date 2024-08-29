@@ -572,4 +572,4 @@ def test_start_prt():
         op = Operator(petsc)
 
     # Verify the case with modulo time stepping
-    assert 'float * start_ptr = t1*localsize + (float *)(u_vec->data);' in str(op)
+    assert 'float * start_ptr_u = t1*localsize + (float *)(u_vec->data);' in str(op)
