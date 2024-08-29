@@ -56,10 +56,9 @@ def init_time_iters(iet, struct):
     dimension_mapper = {}
     for iter in time_iters:
         common_dimensions = [dim for dim in iter.dimensions if dim in struct.fields]
-        common_dimensions = [DummyExpr(FieldFromComposite(struct, dim), dim)
+        common_dimensions = [DummyExpr(FieldFromComposite(dim, struct), dim)
                              for dim in common_dimensions]
         iter_new = iter._rebuild(nodes=List(body=tuple(common_dimensions)+iter.nodes))
         dimension_mapper.update({iter: iter_new})
 
-    iet = Transformer(dimension_mapper).visit(iet)
-    return iet
+    return Transformer(dimension_mapper).visit(iet)
