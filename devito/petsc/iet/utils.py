@@ -43,8 +43,7 @@ def remove_CallbackExpr(body):
         for expr in nodes
         if isinstance(expr.expr.rhs, CallbackExpr)
     }
-    body = Transformer(mapper).visit(body)
-    return body
+    return Transformer(mapper).visit(body)
 
 
 def init_time_iters(iet, struct):
