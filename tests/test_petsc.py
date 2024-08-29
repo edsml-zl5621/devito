@@ -553,6 +553,7 @@ def test_calls_to_callbacks():
     assert 'PetscCall(SNESSetFunction(snes_f,NULL,FormFunction_f,NULL));' in ccode
 
 
+@skipif('petsc')
 def test_start_prt():
     """
     Verify that a pointer to the start of the memory address is correctly
