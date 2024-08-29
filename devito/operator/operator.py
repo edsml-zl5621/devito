@@ -377,12 +377,12 @@ class Operator(Callable):
         # Build a sequence of Clusters from a sequence of Eqs
         clusters = clusterize(expressions, **kwargs)
 
-        clusters = petsc_lift(clusters)
-
         # Operation count before specialization
         init_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)
 
         clusters = cls._specialize_clusters(clusters, **kwargs)
+
+        clusters = petsc_lift(clusters)
 
         # Operation count after specialization
         final_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)

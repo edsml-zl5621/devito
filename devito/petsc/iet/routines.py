@@ -4,15 +4,15 @@ import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference, DummyExpr, BlankLine)
-from devito.symbolics import Byref, FieldFromPointer, Macro, Cast
+from devito.symbolics import Byref, FieldFromPointer, Macro, Cast, FieldFromComposite
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
-from devito.types import LocalObject
+from devito.types import LocalObject, ModuloDimension
 from devito.tools import ctypes_to_cstr, dtype_to_ctype, CustomDtype
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
-from devito.petsc.iet.utils import petsc_call, petsc_struct
+from devito.petsc.iet.utils import petsc_call, petsc_struct, remove_CallbackExpr
 from devito.ir.support import SymbolRegistry
 
 
@@ -85,6 +85,8 @@ class PETScCallbackBuilder:
 
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
+
+        body = remove_CallbackExpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
@@ -185,7 +187,7 @@ class PETScCallbackBuilder:
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         matvec_body = Uxreplace(subs).visit(matvec_body)
-
+        # from IPython import embed; embed()
         self._struct_params.extend(struct.fields)
 
         return matvec_body
@@ -208,6 +210,8 @@ class PETScCallbackBuilder:
 
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
+
+        body = remove_CallbackExpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
@@ -326,6 +330,8 @@ class PETScCallbackBuilder:
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
+        body = remove_CallbackExpr(body)
+
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
@@ -382,6 +388,23 @@ class PETScCallbackBuilder:
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
         target = injectsolve.expr.rhs.target
 
+        # Initialise the modulo dimensions in the main struct 
+        if any(i.is_Time for i in injectsolve.expr.dimensions):
+            # TODO: set the modulo dims that appear in expr.dimensions but not the one that
+            # appears in injectsolve.expr.lhs.indices
+            # DummyExpr(FieldFromComposite(sdata.symbolic_flag, sdata[d]), 2)
+            if any(isinstance(dim, ModuloDimension) for dim in injectsolve.expr.dimensions):
+                # dims_to_initialise = [dim for dim in injectsolve.expr.dimensions
+                #                      if dim not in injectsolve.expr.lhs.indices
+                #                      and isinstance(dim, ModuloDimension)]
+                # dims_to_initialise = [DummyExpr(FieldFromComposite(objs['ctx'], dim), dim) for dim in dims_to_initialise]
+                dims_to_initialise = []
+            else:
+                dims_to_initialise = []
+        else:
+            dims_to_initialise = []
+            # set_modulo_dims = [FieldFromComposite(, threads)]
+
         dmda = objs['da_so_%s' % target.space_order]
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
@@ -416,7 +439,8 @@ class PETScCallbackBuilder:
             dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
         )
 
-        calls = (rhs_call,
+        calls = (dims_to_initialise,
+                 rhs_call,
                  local_x,
                  vec_replace_array,
                  dm_local_to_global_x,

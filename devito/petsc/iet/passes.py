@@ -12,7 +12,8 @@ from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
 from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
-                                    spatial_iteration_loops, transform_efuncs)
+                                    spatial_iteration_loops)
+from devito.types import ModuloDimension
 
 
 @iet_pass
@@ -47,9 +48,9 @@ def lower_petsc(iet, **kwargs):
     objs.update(unique_dmdas)
     for dmda in unique_dmdas.values():
         setup.extend(create_dmda_calls(dmda, objs))
-
+    # from IPython import embed; embed()
     builder = PETScCallbackBuilder(**kwargs)
-
+    # from IPython import embed; embed()
     # Create the PETSc calls which are specific to each target
     for target in unique_targets:
         solver_objs = build_solver_objs(target)
@@ -75,7 +76,8 @@ def lower_petsc(iet, **kwargs):
             break
 
     # Generate callback to populate main struct object
-    struct_main = petsc_struct('ctx', filter_ordered(builder.struct_params))
+    struct_main = objs['ctx']._rebuild(fields=filter_ordered(builder.struct_params))
+    # struct_main = petsc_struct('ctx', filter_ordered(builder.struct_params))
     struct_callback = generate_struct_callback(struct_main)
     call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
     calls_set_app_ctx = [petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
@@ -84,7 +86,10 @@ def lower_petsc(iet, **kwargs):
     
     iet = Transformer(subs).visit(iet)
 
-    # TODO: Use struct within struct to update the modulo dimensions
+    # Initialize the modulo dimensions in the struct for each iteration of the time loop
+    # tmp = [i for i in FindNodes(Iteration).visit(iet) if i.dim.is_Time]
+    # from IPython import embed; embed()
+
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
@@ -95,8 +100,8 @@ def lower_petsc(iet, **kwargs):
     metadata = core_metadata()
 
     # Remove temporary objects in efuncs that were previously used to store metadata
-    efuncs = transform_efuncs(builder.efuncs)
-    efuncs = tuple(efuncs.values())+(struct_callback,)
+    # efuncs = transform_efuncs(builder.efuncs)
+    efuncs = tuple(builder.efuncs.values())+(struct_callback,)
     metadata.update({'efuncs': efuncs})
 
     return iet, metadata
@@ -130,7 +135,8 @@ def build_core_objects(target, **kwargs):
         'comm': communicator,
         'err': PetscErrorCode(name='err'),
         'grid': target.grid,
-        'localsize': PetscInt(name='localsize')
+        'localsize': PetscInt(name='localsize'),
+        'ctx': petsc_struct('ctx', [])
     }
 
 
@@ -272,7 +278,8 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
 
 def generate_struct_callback(struct):
     body = [DummyExpr(FieldFromPointer(i._C_symbol, struct),
-                      i._C_symbol) for i in struct.fields]
+                      i._C_symbol) for i in struct.fields
+                      if not isinstance(i, ModuloDimension)]
     
     struct_callback_body = CallableBody(
         List(body=body), init=tuple([petsc_func_begin_user]),

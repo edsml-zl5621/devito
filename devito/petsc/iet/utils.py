@@ -33,17 +33,33 @@ def spatial_iteration_loops(iet):
 petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
 
 
-def transform_efuncs(efuncs):
+# def transform_efuncs(efuncs):
+#     """
+#     TODO: Insert docstring once removed CallbackExprExpr
+#     """
+#     from devito.petsc.types import CallbackExpr
+#     new_efuncs = {}
+#     for key, efunc in efuncs.items():
+#         nodes = FindNodes(Expression).visit(efunc)
+#         mapper = {
+#             expr: expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr.args[0]))
+#             for expr in nodes
+#             if isinstance(expr.expr.rhs, CallbackExpr)
+#         }
+#         new_efuncs[key] = Transformer(mapper).visit(efunc)
+#     return new_efuncs
+
+
+def remove_CallbackExpr(body):
+    """
+    TODO: Insert docstring once removed CallbackExprExpr
+    """
     from devito.petsc.types import CallbackExpr
-    new_efuncs = {}
-
-    for key, efunc in efuncs.items():
-        nodes = FindNodes(Expression).visit(efunc)
-        mapper = {
-            expr: expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr.args[0]))
-            for expr in nodes
-            if isinstance(expr.expr.rhs, CallbackExpr)
-        }
-        new_efuncs[key] = Transformer(mapper).visit(efunc)
-
-    return new_efuncs
+    nodes = FindNodes(Expression).visit(body)
+    mapper = {
+        expr: expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.expr.args[0]))
+        for expr in nodes
+        if isinstance(expr.expr.rhs, CallbackExpr)
+    }
+    body = Transformer(mapper).visit(body)
+    return body

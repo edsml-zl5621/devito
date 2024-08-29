@@ -94,7 +94,7 @@ def cire(clusters, mode, sregistry, options, platform):
     # from IPython import embed; embed()
     for cls in modes[mode]:
         transformer = cls(sregistry, options, platform)
-    
+
         clusters = transformer.process(clusters)
         # from IPython import embed; embed()
     return clusters
@@ -338,7 +338,7 @@ class CireDerivatives(CireTransformerLegacy):
             # extend this by calling `_aliases_from_clusters` repeatedly until
             # `made` is empty. To be investigated
             made = self._aliases_from_clusters([c], exclude, self._lookup_key(c))
-            
+
             processed.extend(flatten(made) or [c])
 
         return processed
