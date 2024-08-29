@@ -37,7 +37,7 @@ def cse(cluster, sregistry, options, *args):
     Common sub-expressions elimination (CSE).
     """
     make = lambda: CTemp(name=sregistry.make_name(), dtype=cluster.dtype)
-    # from IPython import embed; embed()
+
     exprs = _cse(cluster, make, min_cost=options['cse-min-cost'])
 
     return cluster.rebuild(exprs=exprs)
@@ -92,7 +92,7 @@ def _cse(maybe_exprs, make, min_cost=1, mode='default'):
     d_flow = {i.source.access for i in scope.d_flow.independent()}
     d_anti = {i.source.access for i in scope.d_anti.independent()}
     exclude = d_flow & d_anti
-    # from IPython import embed; embed()
+
     while True:
         # Detect redundancies
         counted = count(processed).items()
@@ -131,7 +131,7 @@ def _cse(maybe_exprs, make, min_cost=1, mode='default'):
 
     # At this point we may have useless temporaries (e.g., r0=r1). Let's drop them
     processed = _compact_temporaries(processed, exclude)
-    # from IPython import embed; embed()
+
     return processed
 
 

@@ -4,10 +4,10 @@ import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference, DummyExpr, BlankLine)
-from devito.symbolics import Byref, FieldFromPointer, Macro, Cast, FieldFromComposite
+from devito.symbolics import Byref, FieldFromPointer, Macro, Cast
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
-from devito.types import LocalObject, ModuloDimension
+from devito.types import LocalObject, ModuloDimension, TimeDimension
 from devito.tools import ctypes_to_cstr, dtype_to_ctype, CustomDtype
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
@@ -185,7 +185,7 @@ class PETScCallbackBuilder:
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         matvec_body = Uxreplace(subs).visit(matvec_body)
-        # from IPython import embed; embed()
+
         self._struct_params.extend(struct.fields)
 
         return matvec_body
@@ -193,8 +193,10 @@ class PETScCallbackBuilder:
     def make_formfunc(self, injectsolve, objs, solver_objs):
         target = injectsolve.expr.rhs.target
         # Compile formfunc `eqns` into an IET via recursive compilation
-        irs_formfunc, _ = self.rcompile(injectsolve.expr.rhs.formfuncs,
-                                        options={'mpi': False}, sregistry=SymbolRegistry())
+        irs_formfunc, _ = self.rcompile(
+            injectsolve.expr.rhs.formfuncs,
+            options={'mpi': False}, sregistry=SymbolRegistry()
+        )
         body_formfunc = self.create_formfunc_body(injectsolve,
                                                   List(body=irs_formfunc.uiet.body),
                                                   solver_objs, objs)
@@ -386,28 +388,6 @@ class PETScCallbackBuilder:
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
         target = injectsolve.expr.rhs.target
 
-        # Initialise the modulo dimensions in the main struct 
-        # if any(i.is_Time for i in injectsolve.expr.dimensions):
-        #     # TODO: set the modulo dims that appear in expr.dimensions but not the one that
-        #     # appears in injectsolve.expr.lhs.indices
-        #     # DummyExpr(FieldFromComposite(sdata.symbolic_flag, sdata[d]), 2)
-        #     if any(isinstance(dim, ModuloDimension) for dim in injectsolve.expr.dimensions):
-        #         dims_to_initialise = [dim for dim in injectsolve.expr.dimensions
-        #                              if dim not in injectsolve.expr.lhs.indices
-        #                              and isinstance(dim, ModuloDimension)]
-        #         dims_to_initialise = [DummyExpr(FieldFromComposite(objs['ctx'], dim), dim) for dim in dims_to_initialise]
-        #         # dims_to_initialise = []
-        #     else:
-        #         dims_to_initialise = []
-        # else:
-        #     dims_to_initialise = []
-        #     # set_modulo_dims = [FieldFromComposite(, threads)]
-
-        # If solve if time dependent, insert placeholder expression to potentially be replaced
-        # by the initialisation of the modulo dimensions (or TimeDimension). 
-        # if any(i.is_Time for i in injectsolve.expr.dimensions):
-        #     placeholder_mod_dims = 
-
         dmda = objs['da_so_%s' % target.space_order]
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
@@ -442,9 +422,7 @@ class PETScCallbackBuilder:
             dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
         )
 
-        calls = ([],
-                #  dims_to_initialise,
-                 rhs_call,
+        calls = (rhs_call,
                  local_x,
                  vec_replace_array,
                  dm_local_to_global_x,
@@ -459,12 +437,12 @@ class PETScCallbackBuilder:
 def build_petsc_struct(iet, name, liveness):
     # Place all context data required by the shell routines into a struct
     basics = FindSymbols('basics').visit(iet)
-    mod_dims = [i for i in FindSymbols('dimensions').visit(iet)
-                if i.is_Modulo]
+    time_dims = [i for i in FindSymbols('dimensions').visit(iet)
+                 if isinstance(i, (TimeDimension, ModuloDimension))]
     avoid0 = [i for i in FindSymbols('indexedbases').visit(iet)
               if isinstance(i.function, PETScArray)]
     avoid1 = [i for i in FindSymbols('dimensions|writes').visit(iet)
-              if i not in mod_dims]
+              if i not in time_dims]
     fields = [data.function for data in basics if data not in avoid0+avoid1]
     return petsc_struct(name, fields, liveness)
 

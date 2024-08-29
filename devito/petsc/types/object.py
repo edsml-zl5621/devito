@@ -1,7 +1,7 @@
 from ctypes import POINTER
 
 from devito.tools import CustomDtype
-from devito.types import LocalObject, CCompositeObject, ModuloDimension
+from devito.types import LocalObject, CCompositeObject, ModuloDimension, TimeDimension
 from devito.symbolics import Byref
 
 from devito.petsc.iet.utils import petsc_call
@@ -141,14 +141,14 @@ class PETScStruct(CCompositeObject):
     @property
     def fields(self):
         return self._fields
-    
+
     @property
-    def modulo_dims(self):
-        modulo_dims = []
+    def time_dim_fields(self):
+        time_dims = []
         for f in self.fields:
-            if isinstance(f, ModuloDimension):
-                modulo_dims.append(f)
-        return modulo_dims
+            if isinstance(f, (ModuloDimension, TimeDimension)):
+                time_dims.append(f)
+        return time_dims
 
     @property
     def _C_ctype(self):

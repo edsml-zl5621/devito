@@ -4,7 +4,7 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Transformer,
                            MapNodes, Iteration, List, BlankLine,
                            Callable, CallableBody, DummyExpr, Call)
-from devito.symbolics import Byref, Macro, FieldFromPointer, FieldFromComposite
+from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.tools import filter_ordered
 from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt)
@@ -12,8 +12,7 @@ from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
 from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
-                                    spatial_iteration_loops)
-from devito.types import ModuloDimension
+                                    spatial_iteration_loops, init_time_iters)
 
 
 @iet_pass
@@ -39,9 +38,6 @@ def lower_petsc(iet, **kwargs):
     spatial_body = spatial_iteration_loops(iet)
     injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
                                   'groupby').visit(List(body=spatial_body))
-    
-    # Used later on to initialise the ModuloDimensions/TimeDimensions required for each solve, if necessary
-    # time_iter_mapper = [i for i in MapNodes(Iteration, InjectSolveDummy).visit(iet).keys() if i.dim.is_Time]
 
     setup = []
     subs = {}
@@ -77,7 +73,7 @@ def lower_petsc(iet, **kwargs):
             setup.extend([matvec_op, formfunc_op])
             subs.update({iter[0]: List(body=runsolve)})
             break
-    # from IPython import embed; embed()
+
     # Generate callback to populate main struct object
     struct_main = objs['ctx']._rebuild(fields=filter_ordered(builder.struct_params))
     struct_callback = generate_struct_callback(struct_main)
@@ -85,19 +81,10 @@ def lower_petsc(iet, **kwargs):
     calls_set_app_ctx = [petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
                          for i in unique_dmdas]
     setup.extend([BlankLine, call_struct_callback] + calls_set_app_ctx)
-    
+
     iet = Transformer(subs).visit(iet)
 
-    time_iters = [i for i in FindNodes(Iteration).visit(iet) if i.dim.is_Time]
-    dimension_mapper = {}
-    for iter in time_iters:
-        common_dimensions = [dim for dim in iter.dimensions if dim in filter_ordered(builder.struct_params)]
-        common_dimensions = [DummyExpr(FieldFromComposite(objs['ctx'], dim), dim) for dim in common_dimensions]
-        iter_new = iter._rebuild(nodes=List(body=tuple(common_dimensions)+iter.nodes))
-        dimension_mapper.update({iter: iter_new})
-
-    iet = Transformer(dimension_mapper).visit(iet)
-    from IPython import embed; embed()
+    iet = init_time_iters(iet, struct_main)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
@@ -285,10 +272,10 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
 
 
 def generate_struct_callback(struct):
-    body = [DummyExpr(FieldFromPointer(i._C_symbol, struct),
-                      i._C_symbol) for i in struct.fields
-                      if not isinstance(i, ModuloDimension)]
-    
+    body = [
+        DummyExpr(FieldFromPointer(i._C_symbol, struct), i._C_symbol)
+        for i in struct.fields if i not in struct.time_dim_fields
+    ]
     struct_callback_body = CallableBody(
         List(body=body), init=tuple([petsc_func_begin_user]),
         retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])

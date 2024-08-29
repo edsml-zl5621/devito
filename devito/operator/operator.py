@@ -257,7 +257,6 @@ class Operator(Callable):
         Perform the lowering Expressions -> Clusters -> ScheduleTree -> IET.
         """
         # Create a symbol registry
-        # from IPython import embed; embed()
         kwargs.setdefault('sregistry', SymbolRegistry())
 
         expressions = as_tuple(expressions)
@@ -1120,7 +1119,7 @@ def rcompile(expressions, kwargs, options, target=None):
 
     # Recursive profiling not supported -- would be a complete mess
     kwargs.pop('profiler', None)
-    # from IPython import embed; embed()
+
     return cls._lower(expressions, **kwargs)
 
 
