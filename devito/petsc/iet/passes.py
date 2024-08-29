@@ -4,7 +4,7 @@ from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Transformer,
                            MapNodes, Iteration, List, BlankLine,
                            Callable, CallableBody, DummyExpr, Call)
-from devito.symbolics import Byref, Macro, FieldFromPointer
+from devito.symbolics import Byref, Macro, FieldFromPointer, FieldFromComposite
 from devito.tools import filter_ordered
 from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt)
@@ -21,7 +21,7 @@ def lower_petsc(iet, **kwargs):
 
     # Check if PETScSolve was used
     petsc_nodes = FindNodes(InjectSolveDummy).visit(iet)
-    # from IPython import embed; embed()
+
     if not petsc_nodes:
         return iet, {}
 
@@ -39,6 +39,9 @@ def lower_petsc(iet, **kwargs):
     spatial_body = spatial_iteration_loops(iet)
     injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
                                   'groupby').visit(List(body=spatial_body))
+    
+    # Used later on to initialise the ModuloDimensions/TimeDimensions required for each solve, if necessary
+    # time_iter_mapper = [i for i in MapNodes(Iteration, InjectSolveDummy).visit(iet).keys() if i.dim.is_Time]
 
     setup = []
     subs = {}
@@ -48,9 +51,9 @@ def lower_petsc(iet, **kwargs):
     objs.update(unique_dmdas)
     for dmda in unique_dmdas.values():
         setup.extend(create_dmda_calls(dmda, objs))
-    # from IPython import embed; embed()
+
     builder = PETScCallbackBuilder(**kwargs)
-    # from IPython import embed; embed()
+
     # Create the PETSc calls which are specific to each target
     for target in unique_targets:
         solver_objs = build_solver_objs(target)
@@ -74,10 +77,9 @@ def lower_petsc(iet, **kwargs):
             setup.extend([matvec_op, formfunc_op])
             subs.update({iter[0]: List(body=runsolve)})
             break
-
+    # from IPython import embed; embed()
     # Generate callback to populate main struct object
     struct_main = objs['ctx']._rebuild(fields=filter_ordered(builder.struct_params))
-    # struct_main = petsc_struct('ctx', filter_ordered(builder.struct_params))
     struct_callback = generate_struct_callback(struct_main)
     call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
     calls_set_app_ctx = [petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
@@ -86,10 +88,16 @@ def lower_petsc(iet, **kwargs):
     
     iet = Transformer(subs).visit(iet)
 
-    # Initialize the modulo dimensions in the struct for each iteration of the time loop
-    # tmp = [i for i in FindNodes(Iteration).visit(iet) if i.dim.is_Time]
-    # from IPython import embed; embed()
+    time_iters = [i for i in FindNodes(Iteration).visit(iet) if i.dim.is_Time]
+    dimension_mapper = {}
+    for iter in time_iters:
+        common_dimensions = [dim for dim in iter.dimensions if dim in filter_ordered(builder.struct_params)]
+        common_dimensions = [DummyExpr(FieldFromComposite(objs['ctx'], dim), dim) for dim in common_dimensions]
+        iter_new = iter._rebuild(nodes=List(body=tuple(common_dimensions)+iter.nodes))
+        dimension_mapper.update({iter: iter_new})
 
+    iet = Transformer(dimension_mapper).visit(iet)
+    from IPython import embed; embed()
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(

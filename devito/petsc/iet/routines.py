@@ -389,21 +389,26 @@ class PETScCallbackBuilder:
         target = injectsolve.expr.rhs.target
 
         # Initialise the modulo dimensions in the main struct 
-        if any(i.is_Time for i in injectsolve.expr.dimensions):
-            # TODO: set the modulo dims that appear in expr.dimensions but not the one that
-            # appears in injectsolve.expr.lhs.indices
-            # DummyExpr(FieldFromComposite(sdata.symbolic_flag, sdata[d]), 2)
-            if any(isinstance(dim, ModuloDimension) for dim in injectsolve.expr.dimensions):
-                # dims_to_initialise = [dim for dim in injectsolve.expr.dimensions
-                #                      if dim not in injectsolve.expr.lhs.indices
-                #                      and isinstance(dim, ModuloDimension)]
-                # dims_to_initialise = [DummyExpr(FieldFromComposite(objs['ctx'], dim), dim) for dim in dims_to_initialise]
-                dims_to_initialise = []
-            else:
-                dims_to_initialise = []
-        else:
-            dims_to_initialise = []
-            # set_modulo_dims = [FieldFromComposite(, threads)]
+        # if any(i.is_Time for i in injectsolve.expr.dimensions):
+        #     # TODO: set the modulo dims that appear in expr.dimensions but not the one that
+        #     # appears in injectsolve.expr.lhs.indices
+        #     # DummyExpr(FieldFromComposite(sdata.symbolic_flag, sdata[d]), 2)
+        #     if any(isinstance(dim, ModuloDimension) for dim in injectsolve.expr.dimensions):
+        #         dims_to_initialise = [dim for dim in injectsolve.expr.dimensions
+        #                              if dim not in injectsolve.expr.lhs.indices
+        #                              and isinstance(dim, ModuloDimension)]
+        #         dims_to_initialise = [DummyExpr(FieldFromComposite(objs['ctx'], dim), dim) for dim in dims_to_initialise]
+        #         # dims_to_initialise = []
+        #     else:
+        #         dims_to_initialise = []
+        # else:
+        #     dims_to_initialise = []
+        #     # set_modulo_dims = [FieldFromComposite(, threads)]
+
+        # If solve if time dependent, insert placeholder expression to potentially be replaced
+        # by the initialisation of the modulo dimensions (or TimeDimension). 
+        # if any(i.is_Time for i in injectsolve.expr.dimensions):
+        #     placeholder_mod_dims = 
 
         dmda = objs['da_so_%s' % target.space_order]
 
@@ -439,7 +444,8 @@ class PETScCallbackBuilder:
             dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
         )
 
-        calls = (dims_to_initialise,
+        calls = ([],
+                #  dims_to_initialise,
                  rhs_call,
                  local_x,
                  vec_replace_array,
@@ -481,7 +487,7 @@ def time_dep_replace(injectsolve, target, solver_objs, objs):
     class StartPtr(LocalObject):
         dtype = CustomDtype(ctype_str, modifier=' *')
 
-    start_ptr = StartPtr('start_ptr')
+    start_ptr = StartPtr(name='start_ptr_%s' % target.name)
 
     vec_get_size = petsc_call(
         'VecGetSize', [solver_objs['x_local'], Byref(objs['localsize'])]
