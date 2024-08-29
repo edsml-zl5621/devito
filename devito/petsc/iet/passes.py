@@ -75,7 +75,7 @@ def lower_petsc(iet, **kwargs):
             break
 
     # Generate callback to populate main struct object
-    struct_main = objs['ctx']._rebuild(fields=filter_ordered(builder.struct_params))
+    struct_main = petsc_struct('ctx', filter_ordered(builder.struct_params))
     struct_callback = generate_struct_callback(struct_main)
     call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
     calls_set_app_ctx = [petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
@@ -93,9 +93,6 @@ def lower_petsc(iet, **kwargs):
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
-
-    # Remove temporary objects in efuncs that were previously used to store metadata
-    # efuncs = transform_efuncs(builder.efuncs)
     efuncs = tuple(builder.efuncs.values())+(struct_callback,)
     metadata.update({'efuncs': efuncs})
 
@@ -130,8 +127,7 @@ def build_core_objects(target, **kwargs):
         'comm': communicator,
         'err': PetscErrorCode(name='err'),
         'grid': target.grid,
-        'localsize': PetscInt(name='localsize'),
-        'ctx': petsc_struct('ctx', [])
+        'localsize': PetscInt(name='localsize')
     }
 
 

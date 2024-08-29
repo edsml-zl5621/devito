@@ -11,6 +11,7 @@ def petsc_lift(clusters):
     """
     processed = []
     for c in clusters:
+
         if isinstance(c.exprs[0].rhs, LinearSolveExpr):
             ispace = c.ispace.lift(c.exprs[0].rhs.target.space_dimensions)
             processed.append(c.rebuild(ispace=ispace))

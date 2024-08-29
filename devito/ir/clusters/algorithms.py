@@ -22,7 +22,6 @@ from devito.tools import (DefaultOrderedDict, Stamp, as_mapper, flatten,
 from devito.types import Array, Eq, Symbol
 from devito.types.dimension import BOTTOM, ModuloDimension
 
-
 __all__ = ['clusterize']
 
 

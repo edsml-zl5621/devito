@@ -160,11 +160,8 @@ class PETScStruct(CCompositeObject):
 
     @property
     def time_dim_fields(self):
-        time_dims = []
-        for f in self.fields:
-            if isinstance(f, (ModuloDimension, TimeDimension)):
-                time_dims.append(f)
-        return time_dims
+        return [f for f in self.fields 
+                if isinstance(f, (ModuloDimension, TimeDimension))]
 
     @property
     def _C_ctype(self):

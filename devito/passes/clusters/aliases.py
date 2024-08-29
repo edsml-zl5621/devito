@@ -95,6 +95,7 @@ def cire(clusters, mode, sregistry, options, platform):
         transformer = cls(sregistry, options, platform)
 
         clusters = transformer.process(clusters)
+
     return clusters
 
 
@@ -116,6 +117,7 @@ class CireTransformer:
 
     def _aliases_from_clusters(self, clusters, exclude, meta):
         exprs = flatten([c.exprs for c in clusters])
+
         # [Clusters]_n -> [Schedule]_m
         variants = []
         for mapper in self._generate(exprs, exclude):
@@ -127,6 +129,7 @@ class CireTransformer:
             schedule = lower_aliases(aliases, meta, self.opt_maxpar)
 
             variants.append(Variant(schedule, pexprs))
+
         if not variants:
             return []
 
