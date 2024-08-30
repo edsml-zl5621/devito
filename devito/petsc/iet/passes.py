@@ -84,7 +84,7 @@ def lower_petsc(iet, **kwargs):
 
     iet = Transformer(subs).visit(iet)
 
-    iet = init_time_iters(iet, struct_main)
+    iet = assign_time_iters(iet, struct_main)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
