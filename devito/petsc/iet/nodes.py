@@ -33,7 +33,7 @@ class FormFunctionCallback(Callback):
     @property
     def callback_form(self):
         return "%s" % self.name
-    
+
 
 class PETScCall(Call):
     pass
