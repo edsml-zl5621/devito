@@ -1,5 +1,5 @@
-from devito.ir.iet.nodes import Call, Expression
-from devito.petsc.iet.nodes import InjectSolveDummy
+from devito.ir.iet.nodes import Expression
+from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.ir.equations import OpInjectSolve
 from devito.ir.iet import (FindNodes, retrieve_iteration_tree,
                            filter_iterations, Transformer, Iteration,
@@ -8,11 +8,11 @@ from devito.symbolics import FieldFromComposite
 
 
 def petsc_call(specific_call, call_args):
-    return Call('PetscCall', [Call(specific_call, arguments=call_args)])
+    return PETScCall('PetscCall', [PETScCall(specific_call, arguments=call_args)])
 
 
 def petsc_call_mpi(specific_call, call_args):
-    return Call('PetscCallMPI', [Call(specific_call, arguments=call_args)])
+    return PETScCall('PetscCallMPI', [PETScCall(specific_call, arguments=call_args)])
 
 
 def petsc_struct(name, fields, liveness='lazy'):
@@ -47,11 +47,18 @@ def remove_CallbackExpr(body):
 
 
 def init_time_iters(iet, struct):
-    # TODO: Fix for the case when you have more than one time-loop but only a
-    # petscsolve inside one of them -> in this case, you do not need to
-    # initialise the modulodims/iterdims for the other time-loops
-    time_iters = [i for i in FindNodes(Iteration).visit(iet) if i.dim.is_Time]
+    """
+    Initialise time iterators in loops that contain PETScCalls.
+    Ensure that initialisation occurs only once per time loop, if necessary.
+    """
+    time_iters = [
+        i for i in FindNodes(Iteration).visit(iet)
+        if i.dim.is_Time and FindNodes(PETScCall).visit(i)
+    ]
 
+    if not time_iters:
+        return iet
+    
     dimension_mapper = {}
     for iter in time_iters:
         common_dimensions = [dim for dim in iter.dimensions if dim in struct.fields]

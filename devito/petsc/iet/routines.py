@@ -394,15 +394,14 @@ class PETScCallbackBuilder:
 
         local_x = petsc_call('DMCreateLocalVector',
                              [dmda, Byref(solver_objs['x_local'])])
-
+        
         if any(i.is_Time for i in target.dimensions):
             vec_replace_array = time_dep_replace(injectsolve, target, solver_objs, objs)
-
         else:
             field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
-            vec_replace_array = petsc_call(
+            vec_replace_array = (petsc_call(
                 'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
-            )
+            ),)
 
         dm_local_to_global_x = petsc_call(
             'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',
@@ -421,17 +420,17 @@ class PETScCallbackBuilder:
         dm_global_to_local_x = petsc_call('DMGlobalToLocal', [
             dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
         )
-
-        calls = (rhs_call,
-                 local_x,
-                 vec_replace_array,
-                 dm_local_to_global_x,
-                 dm_local_to_global_b,
-                 snes_solve,
-                 dm_global_to_local_x,
-                 BlankLine)
-
-        return calls
+        
+        return (
+            rhs_call,
+            local_x
+        ) + vec_replace_array + (
+            dm_local_to_global_x,
+            dm_local_to_global_b,
+            snes_solve,
+            dm_global_to_local_x,
+            BlankLine,
+        )
 
 
 def build_petsc_struct(iet, name, liveness):
@@ -476,7 +475,7 @@ def time_dep_replace(injectsolve, target, solver_objs, objs):
     )
 
     vec_replace_array = petsc_call('VecReplaceArray', [solver_objs['x_local'], start_ptr])
-    return [vec_get_size, expr, vec_replace_array]
+    return (vec_get_size, expr, vec_replace_array)
 
 
 Null = Macro('NULL')
