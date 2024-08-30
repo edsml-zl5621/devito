@@ -93,8 +93,8 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
         dummy_expr, target=target, solver_parameters=solver_parameters,
         matvecs=[matvecaction]+bcs_for_matvec,
-        formfuncs=[formfunction]+bcs_for_formfunc,
-        formrhs=[rhs]+bcs_for_rhs,
+        formfuncs=[formfunction],
+        formrhs=[rhs],
         arrays=arrays,
     ), subdomain=eq.subdomain)
 
