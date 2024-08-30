@@ -396,7 +396,7 @@ class PETScCallbackBuilder:
 
         local_x = petsc_call('DMCreateLocalVector',
                              [dmda, Byref(solver_objs['x_local'])])
-        
+
         if any(i.is_Time for i in target.dimensions):
             vec_replace_array = time_dep_replace(injectsolve, target, solver_objs, objs)
         else:
@@ -422,7 +422,7 @@ class PETScCallbackBuilder:
         dm_global_to_local_x = petsc_call('DMGlobalToLocal', [
             dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
         )
-        
+
         return (
             rhs_call,
             local_x

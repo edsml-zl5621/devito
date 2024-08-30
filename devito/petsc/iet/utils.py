@@ -58,7 +58,7 @@ def init_time_iters(iet, struct):
 
     if not time_iters:
         return iet
-    
+
     dimension_mapper = {}
     for iter in time_iters:
         common_dimensions = [dim for dim in iter.dimensions if dim in struct.fields]
