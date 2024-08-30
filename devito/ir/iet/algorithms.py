@@ -3,6 +3,8 @@ from collections import OrderedDict
 from devito.ir.iet import (Expression, Increment, Iteration, List, Conditional, SyncSpot,
                            Section, HaloSpot, ExpressionBundle)
 from devito.tools import timed_pass
+from devito.petsc.types import LinearSolveExpr
+from devito.petsc.iet.utils import petsc_iet_mapper
 
 
 __all__ = ['iet_build']
@@ -13,8 +15,6 @@ def iet_build(stree):
     """
     Construct an Iteration/Expression tree(IET) from a ScheduleTree.
     """
-    from devito.petsc.types import LinearSolveExpr
-    from devito.petsc.iet.utils import petsc_iet_mapper
     nsections = 0
     queues = OrderedDict()
     for i in stree.visit():
