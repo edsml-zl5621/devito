@@ -30,8 +30,8 @@ def spatial_iteration_loops(iet):
     return spatial_body
 
 
-# Mapping special Eq operations to their corresponding IET Expression subclass types.
-# These operations correspond to subclasses of Eq utilised within PETScSolve.
+# Mapping special Eq operations to their corresponding IET Expression subclass
+# types. These operations correspond to subclasses of Eq utilised within PETScSolve
 petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
 
 
@@ -46,10 +46,12 @@ def remove_CallbackExpr(body):
     return Transformer(mapper).visit(body)
 
 
-def init_time_iters(iet, struct):
+def assign_time_iters(iet, struct):
     """
-    Initialise time iterators in loops that contain PETScCalls.
-    Ensure that initialisation occurs only once per time loop, if necessary.
+    Assign time iterators to the struct within loops containing PETScCalls.
+    Ensure that assignment occurs only once per time loop, if necessary.
+    Assign only the iterators that are common between the struct fields
+    and the actual Iteration.
     """
     time_iters = [
         i for i in FindNodes(Iteration).visit(iet)
