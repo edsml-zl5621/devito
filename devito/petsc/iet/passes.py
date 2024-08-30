@@ -12,7 +12,7 @@ from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
 from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
-                                    spatial_iteration_loops, init_time_iters)
+                                    spatial_iteration_loops, assign_time_iters)
 
 
 @iet_pass
