@@ -22,7 +22,7 @@ def petsc_lift(clusters):
 @timed_pass()
 def petsc_project(clusters):
     """
-    Drop time-loop for expressions which appear in PETSc callback functions.
+    Drop time loop for clusters which appear in PETSc callback functions.
     """
     processed = []
     for c in clusters:

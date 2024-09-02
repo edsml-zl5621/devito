@@ -554,7 +554,7 @@ def test_calls_to_callbacks():
 
 
 @skipif('petsc')
-def test_start_prt():
+def test_start_ptr():
     """
     Verify that a pointer to the start of the memory address is correctly
     generated for TimeFunction objects. This pointer should indicate the

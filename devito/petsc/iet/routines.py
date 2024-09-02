@@ -12,7 +12,7 @@ from devito.tools import ctypes_to_cstr, dtype_to_ctype, CustomDtype
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
-from devito.petsc.iet.utils import petsc_call, petsc_struct, remove_CallbackExpr
+from devito.petsc.iet.utils import petsc_call, petsc_struct, drop_callbackexpr
 from devito.ir.support import SymbolRegistry
 
 
@@ -86,7 +86,7 @@ class PETScCallbackBuilder:
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        body = remove_CallbackExpr(body)
+        body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
@@ -211,7 +211,7 @@ class PETScCallbackBuilder:
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        body = remove_CallbackExpr(body)
+        body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
@@ -330,7 +330,7 @@ class PETScCallbackBuilder:
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        body = remove_CallbackExpr(body)
+        body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 

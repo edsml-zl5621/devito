@@ -35,7 +35,7 @@ def spatial_iteration_loops(iet):
 petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
 
 
-def remove_CallbackExpr(body):
+def drop_callbackexpr(body):
     from devito.petsc.types import CallbackExpr
     nodes = FindNodes(Expression).visit(body)
     mapper = {
@@ -61,12 +61,12 @@ def assign_time_iters(iet, struct):
     if not time_iters:
         return iet
 
-    dimension_mapper = {}
+    mapper = {}
     for iter in time_iters:
         common_dimensions = [dim for dim in iter.dimensions if dim in struct.fields]
         common_dimensions = [DummyExpr(FieldFromComposite(dim, struct), dim)
                              for dim in common_dimensions]
         iter_new = iter._rebuild(nodes=List(body=tuple(common_dimensions)+iter.nodes))
-        dimension_mapper.update({iter: iter_new})
+        mapper.update({iter: iter_new})
 
-    return Transformer(dimension_mapper).visit(iet)
+    return Transformer(mapper).visit(iet)
