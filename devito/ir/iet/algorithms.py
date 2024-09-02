@@ -6,7 +6,6 @@ from devito.tools import timed_pass
 from devito.petsc.types import LinearSolveExpr
 from devito.petsc.iet.utils import petsc_iet_mapper
 
-
 __all__ = ['iet_build']
 
 
