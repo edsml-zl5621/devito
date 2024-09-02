@@ -26,7 +26,6 @@ def petsc_project(clusters):
     """
     processed = []
     for c in clusters:
-        # Drop time-loop for expressions that appear in PETSc callback functions
         if isinstance(c.exprs[0].rhs, CallbackExpr):
             time_dims = [d for d in c.ispace.intervals.dimensions if d.is_Time]
             ispace = c.ispace.project(lambda d: d not in time_dims)
