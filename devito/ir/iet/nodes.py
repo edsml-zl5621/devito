@@ -1057,14 +1057,11 @@ class Dereference(ExprStmt, Node):
 
     @property
     def expr_symbols(self):
-        # TODO: Erick made a similar edit for NoDeclStruct so once merged,
-        # adjust accordingly
+        ret = []
         if self.pointer.is_Object:
-            ret = [self.pointer._C_symbol]
-        else:
-            ret = [self.pointer.indexed]
-        if self.pointer.is_PointerArray or self.pointer.is_TempFunction:
-            ret.append(self.pointee.indexed)
+            ret.extend([self.pointer._C_symbol, self.pointee._C_symbol])
+        elif self.pointer.is_PointerArray or self.pointer.is_TempFunction:
+            ret.extend([self.pointer.indexed, self.pointee.indexed])
             ret.extend(flatten(i.free_symbols for i in self.pointee.symbolic_shape[1:]))
             ret.extend(self.pointer.free_symbols)
         else:

@@ -29,6 +29,10 @@ class DM(LocalObject):
     def _C_free(self):
         return petsc_call('DMDestroy', [Byref(self.function)])
 
+    @property
+    def _C_free_priority(self):
+        return 3
+
 
 class Mat(LocalObject):
     """
@@ -39,6 +43,10 @@ class Mat(LocalObject):
     @property
     def _C_free(self):
         return petsc_call('MatDestroy', [Byref(self.function)])
+
+    @property
+    def _C_free_priority(self):
+        return 1
 
 
 class LocalVec(LocalObject):
@@ -57,6 +65,10 @@ class GlobalVec(LocalObject):
     @property
     def _C_free(self):
         return petsc_call('VecDestroy', [Byref(self.function)])
+
+    @property
+    def _C_free_priority(self):
+        return 0
 
 
 class PetscMPIInt(LocalObject):
@@ -84,6 +96,10 @@ class SNES(LocalObject):
     @property
     def _C_free(self):
         return petsc_call('SNESDestroy', [Byref(self.function)])
+
+    @property
+    def _C_free_priority(self):
+        return 2
 
 
 class PC(LocalObject):

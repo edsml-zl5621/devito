@@ -233,6 +233,10 @@ class LocalObject(AbstractObject, LocalType):
         return None
 
     @property
+    def _C_free_priority(self):
+        return float('inf')
+
+    @property
     def _mem_global(self):
         return self._is_global
 
