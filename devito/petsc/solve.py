@@ -7,11 +7,20 @@ from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
-from devito.symbolics import retrieve_functions
+from devito.symbolics import retrieve_functions, uxreplace
 from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
+from devito.symbolics import retrieve_functions, INT
 
 
-__all__ = ['PETScSolve']
+__all__ = ['PETScSolve', 'NaturalBC', 'EssentialBC']
+
+
+class NaturalBC(Eq):
+    pass
+
+
+class EssentialBC(Eq):
+    pass
 
 
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
@@ -70,25 +79,35 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
     bcs_for_matvec = []
     bcs_for_formfunc = []
     bcs_for_rhs = []
-    for bc in bcs:
-        # TODO: Insert code to distiguish between essential and natural
-        # boundary conditions since these are treated differently within
-        # the solver
-        # NOTE: May eventually remove the essential bcs from the solve
-        # (and move to rhs) but for now, they are included since this
-        # is not trivial to implement when using DMDA
-        # NOTE: Below is temporary -> Just using this as a palceholder for
-        # the actual BC implementation
-        centre = centre_stencil(F_target, target)
-        bcs_for_matvec.append(Eq(
-            arrays['y_matvec'],
-            CallbackExpr(centre.subs({target: arrays['x_matvec']}), *dummy),
-            subdomain=bc.subdomain
-        ))
-        # NOTE: Temporary
-        bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
-                                   0., subdomain=bc.subdomain))
-        bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
+
+    # OBVIOUSLY FIX THIS:
+    rhs = Eq(
+        arrays['b_tmp'],
+        CallbackExpr(b, *dummy),
+        subdomain=target.grid.subdomains['domain']    
+    )
+
+    centre = centre_stencil(F_target, target)
+    # for bc in bcs:
+
+
+        # if isinstance(bc, EssentialBC):
+        #     bcs_for_rhs.append(Eq(arrays['b_tmp'], CallbackExpr(0., *dummy), subdomain=bc.subdomain))
+        #     bcs_for_formfunc.append(Eq(arrays['y_formfunc'], CallbackExpr(0., *dummy), subdomain=bc.subdomain))
+        #     centre = uxreplace(centre, {target: arrays['x_matvec']})
+        #     bcs_for_matvec.append(Eq(
+        #         arrays['y_matvec'],
+        #         CallbackExpr(centre, *dummy),
+        #         subdomain=bc.subdomain
+        #     ))
+
+        # elif isinstance(bc, NaturalBC):
+        #     # new_rhs = F_target.subs({target: arrays['x_formfunc']})
+        #     tmp = neumann(Eq(target, F_target, subdomain=bc.subdomain), bc.subdomain, bc.subdomain.name, array=arrays['x_formfunc'])
+        #     bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
+        #                                CallbackExpr(tmp), subdomain=bc.subdomain))
+
+
 
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
         dummy_expr, target=target, solver_parameters=solver_parameters,
