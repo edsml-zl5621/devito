@@ -31,7 +31,7 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tup
                           split, timed_pass, timed_region, contains_val)
 from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
-from devito.petsc.iet.passes import lower_petsc, sort_frees
+from devito.petsc.iet.passes import lower_petsc
 from devito.petsc.clusters import petsc_lift
 
 __all__ = ['Operator']
@@ -492,9 +492,6 @@ class Operator(Callable):
 
         # Target-independent optimizations
         minimize_symbols(graph)
-
-        # If necessary, sort frees into a specific order
-        sort_frees(graph)
 
         return graph.root, graph
 

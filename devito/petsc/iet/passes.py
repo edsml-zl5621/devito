@@ -291,29 +291,6 @@ def generate_struct_callback(struct):
     return struct_callback
 
 
-@iet_pass
-def sort_frees(iet):
-    frees = iet.body.frees
-
-    if not frees:
-        return iet, {}
-
-    destroys = ["VecDestroy", "MatDestroy", "SNESDestroy", "DMDestroy"]
-    priority = {k: i for i, k in enumerate(destroys, start=1)}
-
-    def key(i):
-        for destroy, prio in priority.items():
-            if destroy in str(i):
-                return prio
-        return float('inf')
-
-    frees = sorted(frees, key=key)
-
-    body = iet.body._rebuild(frees=frees)
-    iet = iet._rebuild(body=body)
-    return iet, {}
-
-
 Null = Macro('NULL')
 void = 'void'
 

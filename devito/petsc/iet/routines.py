@@ -138,11 +138,13 @@ class PETScCallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
-        # NOTE: Question: I have placed a chunk of the calls in the `stacks` argument
-        # of the `CallableBody` to ensure that these calls precede the `cast` statements.
-        # The 'casts' depend on the calls, so this order is necessary. By doing this,
-        # I avoid having to manually construct the 'casts' and can allow Devito to handle
-        # their construction. Are there any potential issues with this approach?
+        # TODO: Some of the calls are placed in the `stacks` argument of the
+        # `CallableBody` to ensure that they precede the `cast` statements. The
+        # 'casts' depend on the calls, so this order is necessary. By doing this,
+        # you avoid having to manually construct the `casts` and can allow
+        # Devito to handle their construction. This is a temporary solution and
+        # should be revisited
+
         body = [body,
                 vec_restore_array_y,
                 vec_restore_array_x,
@@ -402,6 +404,7 @@ class PETScCallbackBuilder:
 
 def build_petsc_struct(iet, name, liveness):
     # Place all context data required by the shell routines into a struct
+    # TODO: Clean this search up
     basics = FindSymbols('basics').visit(iet)
     avoid0 = [i for i in FindSymbols('indexedbases').visit(iet)
               if isinstance(i.function, PETScArray)]
