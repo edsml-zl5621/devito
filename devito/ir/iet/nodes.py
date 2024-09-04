@@ -1059,15 +1059,13 @@ class Dereference(ExprStmt, Node):
     @property
     def expr_symbols(self):
         ret = []
-        if self.pointer.is_Object:
-            assert issubclass(self.pointer._C_ctype, ctypes._Pointer)
-            ret.extend([self.pointer._C_symbol, self.pointee._C_symbol])
-        elif self.pointer.is_PointerArray or self.pointer.is_TempFunction:
+        if self.pointer.is_PointerArray or self.pointer.is_TempFunction:
             ret.extend([self.pointer.indexed, self.pointee.indexed])
             ret.extend(flatten(i.free_symbols for i in self.pointee.symbolic_shape[1:]))
             ret.extend(self.pointer.free_symbols)
         else:
-            ret.append(self.pointee._C_symbol)
+            assert issubclass(self.pointer._C_ctype, ctypes._Pointer)
+            ret.extend([self.pointer._C_symbol, self.pointee._C_symbol])
         return tuple(filter_ordered(ret))
 
     @property
