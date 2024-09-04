@@ -1,6 +1,7 @@
 """The Iteration/Expression Tree (IET) hierarchy."""
 
 import abc
+import ctypes
 import inspect
 from functools import cached_property
 from collections import OrderedDict, namedtuple
@@ -1059,6 +1060,7 @@ class Dereference(ExprStmt, Node):
     def expr_symbols(self):
         ret = []
         if self.pointer.is_Object:
+            assert issubclass(self.pointer._C_ctype, ctypes._Pointer)
             ret.extend([self.pointer._C_symbol, self.pointee._C_symbol])
         elif self.pointer.is_PointerArray or self.pointer.is_TempFunction:
             ret.extend([self.pointer.indexed, self.pointee.indexed])
