@@ -145,7 +145,7 @@ class PETScCallbackBuilder:
         dm_local_to_global_end = petsc_call('DMLocalToGlobalEnd', [
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
-        
+
         # TODO: Some of the calls are placed in the `stacks` argument of the
         # `CallableBody` to ensure that they precede the `cast` statements. The
         # 'casts' depend on the calls, so this order is necessary. By doing this,
