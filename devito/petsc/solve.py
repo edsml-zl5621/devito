@@ -12,18 +12,14 @@ from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
 from devito.symbolics import retrieve_functions, INT
 
 
-__all__ = ['PETScSolve', 'NaturalBC', 'EssentialBC']
-
-
-class NaturalBC(Eq):
-    pass
+__all__ = ['PETScSolve', 'EssentialBC']
 
 
 class EssentialBC(Eq):
     pass
 
 
-def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
+def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
     arrays = {
@@ -37,127 +33,116 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         for p in prefixes
     }
 
-    b, F_target = separate_eqn(eq, target)
+    matvecs = []
+    formfuncs = []
+    formrhs = []
+    funcs = list(set(retrieve_functions(eqns)))
 
-    # Passed through main kernel and removed at iet level, used to generate
-    # correct time loop etc
-    dummy = list(set(retrieve_functions(F_target - b)))
-    dummy_expr = sum(dummy)
+    for eq in eqns:
+        b, F_target, target_funcs = separate_eqn(eq, target)
+        # TODO: Current assumption is that problem is linear and user has not provided
+        # a jacobian. Hence, we can use F_target to form the jac-vec product
 
-    # TODO: Current assumption is that problem is linear and user has not provided
-    # a jacobian. Hence, we can use F_target to form the jac-vec product
+        matvecs.append(Eq(
+            arrays['y_matvec'],
+            CallbackExpr(F_target.subs(generate_mapper(arrays['x_matvec'], target_funcs)), *funcs),
+            subdomain=eq.subdomain
+        ))
 
-    matvecaction = Eq(
-        arrays['y_matvec'],
-        CallbackExpr(F_target.subs({target: arrays['x_matvec']}), *dummy),
-        subdomain=eq.subdomain
-    )
+        formfuncs.append(Eq(
+            arrays['y_formfunc'],
+            CallbackExpr(F_target.subs(generate_mapper(arrays['x_formfunc'], target_funcs)), *funcs),
+            subdomain=eq.subdomain
+        ))
 
-    formfunction = Eq(
-        arrays['y_formfunc'],
-        CallbackExpr(F_target.subs({target: arrays['x_formfunc']}), *dummy),
-        subdomain=eq.subdomain
-    )
-
-    rhs = Eq(
-        arrays['b_tmp'],
-        CallbackExpr(b, *dummy),
-        subdomain=eq.subdomain
-    )
+        formrhs.append(Eq(
+            arrays['b_tmp'],
+            CallbackExpr(b, *funcs),
+            subdomain=eq.subdomain
+        ))
 
     # Placeholder equation for inserting calls to the solver
-    inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        dummy_expr, target=target, solver_parameters=solver_parameters,
-        matvecs=[matvecaction], formfuncs=[formfunction],
-        formrhs=[rhs], arrays=arrays,
-    ), subdomain=eq.subdomain)
-
-    if not bcs:
-        return [inject_solve]
-
-    # NOTE: BELOW IS NOT FULLY TESTED/IMPLEMENTED YET
-    bcs_for_matvec = []
-    bcs_for_formfunc = []
-    bcs_for_rhs = []
-
-    # OBVIOUSLY FIX THIS:
-    rhs = Eq(
-        arrays['b_tmp'],
-        CallbackExpr(b, *dummy),
-        subdomain=target.grid.subdomains['domain']    
-    )
-
-    centre = centre_stencil(F_target, target)
-    # for bc in bcs:
-
-
-        # if isinstance(bc, EssentialBC):
-        #     bcs_for_rhs.append(Eq(arrays['b_tmp'], CallbackExpr(0., *dummy), subdomain=bc.subdomain))
-        #     bcs_for_formfunc.append(Eq(arrays['y_formfunc'], CallbackExpr(0., *dummy), subdomain=bc.subdomain))
-        #     centre = uxreplace(centre, {target: arrays['x_matvec']})
-        #     bcs_for_matvec.append(Eq(
-        #         arrays['y_matvec'],
-        #         CallbackExpr(centre, *dummy),
-        #         subdomain=bc.subdomain
-        #     ))
-
-        # elif isinstance(bc, NaturalBC):
-        #     # new_rhs = F_target.subs({target: arrays['x_formfunc']})
-        #     tmp = neumann(Eq(target, F_target, subdomain=bc.subdomain), bc.subdomain, bc.subdomain.name, array=arrays['x_formfunc'])
-        #     bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
-        #                                CallbackExpr(tmp), subdomain=bc.subdomain))
-
-
+    # TODO: dummy_expr should include functions from all equations that appear
+    # in the set of equations passed into PETScSolve
 
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        dummy_expr, target=target, solver_parameters=solver_parameters,
-        matvecs=[matvecaction]+bcs_for_matvec,
-        formfuncs=[formfunction],
-        formrhs=[rhs],
-        arrays=arrays,
+        sum(funcs), target=target, solver_parameters=solver_parameters,
+        matvecs=matvecs, formfuncs=formfuncs,
+        formrhs=formrhs, arrays=arrays,
     ), subdomain=eq.subdomain)
+
 
     return [inject_solve]
 
 
 def separate_eqn(eqn, target):
     """
-    Separate the equation into two separate expressions,
+    Separate the eqn into two separate expressions,
     where F(target) = b.
     """
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
-    tmp = eval_time_derivatives(zeroed_eqn.lhs)
-    b, F_target = remove_target(tmp, target)
-    return -b, F_target
+    zeroed_eqn = eval_time_derivatives(zeroed_eqn.lhs)
+    target_funcs  = set(spatial_targets(zeroed_eqn, target))
+    b, F_target = remove_target(zeroed_eqn, target_funcs)
+    return -b, F_target, target_funcs
+
+
+def spatial_targets(eq, target):
+    funcs = retrieve_functions(eq)
+
+    if any(dim.is_Time for dim in target.dimensions):
+        time_idx_target = [i for i, d in zip(target.indices, target.dimensions) if d.is_Time]
+        assert len(time_idx_target) == 1
+        funcs_to_subs = [
+            func for func in funcs 
+            if func.function is target.function and time_idx_target[0] 
+            in func.indices
+        ]
+    else:
+        funcs_to_subs = [
+            func for func in funcs 
+            if func.function is target.function
+        ]
+
+    return funcs_to_subs
+
+
+def generate_mapper(array, funcs_to_subs):
+    space_indices = [
+        tuple(i for i, d in zip(func.indices, func.dimensions) if d.is_Space) for func in funcs_to_subs
+    ]
+    array_lst = [array.subs({ai: fi for ai, fi in zip(array.indices, indices)}) for indices in space_indices]
+    return {func: arr for func, arr in zip(funcs_to_subs, array_lst)}
 
 
 @singledispatch
-def remove_target(expr, target):
-    return (0, expr) if expr == target else (expr, 0)
+def remove_target(expr, targets):
+    return (0, expr) if expr in targets else (expr, 0)
 
 
 @remove_target.register(sympy.Add)
-def _(expr, target):
-    if not expr.has(target):
+def _(expr, targets):
+    if not any(expr.has(t) for t in targets):
         return (expr, 0)
 
-    args_b, args_F = zip(*(remove_target(a, target) for a in expr.args))
+    args_b, args_F = zip(*(remove_target(a, targets) for a in expr.args))
     return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
 @remove_target.register(Mul)
-def _(expr, target):
-    if not expr.has(target):
+def _(expr, targets):
+    if not any(expr.has(t) for t in targets):
         return (expr, 0)
 
-    args_b, args_F = zip(*[remove_target(a, target) if a.has(target)
+    args_b, args_F = zip(*[remove_target(a, targets) if any(a.has(t) for t in targets)
                            else (a, a) for a in expr.args])
     return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
 @remove_target.register(Derivative)
 def _(expr, target):
-    return (0, expr) if expr.has(target) else (expr, 0)
+    return (0, expr) if any(expr.has(t) for t in target) else (expr, 0)
+    # return (0, expr) if expr.has(target) else (expr, 0)
 
 
 @singledispatch

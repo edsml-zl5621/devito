@@ -369,7 +369,7 @@ def test_separate_eqn(eqn, target, expected):
     f2 = TimeFunction(name='f2', grid=grid, space_order=so)  # noqa
     g2 = TimeFunction(name='g2', grid=grid, space_order=so)  # noqa
 
-    b, F = separate_eqn(eval(eqn), eval(target))
+    b, F, _ = separate_eqn(eval(eqn), eval(target))
     expected_b, expected_F = expected
 
     assert str(b) == expected_b
