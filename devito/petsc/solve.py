@@ -36,37 +36,62 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     matvecs = []
     formfuncs = []
     formrhs = []
+    # TODO: adjust this for all eqns
+    funcs_placeholder = list(set(retrieve_functions(eqns[0].lhs - eqns[0].rhs)))
     funcs = list(set(retrieve_functions(eqns)))
+    # from IPython import embed; embed()
 
     for eq in eqns:
         b, F_target, target_funcs = separate_eqn(eq, target)
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
 
-        matvecs.append(Eq(
-            arrays['y_matvec'],
-            CallbackExpr(F_target.subs(generate_mapper(arrays['x_matvec'], target_funcs)), *funcs),
-            subdomain=eq.subdomain
-        ))
+        if isinstance(eq, EssentialBC):
+            matvecs.append(Eq(
+                arrays['y_matvec'],
+                CallbackExpr(arrays['x_matvec'], *funcs_placeholder),
+                subdomain=eq.subdomain
+            ))
 
-        formfuncs.append(Eq(
+            formfuncs.append(Eq(
             arrays['y_formfunc'],
-            CallbackExpr(F_target.subs(generate_mapper(arrays['x_formfunc'], target_funcs)), *funcs),
+            CallbackExpr(0., *funcs_placeholder),
             subdomain=eq.subdomain
-        ))
+            ))
+            
+            formrhs.append(Eq(
+                arrays['b_tmp'],
+                CallbackExpr(b, *funcs_placeholder),
+                subdomain=eq.subdomain
+            ))
 
-        formrhs.append(Eq(
-            arrays['b_tmp'],
-            CallbackExpr(b, *funcs),
-            subdomain=eq.subdomain
-        ))
+        else:
 
+            matvecs.append(Eq(
+                arrays['y_matvec'],
+                CallbackExpr(F_target.subs(generate_mapper(arrays['x_matvec'], target_funcs)), *funcs_placeholder),
+                subdomain=eq.subdomain
+            ))
+
+            formfuncs.append(Eq(
+                arrays['y_formfunc'],
+                CallbackExpr(F_target.subs(generate_mapper(arrays['x_formfunc'], target_funcs)), *funcs_placeholder),
+                subdomain=eq.subdomain
+            ))
+
+            formrhs.append(Eq(
+                arrays['b_tmp'],
+                CallbackExpr(b, *funcs_placeholder),
+                subdomain=eq.subdomain
+            ))
+    # from IPython import embed; embed()
     # Placeholder equation for inserting calls to the solver
     # TODO: dummy_expr should include functions from all equations that appear
     # in the set of equations passed into PETScSolve
-
+    dummy_expr = sum(funcs_placeholder)
+    # TODO: pass CallbackExpr through initial lowering to generate correct modulo dims 
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        sum(funcs), target=target, solver_parameters=solver_parameters,
+        dummy_expr, target=target, solver_parameters=solver_parameters,
         matvecs=matvecs, formfuncs=formfuncs,
         formrhs=formrhs, arrays=arrays,
     ), subdomain=eq.subdomain)
