@@ -1,15 +1,17 @@
 from functools import singledispatch
 
 import sympy
+import numpy as np
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-from devito.types import Eq
+from devito.types import Eq, Constant
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions, uxreplace
 from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
 from devito.symbolics import retrieve_functions, INT
+from devito.ir import SymbolRegistry
 
 
 __all__ = ['PETScSolve', 'EssentialBC']
@@ -20,6 +22,8 @@ class EssentialBC(Eq):
 
 
 def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
+
+    sregistry = SymbolRegistry()
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
     arrays = {
@@ -42,26 +46,28 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     # from IPython import embed; embed()
 
     for eq in eqns:
-        b, F_target, target_funcs = separate_eqn(eq, target)
+        b, F_target, target_funcs = separate_eqn(eq, target, sregistry)
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
 
         if isinstance(eq, EssentialBC):
+            btmp, Ftmp, _ = separate_eqn(eqns[0], target, sregistry)
+            centre = centre_stencil(Ftmp, target)
             matvecs.append(Eq(
                 arrays['y_matvec'],
-                CallbackExpr(arrays['x_matvec'], *funcs_placeholder),
+                CallbackExpr(centre.subs(generate_mapper(arrays['x_matvec'], target_funcs)), *funcs_placeholder),
                 subdomain=eq.subdomain
             ))
 
             formfuncs.append(Eq(
             arrays['y_formfunc'],
-            CallbackExpr(0., *funcs_placeholder),
+            CallbackExpr(Constant(name=sregistry.make_name(prefix='zero'), value=0., dtype=target.grid.dtype), *funcs_placeholder),
             subdomain=eq.subdomain
             ))
             
             formrhs.append(Eq(
                 arrays['b_tmp'],
-                CallbackExpr(b, *funcs_placeholder),
+                CallbackExpr(Constant(name=sregistry.make_name(prefix='zero'), value=0., dtype=target.grid.dtype), *funcs_placeholder),
                 subdomain=eq.subdomain
             ))
 
@@ -78,7 +84,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
                 CallbackExpr(F_target.subs(generate_mapper(arrays['x_formfunc'], target_funcs)), *funcs_placeholder),
                 subdomain=eq.subdomain
             ))
-
+            # from IPython import embed; embed()
             formrhs.append(Eq(
                 arrays['b_tmp'],
                 CallbackExpr(b, *funcs_placeholder),
@@ -100,12 +106,12 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     return [inject_solve]
 
 
-def separate_eqn(eqn, target):
+def separate_eqn(eqn, target, sregistry):
     """
     Separate the eqn into two separate expressions,
     where F(target) = b.
     """
-    zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
+    zeroed_eqn = Eq(eqn.lhs - eqn.rhs, Constant(name=sregistry.make_name(prefix='zero'), value=0., dtype=eqn.lhs.dtype))
     zeroed_eqn = eval_time_derivatives(zeroed_eqn.lhs)
     target_funcs  = set(spatial_targets(zeroed_eqn, target))
     b, F_target = remove_target(zeroed_eqn, target_funcs)

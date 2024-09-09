@@ -7,7 +7,7 @@ from devito.ir.iet import (FindNodes, Transformer,
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.tools import filter_ordered
 from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
-                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt)
+                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt, KSPConvergedReason)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
@@ -197,7 +197,8 @@ def build_solver_objs(target):
         'Y_global': GlobalVec(name='Y_global_%s' % name),
         'X_local': LocalVec(name='X_local_%s' % name, liveness='eager'),
         'Y_local': LocalVec(name='Y_local_%s' % name, liveness='eager'),
-        'dummy': DummyArg(name='dummy_%s' % name)
+        'dummy': DummyArg(name='dummy_%s' % name),
+        'reason': KSPConvergedReason(name='reason_%s' % name)
     }
 
 
@@ -232,10 +233,16 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
     snes_get_ksp = petsc_call('SNESGetKSP',
                               [solver_objs['snes'], Byref(solver_objs['ksp'])])
 
+    # ksp_set_tols = petsc_call(
+    #     'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
+    #                          solver_params['ksp_atol'], solver_params['ksp_divtol'],
+    #                          solver_params['ksp_max_it']]
+    # )
+
     ksp_set_tols = petsc_call(
-        'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
-                             solver_params['ksp_atol'], solver_params['ksp_divtol'],
-                             solver_params['ksp_max_it']]
+        'KSPSetTolerances', [solver_objs['ksp'], 'PETSC_DEFAULT',
+                             'PETSC_DEFAULT', 'PETSC_DEFAULT',
+                             'PETSC_DEFAULT']
     )
 
     ksp_set_type = petsc_call(

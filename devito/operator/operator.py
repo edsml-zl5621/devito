@@ -267,6 +267,7 @@ class Operator(Callable):
         kwargs['rcompile'] = cls._rcompile_wrapper(**kwargs)
 
         # [Eq] -> [LoweredEq]
+        # from IPython import embed; embed()
         expressions = cls._lower_exprs(expressions, **kwargs)
 
         # [LoweredEq] -> [Clusters]

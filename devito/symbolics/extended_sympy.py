@@ -252,6 +252,14 @@ class FieldFromPointer(CallFromPointer, Pickable):
     def field(self):
         return self.call
 
+    # @property
+    # def dtype(self):
+    #     return self.field.dtype
+
+    # @property
+    # def _C_ctype(self):
+    #     return self.field._C_ctype
+
     __repr__ = __str__
 
 

@@ -83,6 +83,14 @@ class KSP(LocalObject):
     dtype = CustomDtype('KSP')
 
 
+class KSPConvergedReason(LocalObject):
+    """
+    PETSc KSP : Linear Systems Solvers.
+    Manages Krylov Methods.
+    """
+    dtype = CustomDtype('KSPConvergedReason')
+
+
 class SNES(LocalObject):
     """
     PETSc SNES : Non-Linear Systems Solvers.

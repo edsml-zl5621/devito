@@ -3,7 +3,7 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           Dereference, DummyExpr, BlankLine)
+                           Dereference, DummyExpr, BlankLine, Transformer)
 from devito.symbolics import Byref, FieldFromPointer, Macro, Cast
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
@@ -182,6 +182,7 @@ class PETScCallbackBuilder:
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
+        from IPython import embed; embed()
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         matvec_body = Uxreplace(subs).visit(matvec_body)
@@ -417,6 +418,13 @@ class PETScCallbackBuilder:
             solver_objs['snes'], solver_objs['b_global'], solver_objs['x_global']]
         )
 
+        snesgetksp = petsc_call('SNESGetKSP', [solver_objs['snes'], Byref(solver_objs['ksp'])])
+
+        kspgetconverged = petsc_call('KSPGetConvergedReason', [solver_objs['ksp'], Byref(solver_objs['reason'])])
+
+        printit = petsc_call('PetscPrintf', ['PETSC_COMM_SELF',
+                                             solver_objs['reason']])
+
         dm_global_to_local_x = petsc_call('DMGlobalToLocal', [
             dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
         )
@@ -428,6 +436,9 @@ class PETScCallbackBuilder:
             dm_local_to_global_x,
             dm_local_to_global_b,
             snes_solve,
+            snesgetksp,
+            kspgetconverged,
+            # printit,
             dm_global_to_local_x,
             BlankLine,
         )
