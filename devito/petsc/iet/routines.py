@@ -182,7 +182,7 @@ class PETScCallbackBuilder:
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
-        from IPython import embed; embed()
+        # from IPython import embed; embed()
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         matvec_body = Uxreplace(subs).visit(matvec_body)

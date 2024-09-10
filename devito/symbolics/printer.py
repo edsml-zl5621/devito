@@ -153,7 +153,9 @@ class CodePrinter(C99CodePrinter):
         if isinstance(self.compiler, AOMPCompiler):
             return "fabs(%s)" % self._print(expr.args[0])
         # Check if argument is an integer
-        func = "abs" if has_integer_args(*expr.args[0].args) else "fabs"
+        # func = "abs" if has_integer_args(*expr.args[0].args) else "fabs"
+        func = "abs"
+        # from IPython import embed; embed()
         return "%s(%s)" % (func, self._print(expr.args[0]))
 
     def _print_Add(self, expr, order=None):
