@@ -89,7 +89,7 @@ def lower_petsc(iet, **kwargs):
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
         init=init, body=body,
-        frees=(c.Line("PetscCall(PetscFinalize());"),)
+        frees=(c.Line("PetscCall(PetscFinalize());"), c.Line("PetscCall(DMDestroy(&(da_so_2)));"))
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
@@ -224,6 +224,17 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
     global_x = petsc_call('DMCreateGlobalVector',
                           [dmda, Byref(solver_objs['x_global'])])
 
+    if not any(i.is_Time for i in target.dimensions):
+        local_x = petsc_call('DMCreateLocalVector',
+                                [dmda, Byref(solver_objs['x_local'])])
+
+        field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
+        vec_replace_array = (local_x, petsc_call(
+            'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
+        ))
+    else:
+        vec_replace_array = ()
+    # from IPython import embed; embed()
     global_b = petsc_call('DMCreateGlobalVector',
                           [dmda, Byref(solver_objs['b_global'])])
 
@@ -233,16 +244,10 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
     snes_get_ksp = petsc_call('SNESGetKSP',
                               [solver_objs['snes'], Byref(solver_objs['ksp'])])
 
-    # ksp_set_tols = petsc_call(
-    #     'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
-    #                          solver_params['ksp_atol'], solver_params['ksp_divtol'],
-    #                          solver_params['ksp_max_it']]
-    # )
-
     ksp_set_tols = petsc_call(
-        'KSPSetTolerances', [solver_objs['ksp'], 'PETSC_DEFAULT',
-                             'PETSC_DEFAULT', 'PETSC_DEFAULT',
-                             'PETSC_DEFAULT']
+        'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
+                             solver_params['ksp_atol'], solver_params['ksp_divtol'],
+                             solver_params['ksp_max_it']]
     )
 
     ksp_set_type = petsc_call(
@@ -262,7 +267,8 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
         create_matrix,
         snes_set_jac,
         snes_set_type,
-        global_x,
+        global_x
+    ) + vec_replace_array + (
         global_b,
         local_b,
         snes_get_ksp,

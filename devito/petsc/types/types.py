@@ -12,10 +12,11 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     defaults = {
         'ksp_type': 'gmres',
         'pc_type': 'jacobi',
-        'ksp_rtol': 1e-7,  # Relative tolerance
+        # Tolerance defaults are set to the PETSc defaults
+        'ksp_rtol': 1e-5,  # Relative tolerance
         'ksp_atol': 1e-50,  # Absolute tolerance
-        'ksp_divtol': 1e4,  # Divergence tolerance
-        'ksp_max_it': 10000  # Maximum iterations
+        'ksp_divtol': 1e5,  # Divergence tolerance
+        'ksp_max_it': 1e4  # Maximum iterations
     }
 
     def __new__(cls, expr, target=None, solver_parameters=None,

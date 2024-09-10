@@ -25,9 +25,9 @@ class DM(LocalObject):
     def info(self):
         return DMDALocalInfo(name='%s_info' % self.name, liveness='eager')
 
-    @property
-    def _C_free(self):
-        return petsc_call('DMDestroy', [Byref(self.function)])
+    # @property
+    # def _C_free(self):
+    #     return petsc_call('DMDestroy', [Byref(self.function)])
 
 
 class Mat(LocalObject):

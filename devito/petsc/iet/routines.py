@@ -146,6 +146,14 @@ class PETScCallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
+        dm_restore_local_xvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(solver_objs['X_local'])]
+        )
+
+        dm_restore_local_yvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(solver_objs['Y_local'])]
+        )
+
         # NOTE: Question: I have placed a chunk of the calls in the `stacks` argument
         # of the `CallableBody` to ensure that these calls precede the `cast` statements.
         # The 'casts' depend on the calls, so this order is necessary. By doing this,
@@ -156,7 +164,9 @@ class PETScCallbackBuilder:
             (vec_restore_array_y,
              vec_restore_array_x,
              dm_local_to_global_begin,
-             dm_local_to_global_end)
+             dm_local_to_global_end,
+             dm_restore_local_xvec,
+             dm_restore_local_yvec)
         )
 
         stacks = (
@@ -272,12 +282,22 @@ class PETScCallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
+        dm_restore_local_xvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(solver_objs['X_local'])]
+        )
+
+        dm_restore_local_yvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(solver_objs['Y_local'])]
+        )
+
         body = body._rebuild(
             body=body.body +
             (vec_restore_array_y,
              vec_restore_array_x,
              dm_local_to_global_begin,
-             dm_local_to_global_end)
+             dm_local_to_global_end,
+             dm_restore_local_xvec,
+             dm_restore_local_yvec)
         )
 
         stacks = (
@@ -393,17 +413,22 @@ class PETScCallbackBuilder:
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
 
-        local_x = petsc_call('DMCreateLocalVector',
-                             [dmda, Byref(solver_objs['x_local'])])
+        # local_x = petsc_call('DMCreateLocalVector',
+        #                      [dmda, Byref(solver_objs['x_local'])])
 
         if any(i.is_Time for i in target.dimensions):
+            local_x = petsc_call('DMCreateLocalVector',
+                                [dmda, Byref(solver_objs['x_local'])])
             vec_replace_array = time_dep_replace(injectsolve, target, solver_objs, objs)
         else:
-            field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
-            vec_replace_array = (petsc_call(
-                'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
-            ),)
+            # field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
+            # vec_replace_array = (petsc_call(
+            #     'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
+            # ),)
+            local_x = ()
+            vec_replace_array = ()
 
+        # TODO: This can be moved outside the time loop when target is not time dependent 
         dm_local_to_global_x = petsc_call(
             'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',
                                 solver_objs['x_global']]
