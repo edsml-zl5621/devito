@@ -53,6 +53,7 @@ def assign_time_iters(iet, struct):
     Assign only the iterators that are common between the struct fields
     and the actual Iteration.
     """
+    # from IPython import embed; embed()
     time_iters = [
         i for i in FindNodes(Iteration).visit(iet)
         if i.dim.is_Time and FindNodes(PETScCall).visit(i)
@@ -63,10 +64,10 @@ def assign_time_iters(iet, struct):
 
     mapper = {}
     for iter in time_iters:
-        common_dimensions = [dim for dim in iter.dimensions if dim in struct.fields]
+        common_dimensions = [dim for dim in iter.dimensions if dim.name in [str(f) for f in struct.fields]]
         common_dimensions = [DummyExpr(FieldFromComposite(dim, struct), dim)
                              for dim in common_dimensions]
         iter_new = iter._rebuild(nodes=List(body=tuple(common_dimensions)+iter.nodes))
         mapper.update({iter: iter_new})
-
+    # from IPython import embed; embed()
     return Transformer(mapper).visit(iet)

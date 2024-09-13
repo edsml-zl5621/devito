@@ -42,6 +42,8 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     formrhs = []
     # TODO: adjust this for all eqns
     funcs_placeholder = list(set(retrieve_functions(eqns[0].lhs - eqns[0].rhs)))
+    # TODO: fix modulo dimension thing i.e rebuild the callbackexpr later on or use mapper technique
+    funcs_placeholder.append(funcs_placeholder[0].backward)
     funcs = list(set(retrieve_functions(eqns)))
     # from IPython import embed; embed()
 

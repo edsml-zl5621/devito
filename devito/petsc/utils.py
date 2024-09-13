@@ -6,6 +6,7 @@ from devito.tools import memoized_func
 solver_mapper = {
     'gmres': 'KSPGMRES',
     'jacobi': 'PCJACOBI',
+    'cg': 'KSPCG',
     None: 'PCNONE'
 }
 
