@@ -86,7 +86,9 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     func = Reconstructable._rebuild
 
 
-class CallbackExpr(sympy.Function):
+class CallbackExpr(sympy.Function, Reconstructable):
     @classmethod
     def eval(cls, true_rhs, *t_args):
         return None
+
+    func = Reconstructable._rebuild

@@ -32,13 +32,15 @@ def lower_petsc(iet, **kwargs):
 
     # Create core PETSc calls (not specific to each PETScSolve)
     core = make_core_petsc_calls(objs, **kwargs)
-
+    
     # Create injectsolve mapper from the spatial iteration loops
     # (exclude time loop if present)
+    # TODO: extend to multiple different time loops
+    # from IPython import embed; embsed()
     spatial_body = spatial_iteration_loops(iet)
     injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
                                   'groupby').visit(List(body=spatial_body))
-
+    # from IPython import embed; embed()
     setup = []
     subs = {}
 
@@ -52,6 +54,7 @@ def lower_petsc(iet, **kwargs):
 
     # Create the PETSc calls which are specific to each target
     for target in unique_targets:
+        # spatial_body = spatial_iteration_loops(iet)
         solver_objs = build_solver_objs(target)
 
         # Generate the solver setup for target. This is required only

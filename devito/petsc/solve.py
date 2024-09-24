@@ -41,9 +41,11 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     formfuncs = []
     formrhs = []
     # TODO: adjust this for all eqns
-    funcs_placeholder = list(set(retrieve_functions(eqns[0].lhs - eqns[0].rhs)))
+    funcs_placeholder = set(retrieve_functions(eqns[0].lhs - eqns[0].rhs))
+    funcs_placeholder = list(funcs_placeholder)
+    # from IPython import embed; embed()
     # TODO: fix modulo dimension thing i.e rebuild the callbackexpr later on or use mapper technique
-    funcs_placeholder.append(funcs_placeholder[0].backward)
+    funcs_placeholder.append(funcs_placeholder[-1].backward)
     funcs = list(set(retrieve_functions(eqns)))
     # from IPython import embed; embed()
 
@@ -53,23 +55,24 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         # a jacobian. Hence, we can use F_target to form the jac-vec product
 
         if isinstance(eq, EssentialBC):
+            # TODO: FIX THIS-> RE-EVALUATE
             btmp, Ftmp, _ = separate_eqn(eqns[0], target, sregistry)
             centre = centre_stencil(Ftmp, target)
             matvecs.append(Eq(
                 arrays['y_matvec'],
-                CallbackExpr(centre.subs(generate_mapper(arrays['x_matvec'], target_funcs)), *funcs_placeholder),
+                CallbackExpr(centre.subs(generate_mapper(arrays['x_matvec'], target_funcs))),
                 subdomain=eq.subdomain
             ))
 
             formfuncs.append(Eq(
             arrays['y_formfunc'],
-            CallbackExpr(Constant(name=sregistry.make_name(prefix='zero'), value=0., dtype=target.grid.dtype), *funcs_placeholder),
+            CallbackExpr(Constant(name=sregistry.make_name(prefix='zero'), value=0., dtype=target.grid.dtype)),
             subdomain=eq.subdomain
             ))
             
             formrhs.append(Eq(
                 arrays['b_tmp'],
-                CallbackExpr(Constant(name=sregistry.make_name(prefix='zero'), value=0., dtype=target.grid.dtype), *funcs_placeholder),
+                CallbackExpr(Constant(name=sregistry.make_name(prefix='zero'), value=0., dtype=target.grid.dtype)),
                 subdomain=eq.subdomain
             ))
 
@@ -77,19 +80,19 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
 
             matvecs.append(Eq(
                 arrays['y_matvec'],
-                CallbackExpr(F_target.subs(generate_mapper(arrays['x_matvec'], target_funcs)), *funcs_placeholder),
+                CallbackExpr(F_target.subs(generate_mapper(arrays['x_matvec'], target_funcs))),
                 subdomain=eq.subdomain
             ))
 
             formfuncs.append(Eq(
                 arrays['y_formfunc'],
-                CallbackExpr(F_target.subs(generate_mapper(arrays['x_formfunc'], target_funcs)), *funcs_placeholder),
+                CallbackExpr(F_target.subs(generate_mapper(arrays['x_formfunc'], target_funcs))),
                 subdomain=eq.subdomain
             ))
             # from IPython import embed; embed()
             formrhs.append(Eq(
                 arrays['b_tmp'],
-                CallbackExpr(b, *funcs_placeholder),
+                CallbackExpr(b),
                 subdomain=eq.subdomain
             ))
     # from IPython import embed; embed()
