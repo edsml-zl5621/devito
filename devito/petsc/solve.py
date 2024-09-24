@@ -5,47 +5,54 @@ import sympy
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
 from devito.types import Eq
+from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
-from devito.symbolics import retrieve_functions
-from devito.petsc.types import PETScArray, LinearSolveExpr, MatVecEq, RHSEq
+from devito.petsc.types import LinearSolveExpr, PETScArray
+
 
 __all__ = ['PETScSolve']
 
 
 def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
 
-    y_matvec, x_matvec, b_tmp = [
-        PETScArray(name=f'{prefix}_{target.name}',
-                   dtype=target.dtype,
-                   dimensions=target.space_dimensions,
-                   shape=target.grid.shape,
-                   liveness='eager',
-                   halo=[target.halo[d] for d in target.space_dimensions])
-        for prefix in ['y_matvec', 'x_matvec', 'b_tmp']]
+    prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
+
+    arrays = {
+        p: PETScArray(name='%s_%s' % (p, target.name),
+                           dtype=target.dtype,
+                           dimensions=target.space_dimensions,
+                           shape=target.grid.shape,
+                           liveness='eager',
+                           halo=[target.halo[d] for d in target.space_dimensions],
+                           space_order=target.space_order)
+        for p in prefixes
+    }
 
     b, F_target = separate_eqn(eq, target)
 
-    # Args were updated so need to update target to enable uxreplace on F_target
-    new_target = {f for f in retrieve_functions(F_target) if
-                  f.function == target.function}
-    assert len(new_target) == 1  # Sanity check: only one target expected
-    new_target = new_target.pop()
-
     # TODO: Current assumption is that problem is linear and user has not provided
     # a jacobian. Hence, we can use F_target to form the jac-vec product
-    matvecaction = MatVecEq(
-        y_matvec, LinearSolveExpr(F_target.subs(target, x_matvec),
-                                  target=target, solver_parameters=solver_parameters),
-        subdomain=eq.subdomain)
+    matvecaction = Eq(arrays['y_matvec'], F_target.subs(target, arrays['x_matvec']),
+                      subdomain=eq.subdomain)
 
-    # Part of pde that remains constant at each timestep
-    rhs = RHSEq(b_tmp, LinearSolveExpr(b, target=target,
-                solver_parameters=solver_parameters), subdomain=eq.subdomain)
+    formfunction = Eq(arrays['y_formfunc'], F_target.subs(target, arrays['x_formfunc']),
+                      subdomain=eq.subdomain)
+
+    rhs = Eq(arrays['b_tmp'], b, subdomain=eq.subdomain)
+
+    # Placeholder equation for inserting calls to the solver
+    inject_solve = InjectSolveEq(arrays['b_tmp'], LinearSolveExpr(
+        b, target=target, solver_parameters=solver_parameters, matvecs=[matvecaction],
+        formfuncs=[formfunction], formrhs=[rhs], arrays=arrays,
+    ), subdomain=eq.subdomain)
 
     if not bcs:
-        return [matvecaction, rhs]
+        return [inject_solve]
 
+    # NOTE: BELOW IS NOT FULLY TESTED/IMPLEMENTED YET
     bcs_for_matvec = []
+    bcs_for_formfunc = []
+    bcs_for_rhs = []
     for bc in bcs:
         # TODO: Insert code to distiguish between essential and natural
         # boundary conditions since these are treated differently within
@@ -54,14 +61,24 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         # (and move to rhs) but for now, they are included since this
         # is not trivial to implement when using DMDA
         # NOTE: Below is temporary -> Just using this as a palceholder for
-        # the actual BC implementation for the matvec callback
-        new_rhs = bc.rhs.subs(target, x_matvec)
-        bc_rhs = LinearSolveExpr(
-            new_rhs, target=target, solver_parameters=solver_parameters
-        )
-        bcs_for_matvec.append(MatVecEq(y_matvec, bc_rhs, subdomain=bc.subdomain))
+        # the actual BC implementation
+        centre = centre_stencil(F_target, target)
+        bcs_for_matvec.append(Eq(arrays['y_matvec'],
+                                 centre.subs(target, arrays['x_matvec']),
+                                 subdomain=bc.subdomain))
+        bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
+                                   0., subdomain=bc.subdomain))
+        # NOTE: Temporary
+        bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
 
-    return [matvecaction] + bcs_for_matvec + [rhs]
+    inject_solve = InjectSolveEq(arrays['b_tmp'], LinearSolveExpr(
+        b, target=target, solver_parameters=solver_parameters,
+        matvecs=[matvecaction]+bcs_for_matvec,
+        formfuncs=[formfunction]+bcs_for_formfunc, formrhs=[rhs],
+        arrays=arrays,
+    ), subdomain=eq.subdomain)
+
+    return [inject_solve]
 
 
 def separate_eqn(eqn, target):

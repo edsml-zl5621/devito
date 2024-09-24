@@ -511,7 +511,7 @@ class Operator(Callable):
 
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
-        ret.update(d for d in dimensions if d.is_PerfKnob)
+        ret.update(dimensions)
 
         ret = tuple(sorted(ret, key=attrgetter('name')))
 

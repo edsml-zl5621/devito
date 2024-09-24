@@ -10,10 +10,10 @@ from devito.symbolics import IntDiv, uxreplace
 from devito.tools import Pickable, Tag, frozendict
 from devito.types import (Eq, Inc, ReduceMax, ReduceMin,
                           relational_min)
-from devito.petsc.types import MatVecEq, RHSEq
+from devito.types.equation import InjectSolveEq
 
 __all__ = ['LoweredEq', 'ClusterizedEq', 'DummyEq', 'OpInc', 'OpMin', 'OpMax',
-           'OpMatVec', 'OpRHS']
+           'OpInjectSolve']
 
 
 class IREq(sympy.Eq, Pickable):
@@ -104,8 +104,7 @@ class Operation(Tag):
             Inc: OpInc,
             ReduceMax: OpMax,
             ReduceMin: OpMin,
-            MatVecEq: OpMatVec,
-            RHSEq: OpRHS
+            InjectSolveEq: OpInjectSolve
         }
         try:
             return reduction_mapper[type(expr)]
@@ -122,12 +121,7 @@ class Operation(Tag):
 OpInc = Operation('+')
 OpMax = Operation('max')
 OpMin = Operation('min')
-
-# Operations required by a Linear Solve of the form Ax=b:
-# Application of linear operator on a vector -> op for matrix-vector multiplication.
-OpMatVec = Operation('matvec')
-# Building the right-hand side of linear system.
-OpRHS = Operation('rhs')
+OpInjectSolve = Operation('solve')
 
 
 class LoweredEq(IREq):
