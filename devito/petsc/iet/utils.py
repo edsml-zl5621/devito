@@ -22,11 +22,12 @@ def petsc_struct(name, fields, liveness='lazy'):
                        fields=fields, liveness=liveness)
 
 
-def spatial_iteration_loops(iet):
+def spatial_injectsolve_iter(iter, injectsolve):
     spatial_body = []
-    for tree in retrieve_iteration_tree(iet):
+    for tree in retrieve_iteration_tree(iter[0]):
         root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
-        spatial_body.append(root)
+        if injectsolve in FindNodes(InjectSolveDummy).visit(root):
+            spatial_body.append(root)
     return spatial_body
 
 
@@ -64,10 +65,19 @@ def assign_time_iters(iet, struct):
 
     mapper = {}
     for iter in time_iters:
-        common_dimensions = [dim for dim in iter.dimensions if dim in struct.fields]
-        common_dimensions = [DummyExpr(FieldFromComposite(dim, struct), dim)
-                             for dim in common_dimensions]
-        iter_new = iter._rebuild(nodes=List(body=tuple(common_dimensions)+iter.nodes))
+        common_dims = [dim for dim in iter.dimensions if dim in struct.fields]
+        common_dims = [
+            DummyExpr(FieldFromComposite(dim, struct), dim) for dim in common_dims
+        ]
+        iter_new = iter._rebuild(nodes=List(body=tuple(common_dims)+iter.nodes))
         mapper.update({iter: iter_new})
-    from IPython import embed; embed()
+
     return Transformer(mapper).visit(iet)
+
+
+def retrieve_mod_dims(iters):
+    outer_iter_dims = iters[0].dimensions
+    if any(dim.is_Time for dim in outer_iter_dims):
+        mod_dims = [dim for dim in outer_iter_dims if dim.is_Modulo]
+        return {dim.origin: dim for dim in mod_dims}
+    return {}

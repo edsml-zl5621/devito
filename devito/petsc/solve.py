@@ -8,13 +8,14 @@ from devito.types import Eq
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
+from devito.tools import filter_sorted
 from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
 
 
 __all__ = ['PETScSolve']
 
 
-def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
+def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
     arrays = {
@@ -28,74 +29,44 @@ def PETScSolve(eq, target, bcs=None, solver_parameters=None, **kwargs):
         for p in prefixes
     }
 
-    b, F_target = separate_eqn(eq, target)
-
+    eqns = eqns if isinstance(eqns, (list, tuple)) else [eqns]
     # Passed through main kernel and removed at iet level, used to generate
     # correct time loop etc
-    dummy = list(set(retrieve_functions(F_target - b)))
-    dummy_expr = sum(dummy)
+    dummy_expr = sum(filter_sorted(retrieve_functions(eqns)))
 
-    # TODO: Current assumption is that problem is linear and user has not provided
-    # a jacobian. Hence, we can use F_target to form the jac-vec product
+    matvecs = []
+    formfuncs = []
+    formrhs = []
 
-    matvecaction = Eq(
-        arrays['y_matvec'],
-        CallbackExpr(F_target.subs({target: arrays['x_matvec']}), *dummy),
-        subdomain=eq.subdomain
-    )
+    for eq in eqns:
+        b, F_target = separate_eqn(eq, target)
 
-    formfunction = Eq(
-        arrays['y_formfunc'],
-        CallbackExpr(F_target.subs({target: arrays['x_formfunc']}), *dummy),
-        subdomain=eq.subdomain
-    )
+        # TODO: Current assumption is that problem is linear and user has not provided
+        # a jacobian. Hence, we can use F_target to form the jac-vec product
 
-    rhs = Eq(
-        arrays['b_tmp'],
-        CallbackExpr(b, *dummy),
-        subdomain=eq.subdomain
-    )
+        matvecs.append(Eq(
+            arrays['y_matvec'],
+            CallbackExpr(F_target.subs({target: arrays['x_matvec']})),
+            subdomain=eq.subdomain
+        ))
+
+        formfuncs.append(Eq(
+            arrays['y_formfunc'],
+            CallbackExpr(F_target.subs({target: arrays['x_formfunc']})),
+            subdomain=eq.subdomain
+        ))
+
+        formrhs.append(Eq(
+            arrays['b_tmp'],
+            CallbackExpr(b),
+            subdomain=eq.subdomain
+        ))
 
     # Placeholder equation for inserting calls to the solver
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
         dummy_expr, target=target, solver_parameters=solver_parameters,
-        matvecs=[matvecaction], formfuncs=[formfunction],
-        formrhs=[rhs], arrays=arrays,
-    ), subdomain=eq.subdomain)
-
-    if not bcs:
-        return [inject_solve]
-
-    # NOTE: BELOW IS NOT FULLY TESTED/IMPLEMENTED YET
-    bcs_for_matvec = []
-    bcs_for_formfunc = []
-    bcs_for_rhs = []
-    for bc in bcs:
-        # TODO: Insert code to distiguish between essential and natural
-        # boundary conditions since these are treated differently within
-        # the solver
-        # NOTE: May eventually remove the essential bcs from the solve
-        # (and move to rhs) but for now, they are included since this
-        # is not trivial to implement when using DMDA
-        # NOTE: Below is temporary -> Just using this as a palceholder for
-        # the actual BC implementation
-        centre = centre_stencil(F_target, target)
-        bcs_for_matvec.append(Eq(
-            arrays['y_matvec'],
-            CallbackExpr(centre.subs({target: arrays['x_matvec']}), *dummy),
-            subdomain=bc.subdomain
-        ))
-        # NOTE: Temporary
-        bcs_for_formfunc.append(Eq(arrays['y_formfunc'],
-                                   0., subdomain=bc.subdomain))
-        bcs_for_rhs.append(Eq(arrays['b_tmp'], 0., subdomain=bc.subdomain))
-
-    inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        dummy_expr, target=target, solver_parameters=solver_parameters,
-        matvecs=[matvecaction]+bcs_for_matvec,
-        formfuncs=[formfunction],
-        formrhs=[rhs],
-        arrays=arrays,
+        matvecs=matvecs, formfuncs=formfuncs,
+        formrhs=formrhs, arrays=arrays,
     ), subdomain=eq.subdomain)
 
     return [inject_solve]

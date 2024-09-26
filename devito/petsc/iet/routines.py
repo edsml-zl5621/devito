@@ -90,6 +90,8 @@ class PETScCallbackBuilder:
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
+        body = correct_mod_dims(body, solver_objs['mod_dims'])
+
         struct = build_petsc_struct(body, 'matvec', liveness='eager')
 
         y_matvec = linsolveexpr.arrays['y_matvec']
@@ -216,6 +218,8 @@ class PETScCallbackBuilder:
         body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
+
+        body = correct_mod_dims(body, solver_objs['mod_dims'])
 
         struct = build_petsc_struct(body, 'formfunc', liveness='eager')
 
@@ -348,6 +352,8 @@ class PETScCallbackBuilder:
             'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
         )
 
+        body = correct_mod_dims(body, solver_objs['mod_dims'])
+
         struct = build_petsc_struct(body, 'formrhs', liveness='eager')
 
         dm_get_app_context = petsc_call(
@@ -479,6 +485,13 @@ def time_dep_replace(injectsolve, target, solver_objs, objs):
 
     vec_replace_array = petsc_call('VecReplaceArray', [solver_objs['x_local'], start_ptr])
     return (vec_get_size, expr, vec_replace_array)
+
+
+def correct_mod_dims(body, mod_dims):
+    old_mod_dims = [
+        i for i in FindSymbols('dimensions').visit(body) if isinstance(i, ModuloDimension)
+    ]
+    return Uxreplace({i: mod_dims[i.origin] for i in old_mod_dims}).visit(body)
 
 
 Null = Macro('NULL')

@@ -12,7 +12,8 @@ from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
 from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
-                                    spatial_iteration_loops, assign_time_iters)
+                                    spatial_injectsolve_iter, assign_time_iters,
+                                    retrieve_mod_dims)
 
 
 @iet_pass
@@ -33,11 +34,8 @@ def lower_petsc(iet, **kwargs):
     # Create core PETSc calls (not specific to each PETScSolve)
     core = make_core_petsc_calls(objs, **kwargs)
 
-    # Create injectsolve mapper from the spatial iteration loops
-    # (exclude time loop if present)
-    spatial_body = spatial_iteration_loops(iet)
     injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
-                                  'groupby').visit(List(body=spatial_body))
+                                  'groupby').visit(iet)
 
     setup = []
     subs = {}
@@ -65,13 +63,17 @@ def lower_petsc(iet, **kwargs):
             break
 
         # Generate all PETSc callback functions for the target via recusive compilation
-        for iter, (injectsolve,) in injectsolve_mapper.items():
+        for iters, (injectsolve,) in injectsolve_mapper.items():
             if injectsolve.expr.rhs.target != target:
                 continue
+            # Retrieve the modulo dimensions and map them to their origins based
+            # on the initial lowering
+            solver_objs['mod_dims'] = retrieve_mod_dims(iters)
+            space_iter, = spatial_injectsolve_iter(iters, injectsolve)
             matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
                                                             objs, solver_objs)
             setup.extend([matvec_op, formfunc_op])
-            subs.update({iter[0]: List(body=runsolve)})
+            subs.update({space_iter: List(body=runsolve)})
             break
 
     # Generate callback to populate main struct object
@@ -83,7 +85,7 @@ def lower_petsc(iet, **kwargs):
     setup.extend([BlankLine, call_struct_callback] + calls_set_app_ctx)
 
     iet = Transformer(subs).visit(iet)
-    
+
     iet = assign_time_iters(iet, struct_main)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
