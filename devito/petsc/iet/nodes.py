@@ -1,4 +1,4 @@
-from devito.ir.iet import Expression, Callback, FixedArgsCallable
+from devito.ir.iet import Expression, Callback, FixedArgsCallable, Call
 from devito.ir.equations import OpInjectSolve
 
 
@@ -33,3 +33,7 @@ class FormFunctionCallback(Callback):
     @property
     def callback_form(self):
         return "%s" % self.name
+
+
+class PETScCall(Call):
+    pass

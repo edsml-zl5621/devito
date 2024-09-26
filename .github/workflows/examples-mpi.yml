@@ -17,6 +17,7 @@ on:
   push:
     branches:
       - master
+      - time_loop_branch
   pull_request:
     branches:
       - master

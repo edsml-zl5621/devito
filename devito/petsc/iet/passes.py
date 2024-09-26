@@ -3,16 +3,16 @@ import cgen as c
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (FindNodes, Transformer,
                            MapNodes, Iteration, List, BlankLine,
-                           filter_iterations, retrieve_iteration_tree,
                            Callable, CallableBody, DummyExpr, Call)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.tools import filter_ordered
-from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec,
-                                GlobalVec, KSP, PC, SNES, PetscErrorCode, DummyArg)
+from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
+                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
-from devito.petsc.iet.utils import petsc_call, petsc_call_mpi, petsc_struct
+from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
+                                    spatial_iteration_loops, assign_time_iters)
 
 
 @iet_pass
@@ -35,10 +35,7 @@ def lower_petsc(iet, **kwargs):
 
     # Create injectsolve mapper from the spatial iteration loops
     # (exclude time loop if present)
-    spatial_body = []
-    for tree in retrieve_iteration_tree(iet):
-        root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
-        spatial_body.append(root)
+    spatial_body = spatial_iteration_loops(iet)
     injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
                                   'groupby').visit(List(body=spatial_body))
 
@@ -87,6 +84,8 @@ def lower_petsc(iet, **kwargs):
 
     iet = Transformer(subs).visit(iet)
 
+    iet = assign_time_iters(iet, struct_main)
+
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
         init=init, body=body,
@@ -127,7 +126,8 @@ def build_core_objects(target, **kwargs):
         'size': PetscMPIInt(name='size'),
         'comm': communicator,
         'err': PetscErrorCode(name='err'),
-        'grid': target.grid
+        'grid': target.grid,
+        'localsize': PetscInt(name='localsize')
     }
 
 
@@ -223,9 +223,6 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
     global_x = petsc_call('DMCreateGlobalVector',
                           [dmda, Byref(solver_objs['x_global'])])
 
-    local_x = petsc_call('DMCreateLocalVector',
-                         [dmda, Byref(solver_objs['x_local'])])
-
     global_b = petsc_call('DMCreateGlobalVector',
                           [dmda, Byref(solver_objs['b_global'])])
 
@@ -234,11 +231,6 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
 
     snes_get_ksp = petsc_call('SNESGetKSP',
                               [solver_objs['snes'], Byref(solver_objs['ksp'])])
-
-    vec_replace_array = petsc_call(
-        'VecReplaceArray', [solver_objs['x_local'],
-                            FieldFromPointer(target._C_field_data, target._C_symbol)]
-    )
 
     ksp_set_tols = petsc_call(
         'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
@@ -264,11 +256,9 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
         snes_set_jac,
         snes_set_type,
         global_x,
-        local_x,
         global_b,
         local_b,
         snes_get_ksp,
-        vec_replace_array,
         ksp_set_tols,
         ksp_set_type,
         ksp_get_pc,
@@ -278,8 +268,10 @@ def generate_solver_setup(solver_objs, objs, injectsolve, target):
 
 
 def generate_struct_callback(struct):
-    body = [DummyExpr(FieldFromPointer(i._C_symbol, struct),
-                      i._C_symbol) for i in struct.fields]
+    body = [
+        DummyExpr(FieldFromPointer(i._C_symbol, struct), i._C_symbol)
+        for i in struct.fields if i not in struct.time_dim_fields
+    ]
     struct_callback_body = CallableBody(
         List(body=body), init=tuple([petsc_func_begin_user]),
         retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])

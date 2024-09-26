@@ -3,22 +3,27 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           Dereference)
-from devito.symbolics import Byref, FieldFromPointer, Macro
+                           Dereference, DummyExpr, BlankLine)
+from devito.symbolics import Byref, FieldFromPointer, Macro, Cast
+from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
+from devito.types import LocalObject, ModuloDimension, TimeDimension
+from devito.tools import ctypes_to_cstr, dtype_to_ctype, CustomDtype
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
-from devito.petsc.iet.utils import petsc_call, petsc_struct
+from devito.petsc.iet.utils import petsc_call, petsc_struct, drop_callbackexpr
+from devito.ir.support import SymbolRegistry
 
 
 class PETScCallbackBuilder:
     """
     Build IET routines to generate PETSc callback functions.
     """
-    def __new__(cls, rcompile=None, **kwargs):
+    def __new__(cls, rcompile=None, sregistry=None, **kwargs):
         obj = object.__new__(cls)
         obj.rcompile = rcompile
+        obj.sregistry = sregistry
         obj._efuncs = OrderedDict()
         obj._struct_params = []
 
@@ -65,8 +70,9 @@ class PETScCallbackBuilder:
         target = injectsolve.expr.rhs.target
         # Compile matvec `eqns` into an IET via recursive compilation
         irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
-                                      options={'mpi': False})
-        body_matvec = self.create_matvec_body(injectsolve, irs_matvec.uiet.body,
+                                      options={'mpi': False}, sregistry=SymbolRegistry())
+        body_matvec = self.create_matvec_body(injectsolve,
+                                              List(body=irs_matvec.uiet.body),
                                               solver_objs, objs)
 
         matvec_callback = PETScCallable(
@@ -79,6 +85,8 @@ class PETScCallbackBuilder:
 
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
+
+        body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
@@ -145,11 +153,13 @@ class PETScCallbackBuilder:
         # Devito to handle their construction. This is a temporary solution and
         # should be revisited
 
-        body = [body,
-                vec_restore_array_y,
-                vec_restore_array_x,
-                dm_local_to_global_begin,
-                dm_local_to_global_end]
+        body = body._rebuild(
+            body=body.body +
+            (vec_restore_array_y,
+             vec_restore_array_x,
+             dm_local_to_global_begin,
+             dm_local_to_global_end)
+        )
 
         stacks = (
             mat_get_dm,
@@ -185,9 +195,12 @@ class PETScCallbackBuilder:
     def make_formfunc(self, injectsolve, objs, solver_objs):
         target = injectsolve.expr.rhs.target
         # Compile formfunc `eqns` into an IET via recursive compilation
-        irs_formfunc, _ = self.rcompile(injectsolve.expr.rhs.formfuncs,
-                                        options={'mpi': False})
-        body_formfunc = self.create_formfunc_body(injectsolve, irs_formfunc.uiet.body,
+        irs_formfunc, _ = self.rcompile(
+            injectsolve.expr.rhs.formfuncs,
+            options={'mpi': False}, sregistry=SymbolRegistry()
+        )
+        body_formfunc = self.create_formfunc_body(injectsolve,
+                                                  List(body=irs_formfunc.uiet.body),
                                                   solver_objs, objs)
 
         formfunc_callback = PETScCallable(
@@ -199,6 +212,8 @@ class PETScCallbackBuilder:
 
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
+
+        body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
@@ -258,11 +273,13 @@ class PETScCallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
-        body = [body,
-                vec_restore_array_y,
-                vec_restore_array_x,
-                dm_local_to_global_begin,
-                dm_local_to_global_end]
+        body = body._rebuild(
+            body=body.body +
+            (vec_restore_array_y,
+             vec_restore_array_x,
+             dm_local_to_global_begin,
+             dm_local_to_global_end)
+        )
 
         stacks = (
             snes_get_dm,
@@ -298,8 +315,9 @@ class PETScCallbackBuilder:
         target = injectsolve.expr.rhs.target
         # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
-                                       options={'mpi': False})
-        body_formrhs = self.create_formrhs_body(injectsolve, irs_formrhs.uiet.body,
+                                       options={'mpi': False}, sregistry=SymbolRegistry())
+        body_formrhs = self.create_formrhs_body(injectsolve,
+                                                List(body=irs_formrhs.uiet.body),
                                                 solver_objs, objs)
 
         formrhs_callback = PETScCallable(
@@ -313,6 +331,8 @@ class PETScCallbackBuilder:
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
+
+        body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
@@ -338,8 +358,7 @@ class PETScCallbackBuilder:
             'VecRestoreArray', [solver_objs['b_local'], Byref(b_arr._C_symbol)]
         )
 
-        body = [body,
-                vec_restore_array]
+        body = body._rebuild(body=body.body + (vec_restore_array,))
 
         stacks = (
             snes_get_dm,
@@ -375,6 +394,17 @@ class PETScCallbackBuilder:
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
 
+        local_x = petsc_call('DMCreateLocalVector',
+                             [dmda, Byref(solver_objs['x_local'])])
+
+        if any(i.is_Time for i in target.dimensions):
+            vec_replace_array = time_dep_replace(injectsolve, target, solver_objs, objs)
+        else:
+            field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
+            vec_replace_array = (petsc_call(
+                'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
+            ),)
+
         dm_local_to_global_x = petsc_call(
             'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',
                                 solver_objs['x_global']]
@@ -393,24 +423,62 @@ class PETScCallbackBuilder:
             dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
         )
 
-        calls = (rhs_call,
-                 dm_local_to_global_x,
-                 dm_local_to_global_b,
-                 snes_solve,
-                 dm_global_to_local_x)
-
-        return calls
+        return (
+            rhs_call,
+            local_x
+        ) + vec_replace_array + (
+            dm_local_to_global_x,
+            dm_local_to_global_b,
+            snes_solve,
+            dm_global_to_local_x,
+            BlankLine,
+        )
 
 
 def build_petsc_struct(iet, name, liveness):
     # Place all context data required by the shell routines into a struct
     # TODO: Clean this search up
     basics = FindSymbols('basics').visit(iet)
+    time_dims = [i for i in FindSymbols('dimensions').visit(iet)
+                 if isinstance(i, (TimeDimension, ModuloDimension))]
     avoid0 = [i for i in FindSymbols('indexedbases').visit(iet)
               if isinstance(i.function, PETScArray)]
-    avoid1 = FindSymbols('dimensions|writes').visit(iet)
+    avoid1 = [i for i in FindSymbols('dimensions|writes').visit(iet)
+              if i not in time_dims]
     fields = [data.function for data in basics if data not in avoid0+avoid1]
     return petsc_struct(name, fields, liveness)
+
+
+def time_dep_replace(injectsolve, target, solver_objs, objs):
+    target_time = injectsolve.expr.lhs
+    target_time = [i for i, d in zip(target_time.indices,
+                                     target_time.dimensions) if d.is_Time]
+    assert len(target_time) == 1
+    target_time = target_time.pop()
+
+    ctype_str = ctypes_to_cstr(dtype_to_ctype(target.dtype))
+
+    class BarCast(Cast):
+        _base_typ = ctype_str
+
+    class StartPtr(LocalObject):
+        dtype = CustomDtype(ctype_str, modifier=' *')
+
+    start_ptr = StartPtr(name='start_ptr_%s' % target.name)
+
+    vec_get_size = petsc_call(
+        'VecGetSize', [solver_objs['x_local'], Byref(objs['localsize'])]
+    )
+
+    # TODO: What is the correct way to use Mul here? Devito Mul? Sympy Mul?
+    field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
+    expr = DummyExpr(
+        start_ptr, BarCast(field_from_ptr, ' *') +
+        Mul(target_time, objs['localsize']), init=True
+    )
+
+    vec_replace_array = petsc_call('VecReplaceArray', [solver_objs['x_local'], start_ptr])
+    return (vec_get_size, expr, vec_replace_array)
 
 
 Null = Macro('NULL')

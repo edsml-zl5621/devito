@@ -1,7 +1,7 @@
 from ctypes import POINTER
 
 from devito.tools import CustomDtype
-from devito.types import LocalObject, CCompositeObject
+from devito.types import LocalObject, CCompositeObject, ModuloDimension, TimeDimension
 from devito.symbolics import Byref
 
 from devito.petsc.iet.utils import petsc_call
@@ -79,6 +79,14 @@ class PetscMPIInt(LocalObject):
     dtype = CustomDtype('PetscMPIInt')
 
 
+class PetscInt(LocalObject):
+    """
+    PETSc datatype used to represent `int` parameters
+    to PETSc functions.
+    """
+    dtype = CustomDtype('PetscInt')
+
+
 class KSP(LocalObject):
     """
     PETSc KSP : Linear Systems Solvers.
@@ -149,6 +157,11 @@ class PETScStruct(CCompositeObject):
     @property
     def fields(self):
         return self._fields
+
+    @property
+    def time_dim_fields(self):
+        return [f for f in self.fields
+                if isinstance(f, (ModuloDimension, TimeDimension))]
 
     @property
     def _C_ctype(self):
