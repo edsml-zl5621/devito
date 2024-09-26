@@ -83,7 +83,7 @@ def lower_petsc(iet, **kwargs):
     setup.extend([BlankLine, call_struct_callback] + calls_set_app_ctx)
 
     iet = Transformer(subs).visit(iet)
-
+    
     iet = assign_time_iters(iet, struct_main)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
