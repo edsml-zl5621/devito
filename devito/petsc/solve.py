@@ -8,7 +8,6 @@ from devito.types import Eq
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.tools import filter_sorted
 from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
 
 
@@ -32,7 +31,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     eqns = eqns if isinstance(eqns, (list, tuple)) else [eqns]
     # Passed through main kernel and removed at iet level, used to generate
     # correct time loop etc
-    dummy_expr = sum(filter_sorted(retrieve_functions(eqns)))
+    dummy_expr = sum(retrieve_functions(eqns))
 
     matvecs = []
     formfuncs = []

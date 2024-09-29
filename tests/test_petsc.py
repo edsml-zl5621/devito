@@ -573,3 +573,65 @@ def test_start_ptr():
 
     # Verify the case with modulo time stepping
     assert 'float * start_ptr_u = t1*localsize + (float *)(u_vec->data);' in str(op)
+
+
+@skipif('petsc')
+def test_time_loop():
+    """
+    Verify the following:
+    - Modulo dimensions are correctly assigned and updated in the PETSc struct
+    at each time step.
+    - Only the necessary modulo dimensions required by any PETSc callback
+    functions are updated.
+    """
+    grid = Grid((11, 11))
+
+    # Modulo time stepping
+    u1 = TimeFunction(name='u1', grid=grid, space_order=2)
+    v1 = Function(name='v1', grid=grid, space_order=2)
+    eq1 = Eq(v1.laplace, u1)
+    petsc1 = PETScSolve(eq1, v1)
+    op1 = Operator(petsc1)
+    body1 = str(op1.body)
+    rhs1 = str(op1._func_table['FormRHS_v1'].root.ccode)
+
+    assert 'ctx.t0 = t0' in body1
+    assert 'ctx.t1 = t1' not in body1
+    assert 'formrhs->t0' in rhs1
+    assert 'formrhs->t1' not in rhs1
+
+    # Non-modulo time stepping
+    u2 = TimeFunction(name='u2', grid=grid, space_order=2, save=5)
+    v2 = Function(name='v2', grid=grid, space_order=2, save=5)
+    eq2 = Eq(v2.laplace, u2)
+    petsc2 = PETScSolve(eq2, v2)
+    op2 = Operator(petsc2)
+    body2 = str(op2.body)
+    rhs2 = str(op2._func_table['FormRHS_v2'].root.ccode)
+
+    assert 'ctx.time = time' in body2
+    assert 'formrhs->time' in rhs2
+
+    # Modulo time stepping with more than one time step
+    # used in one of the callback functions
+    eq3 = Eq(v1.laplace, u1 + u1.forward)
+    petsc3 = PETScSolve(eq3, v1)
+    op3 = Operator(petsc3)
+    body3 = str(op3.body)
+    rhs3 = str(op3._func_table['FormRHS_v1'].root.ccode)
+
+    assert 'ctx.t0 = t0' in body3
+    assert 'ctx.t1 = t1' in body3
+    assert 'formrhs->t0' in rhs3
+    assert 'formrhs->t1' in rhs3
+
+    # Multiple petsc solves within the same time loop
+    v2 = Function(name='v2', grid=grid, space_order=2)
+    eq4 = Eq(v1.laplace, u1)
+    petsc4 = PETScSolve(eq4, v1)
+    eq5 = Eq(v2.laplace, u1)
+    petsc5 = PETScSolve(eq5, v2)
+    op4 = Operator(petsc4 + petsc5)
+    body4 = str(op4.body)
+
+    assert 'ctx.t0 = t0' in body4

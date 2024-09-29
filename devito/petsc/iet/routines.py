@@ -491,6 +491,8 @@ def correct_mod_dims(body, mod_dims):
     old_mod_dims = [
         i for i in FindSymbols('dimensions').visit(body) if isinstance(i, ModuloDimension)
     ]
+    if not old_mod_dims:
+        return body
     return Uxreplace({i: mod_dims[i.origin] for i in old_mod_dims}).visit(body)
 
 
