@@ -28,7 +28,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
                 solver_parameters[key] = solver_parameters.get(key, val)
 
         with sympy_mutex:
-            obj = sympy.Basic.__new__(cls, expr)
+            obj = sympy.Function.__new__(cls, expr)
+
         obj._expr = expr
         obj._target = target
         obj._solver_parameters = solver_parameters
@@ -82,10 +83,14 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     def arrays(self):
         return self._arrays
 
+    @classmethod
+    def eval(cls, *args):
+        return None
+
     func = Reconstructable._rebuild
 
 
 class CallbackExpr(sympy.Function):
     @classmethod
-    def eval(cls, true_rhs, *t_args):
+    def eval(cls, *args):
         return None

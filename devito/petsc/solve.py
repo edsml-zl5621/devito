@@ -28,21 +28,16 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         for p in prefixes
     }
 
-    eqns = eqns if isinstance(eqns, (list, tuple)) else [eqns]
-    # Passed through main kernel and removed at iet level, used to generate
-    # correct time loop etc
-    dummy_expr = sum(retrieve_functions(eqns))
-
     matvecs = []
     formfuncs = []
     formrhs = []
 
+    eqns = eqns if isinstance(eqns, (list, tuple)) else [eqns]
     for eq in eqns:
         b, F_target = separate_eqn(eq, target)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
-
         matvecs.append(Eq(
             arrays['y_matvec'],
             CallbackExpr(F_target.subs({target: arrays['x_matvec']})),
@@ -61,11 +56,16 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
             subdomain=eq.subdomain
         ))
 
-    # Placeholder equation for inserting calls to the solver
+    # Placeholder equation for inserting calls to the solver and generating
+    # correct time loop etc
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        dummy_expr, target=target, solver_parameters=solver_parameters,
-        matvecs=matvecs, formfuncs=formfuncs,
-        formrhs=formrhs, arrays=arrays,
+        expr=tuple(retrieve_functions(eqns)),
+        target=target,
+        solver_parameters=solver_parameters,
+        matvecs=matvecs,
+        formfuncs=formfuncs,
+        formrhs=formrhs,
+        arrays=arrays,
     ), subdomain=eq.subdomain)
 
     return [inject_solve]
