@@ -48,17 +48,17 @@ def lower_petsc(iet, **kwargs):
         target = injectsolve.expr.rhs.target
         solver_objs = build_solver_objs(target, **kwargs)
 
-        # Generate the solver setup for each target
+        # Generate the solver setup for each InjectSolveDummy
         solver_setup = generate_solver_setup(solver_objs, objs, injectsolve)
         setup.extend(solver_setup)
 
-        # Retrieve modulo dimensions to use in callback functions
+        # Retrieve `ModuloDimensions` for use in callback functions
         solver_objs['mod_dims'] = retrieve_mod_dims(iters)
-        # Generate all PETSc callback functions for the target via recusive compilation
+        # Generate all PETSc callback functions for the target via recursive compilation
         matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
                                                         objs, solver_objs)
         setup.extend([matvec_op, formfunc_op, BlankLine])
-        # Only want to Transform the spatial iteration loop
+        # Only Transform the spatial iteration loop
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
 

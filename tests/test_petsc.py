@@ -592,8 +592,8 @@ def test_time_loop():
     Verify the following:
     - Modulo dimensions are correctly assigned and updated in the PETSc struct
     at each time step.
-    - Only the necessary modulo dimensions required by any PETSc callback
-    functions are updated.
+    - Only assign/update the modulo dimensions required by any of the
+    PETSc callback functions.
     """
     grid = Grid((11, 11))
 
