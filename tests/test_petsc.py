@@ -564,15 +564,26 @@ def test_start_ptr():
     that the correct memory location is accessed and modified during each time step.
     """
     grid = Grid((11, 11))
-    u = TimeFunction(name='u', grid=grid, space_order=2, dtype=np.float32)
-    eq = Eq(u.dt, u.laplace, subdomain=grid.interior)
-    petsc = PETScSolve(eq, u.forward)
+    u1 = TimeFunction(name='u1', grid=grid, space_order=2, dtype=np.float32)
+    eq1 = Eq(u1.dt, u1.laplace, subdomain=grid.interior)
+    petsc1 = PETScSolve(eq1, u1.forward)
 
     with switchconfig(openmp=False):
-        op = Operator(petsc)
+        op1 = Operator(petsc1)
 
     # Verify the case with modulo time stepping
-    assert 'float * start_ptr_0 = t1*localsize + (float *)(u_vec->data);' in str(op)
+    assert 'float * start_ptr_0 = t1*localsize + (float *)(u1_vec->data);' in str(op1)
+
+    # Verify the case with no modulo time stepping
+    u2 = TimeFunction(name='u2', grid=grid, space_order=2, dtype=np.float32, save=5)
+    eq2 = Eq(u2.dt, u2.laplace, subdomain=grid.interior)
+    petsc2 = PETScSolve(eq2, u2.forward)
+
+    with switchconfig(openmp=False):
+        op2 = Operator(petsc2)
+
+    assert 'float * start_ptr_0 = (time + 1)*localsize + ' + \
+        '(float *)(u2_vec->data);' in str(op2)
 
 
 @skipif('petsc')

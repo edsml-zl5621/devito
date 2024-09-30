@@ -17,6 +17,7 @@ from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
+    # Check if PETScSolve was used
     injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
                                   'groupby').visit(iet)
 
@@ -51,14 +52,14 @@ def lower_petsc(iet, **kwargs):
         solver_setup = generate_solver_setup(solver_objs, objs, injectsolve)
         setup.extend(solver_setup)
 
-        # Retrieve the modulo dimensions and map them to their origins based
-        # on the initial lowering
+        # Retrieve modulo dimensions to use in callback functions
         solver_objs['mod_dims'] = retrieve_mod_dims(iters)
-        space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         # Generate all PETSc callback functions for the target via recusive compilation
         matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
                                                         objs, solver_objs)
         setup.extend([matvec_op, formfunc_op, BlankLine])
+        # Only want to Transform the spatial iteration loop
+        space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
 
     # Generate callback to populate main struct object
@@ -113,8 +114,7 @@ def build_core_objects(target, **kwargs):
         'size': PetscMPIInt(name='size'),
         'comm': communicator,
         'err': PetscErrorCode(name='err'),
-        'grid': target.grid,
-        'localsize': PetscInt(name='localsize')
+        'grid': target.grid
     }
 
 
@@ -184,7 +184,8 @@ def build_solver_objs(target, **kwargs):
         'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
         'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
         'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
-        'dummy': DummyArg(sreg.make_name(prefix='dummy_'))
+        'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
+        'localsize': PetscInt(sreg.make_name(prefix='localsize_'))
     }
 
 

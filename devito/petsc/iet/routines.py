@@ -90,7 +90,7 @@ class PETScCallbackBuilder:
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
-        body = correct_mod_dims(body, solver_objs['mod_dims'])
+        body = uxreplace_mod_dims(body, solver_objs['mod_dims'])
 
         struct = build_petsc_struct(body, 'matvec', liveness='eager')
 
@@ -219,7 +219,7 @@ class PETScCallbackBuilder:
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
-        body = correct_mod_dims(body, solver_objs['mod_dims'])
+        body = uxreplace_mod_dims(body, solver_objs['mod_dims'])
 
         struct = build_petsc_struct(body, 'formfunc', liveness='eager')
 
@@ -351,7 +351,7 @@ class PETScCallbackBuilder:
             'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
         )
 
-        body = correct_mod_dims(body, solver_objs['mod_dims'])
+        body = uxreplace_mod_dims(body, solver_objs['mod_dims'])
 
         struct = build_petsc_struct(body, 'formrhs', liveness='eager')
 
@@ -474,21 +474,29 @@ def time_dep_replace(injectsolve, target, solver_objs, objs, sregistry):
     start_ptr = StartPtr(sregistry.make_name(prefix='start_ptr_'))
 
     vec_get_size = petsc_call(
-        'VecGetSize', [solver_objs['x_local'], Byref(objs['localsize'])]
+        'VecGetSize', [solver_objs['x_local'], Byref(solver_objs['localsize'])]
     )
 
     # TODO: What is the correct way to use Mul here? Devito Mul? Sympy Mul?
     field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
     expr = DummyExpr(
         start_ptr, BarCast(field_from_ptr, ' *') +
-        Mul(target_time, objs['localsize']), init=True
+        Mul(target_time, solver_objs['localsize']), init=True
     )
 
     vec_replace_array = petsc_call('VecReplaceArray', [solver_objs['x_local'], start_ptr])
     return (vec_get_size, expr, vec_replace_array)
 
 
-def correct_mod_dims(body, mod_dims):
+def uxreplace_mod_dims(body, mod_dims):
+    """
+    Replace ModuloDimensions in callback functions to align/match with the
+    initial lowering. The ModuloDimensions in callback functions must match
+    those generated during the initial lowering, as they are assigned and
+    updated in the struct at each time step. This is a valid uxreplace because
+    all functions appearing in the callback functions are passed through
+    the initial lowering.
+    """
     old_mod_dims = [
         i for i in FindSymbols('dimensions').visit(body) if isinstance(i, ModuloDimension)
     ]
