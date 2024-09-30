@@ -1,8 +1,7 @@
 import cgen as c
 
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (FindNodes, Transformer,
-                           MapNodes, Iteration, List, BlankLine,
+from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
                            Callable, CallableBody, DummyExpr, Call)
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.tools import filter_ordered
@@ -18,63 +17,49 @@ from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
+    injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
+                                  'groupby').visit(iet)
 
-    # Check if PETScSolve was used
-    petsc_nodes = FindNodes(InjectSolveDummy).visit(iet)
-
-    if not petsc_nodes:
+    if not injectsolve_mapper:
         return iet, {}
 
-    unique_targets = list({i.expr.rhs.target for i in petsc_nodes})
+    targets = [i.expr.rhs.target for (i,) in injectsolve_mapper.values()]
     init = init_petsc(**kwargs)
 
     # Assumption is that all targets have the same grid so can use any target here
-    objs = build_core_objects(unique_targets[-1], **kwargs)
+    objs = build_core_objects(targets[-1], **kwargs)
 
     # Create core PETSc calls (not specific to each PETScSolve)
     core = make_core_petsc_calls(objs, **kwargs)
-
-    injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
-                                  'groupby').visit(iet)
 
     setup = []
     subs = {}
 
     # Create a different DMDA for each target with a unique space order
-    unique_dmdas = create_dmda_objs(unique_targets)
+    unique_dmdas = create_dmda_objs(targets)
     objs.update(unique_dmdas)
     for dmda in unique_dmdas.values():
         setup.extend(create_dmda_calls(dmda, objs))
 
     builder = PETScCallbackBuilder(**kwargs)
 
-    # Create the PETSc calls which are specific to each target
-    for target in unique_targets:
-        solver_objs = build_solver_objs(target)
+    for iters, (injectsolve,) in injectsolve_mapper.items():
+        target = injectsolve.expr.rhs.target
+        solver_objs = build_solver_objs(target, **kwargs)
 
-        # Generate the solver setup for target. This is required only
-        # once per target
-        for (injectsolve,) in injectsolve_mapper.values():
-            # Skip if not associated with the target
-            if injectsolve.expr.rhs.target != target:
-                continue
-            solver_setup = generate_solver_setup(solver_objs, objs, injectsolve, target)
-            setup.extend(solver_setup)
-            break
+        # Generate the solver setup for each target
+        solver_setup = generate_solver_setup(solver_objs, objs, injectsolve)
+        setup.extend(solver_setup)
 
+        # Retrieve the modulo dimensions and map them to their origins based
+        # on the initial lowering
+        solver_objs['mod_dims'] = retrieve_mod_dims(iters)
+        space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         # Generate all PETSc callback functions for the target via recusive compilation
-        for iters, (injectsolve,) in injectsolve_mapper.items():
-            if injectsolve.expr.rhs.target != target:
-                continue
-            # Retrieve the modulo dimensions and map them to their origins based
-            # on the initial lowering
-            solver_objs['mod_dims'] = retrieve_mod_dims(iters)
-            space_iter, = spatial_injectsolve_iter(iters, injectsolve)
-            matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
-                                                            objs, solver_objs)
-            setup.extend([matvec_op, formfunc_op])
-            subs.update({space_iter: List(body=runsolve)})
-            break
+        matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
+                                                        objs, solver_objs)
+        setup.extend([matvec_op, formfunc_op, BlankLine])
+        subs.update({space_iter: List(body=runsolve)})
 
     # Generate callback to populate main struct object
     struct_main = petsc_struct('ctx', filter_ordered(builder.struct_params))
@@ -82,7 +67,7 @@ def lower_petsc(iet, **kwargs):
     call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
     calls_set_app_ctx = [petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
                          for i in unique_dmdas]
-    setup.extend([BlankLine, call_struct_callback] + calls_set_app_ctx)
+    setup.extend([call_struct_callback] + calls_set_app_ctx)
 
     iet = Transformer(subs).visit(iet)
 
@@ -184,26 +169,28 @@ def create_dmda(dmda, objs):
     return dmda
 
 
-def build_solver_objs(target):
-    name = target.name
+def build_solver_objs(target, **kwargs):
+    sreg = kwargs['sregistry']
     return {
-        'Jac': Mat(name='J_%s' % name),
-        'x_global': GlobalVec(name='x_global_%s' % name),
-        'x_local': LocalVec(name='x_local_%s' % name, liveness='eager'),
-        'b_global': GlobalVec(name='b_global_%s' % name),
-        'b_local': LocalVec(name='b_local_%s' % name),
-        'ksp': KSP(name='ksp_%s' % name),
-        'pc': PC(name='pc_%s' % name),
-        'snes': SNES(name='snes_%s' % name),
-        'X_global': GlobalVec(name='X_global_%s' % name),
-        'Y_global': GlobalVec(name='Y_global_%s' % name),
-        'X_local': LocalVec(name='X_local_%s' % name, liveness='eager'),
-        'Y_local': LocalVec(name='Y_local_%s' % name, liveness='eager'),
-        'dummy': DummyArg(name='dummy_%s' % name)
+        'Jac': Mat(sreg.make_name(prefix='J_')),
+        'x_global': GlobalVec(sreg.make_name(prefix='x_global_')),
+        'x_local': LocalVec(sreg.make_name(prefix='x_local_'), liveness='eager'),
+        'b_global': GlobalVec(sreg.make_name(prefix='b_global_')),
+        'b_local': LocalVec(sreg.make_name(prefix='b_local_')),
+        'ksp': KSP(sreg.make_name(prefix='ksp_')),
+        'pc': PC(sreg.make_name(prefix='pc_')),
+        'snes': SNES(sreg.make_name(prefix='snes_')),
+        'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
+        'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
+        'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
+        'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
+        'dummy': DummyArg(sreg.make_name(prefix='dummy_'))
     }
 
 
-def generate_solver_setup(solver_objs, objs, injectsolve, target):
+def generate_solver_setup(solver_objs, objs, injectsolve):
+    target = injectsolve.expr.rhs.target
+
     dmda = objs['da_so_%s' % target.space_order]
 
     solver_params = injectsolve.expr.rhs.solver_parameters

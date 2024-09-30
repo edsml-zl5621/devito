@@ -121,9 +121,9 @@ def test_petsc_solve():
 
     callable_roots = [meta_call.root for meta_call in op._func_table.values()]
 
-    matvec_callback = [root for root in callable_roots if root.name == 'MyMatShellMult_f']
+    matvec_callback = [root for root in callable_roots if root.name == 'MyMatShellMult_0']
 
-    formrhs_callback = [root for root in callable_roots if root.name == 'FormRHS_f']
+    formrhs_callback = [root for root in callable_roots if root.name == 'FormRHS_0']
 
     action_expr = FindNodes(Expression).visit(matvec_callback[0])
     rhs_expr = FindNodes(Expression).visit(formrhs_callback[0])
@@ -439,14 +439,14 @@ def test_callback_arguments():
     with switchconfig(openmp=False):
         op = Operator(petsc1)
 
-    mv = op._func_table['MyMatShellMult_f1'].root
-    ff = op._func_table['FormFunction_f1'].root
+    mv = op._func_table['MyMatShellMult_0'].root
+    ff = op._func_table['FormFunction_0'].root
 
     assert len(mv.parameters) == 3
     assert len(ff.parameters) == 4
 
-    assert str(mv.parameters) == '(J_f1, X_global_f1, Y_global_f1)'
-    assert str(ff.parameters) == '(snes_f1, X_global_f1, Y_global_f1, dummy_f1)'
+    assert str(mv.parameters) == '(J_0, X_global_0, Y_global_0)'
+    assert str(ff.parameters) == '(snes_0, X_global_0, Y_global_0, dummy_0)'
 
 
 @skipif('petsc')
@@ -526,10 +526,10 @@ def test_petsc_frees():
     frees = op.body.frees
 
     # Check the frees appear in the following order
-    assert str(frees[0]) == 'PetscCall(VecDestroy(&(b_global_f)));'
-    assert str(frees[1]) == 'PetscCall(VecDestroy(&(x_global_f)));'
-    assert str(frees[2]) == 'PetscCall(MatDestroy(&(J_f)));'
-    assert str(frees[3]) == 'PetscCall(SNESDestroy(&(snes_f)));'
+    assert str(frees[0]) == 'PetscCall(VecDestroy(&(b_global_0)));'
+    assert str(frees[1]) == 'PetscCall(VecDestroy(&(x_global_0)));'
+    assert str(frees[2]) == 'PetscCall(MatDestroy(&(J_0)));'
+    assert str(frees[3]) == 'PetscCall(SNESDestroy(&(snes_0)));'
     assert str(frees[4]) == 'PetscCall(DMDestroy(&(da_so_2)));'
 
 
@@ -549,8 +549,8 @@ def test_calls_to_callbacks():
 
     ccode = str(op.ccode)
 
-    assert '(void (*)(void))MyMatShellMult_f' in ccode
-    assert 'PetscCall(SNESSetFunction(snes_f,NULL,FormFunction_f,NULL));' in ccode
+    assert '(void (*)(void))MyMatShellMult_0' in ccode
+    assert 'PetscCall(SNESSetFunction(snes_0,NULL,FormFunction_0,NULL));' in ccode
 
 
 @skipif('petsc')
@@ -572,7 +572,7 @@ def test_start_ptr():
         op = Operator(petsc)
 
     # Verify the case with modulo time stepping
-    assert 'float * start_ptr_u = t1*localsize + (float *)(u_vec->data);' in str(op)
+    assert 'float * start_ptr_0 = t1*localsize + (float *)(u_vec->data);' in str(op)
 
 
 @skipif('petsc')
@@ -593,7 +593,7 @@ def test_time_loop():
     petsc1 = PETScSolve(eq1, v1)
     op1 = Operator(petsc1)
     body1 = str(op1.body)
-    rhs1 = str(op1._func_table['FormRHS_v1'].root.ccode)
+    rhs1 = str(op1._func_table['FormRHS_0'].root.ccode)
 
     assert 'ctx.t0 = t0' in body1
     assert 'ctx.t1 = t1' not in body1
@@ -607,7 +607,7 @@ def test_time_loop():
     petsc2 = PETScSolve(eq2, v2)
     op2 = Operator(petsc2)
     body2 = str(op2.body)
-    rhs2 = str(op2._func_table['FormRHS_v2'].root.ccode)
+    rhs2 = str(op2._func_table['FormRHS_0'].root.ccode)
 
     assert 'ctx.time = time' in body2
     assert 'formrhs->time' in rhs2
@@ -618,7 +618,7 @@ def test_time_loop():
     petsc3 = PETScSolve(eq3, v1)
     op3 = Operator(petsc3)
     body3 = str(op3.body)
-    rhs3 = str(op3._func_table['FormRHS_v1'].root.ccode)
+    rhs3 = str(op3._func_table['FormRHS_0'].root.ccode)
 
     assert 'ctx.t0 = t0' in body3
     assert 'ctx.t1 = t1' in body3
@@ -635,3 +635,4 @@ def test_time_loop():
     body4 = str(op4.body)
 
     assert 'ctx.t0 = t0' in body4
+    assert body4.count('ctx.t0 = t0') == 1

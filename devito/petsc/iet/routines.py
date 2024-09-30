@@ -67,7 +67,6 @@ class PETScCallbackBuilder:
         return matvec_callback, formfunc_callback, formrhs_callback
 
     def make_matvec(self, injectsolve, objs, solver_objs):
-        target = injectsolve.expr.rhs.target
         # Compile matvec `eqns` into an IET via recursive compilation
         irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
                                       options={'mpi': False}, sregistry=SymbolRegistry())
@@ -76,7 +75,8 @@ class PETScCallbackBuilder:
                                               solver_objs, objs)
 
         matvec_callback = PETScCallable(
-            'MyMatShellMult_%s' % target.name, body_matvec, retval=objs['err'],
+            self.sregistry.make_name(prefix='MyMatShellMult_'), body_matvec,
+            retval=objs['err'],
             parameters=(
                 solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global']
             )
@@ -195,7 +195,6 @@ class PETScCallbackBuilder:
         return matvec_body
 
     def make_formfunc(self, injectsolve, objs, solver_objs):
-        target = injectsolve.expr.rhs.target
         # Compile formfunc `eqns` into an IET via recursive compilation
         irs_formfunc, _ = self.rcompile(
             injectsolve.expr.rhs.formfuncs,
@@ -206,7 +205,8 @@ class PETScCallbackBuilder:
                                                   solver_objs, objs)
 
         formfunc_callback = PETScCallable(
-            'FormFunction_%s' % target.name, body_formfunc, retval=objs['err'],
+            self.sregistry.make_name(prefix='FormFunction_'), body_formfunc,
+            retval=objs['err'],
             parameters=(solver_objs['snes'], solver_objs['X_global'],
                         solver_objs['Y_global'], solver_objs['dummy'])
         )
@@ -316,7 +316,6 @@ class PETScCallbackBuilder:
         return formfunc_body
 
     def make_formrhs(self, injectsolve, objs, solver_objs):
-        target = injectsolve.expr.rhs.target
         # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
                                        options={'mpi': False}, sregistry=SymbolRegistry())
@@ -325,7 +324,7 @@ class PETScCallbackBuilder:
                                                 solver_objs, objs)
 
         formrhs_callback = PETScCallable(
-            'FormRHS_%s' % target.name, body_formrhs, retval=objs['err'],
+            self.sregistry.make_name(prefix='FormRHS_'), body_formrhs, retval=objs['err'],
             parameters=(
                 solver_objs['snes'], solver_objs['b_local']
             )
@@ -404,7 +403,9 @@ class PETScCallbackBuilder:
                              [dmda, Byref(solver_objs['x_local'])])
 
         if any(i.is_Time for i in target.dimensions):
-            vec_replace_array = time_dep_replace(injectsolve, target, solver_objs, objs)
+            vec_replace_array = time_dep_replace(
+                injectsolve, target, solver_objs, objs, self.sregistry
+            )
         else:
             field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
             vec_replace_array = (petsc_call(
@@ -455,7 +456,7 @@ def build_petsc_struct(iet, name, liveness):
     return petsc_struct(name, fields, liveness)
 
 
-def time_dep_replace(injectsolve, target, solver_objs, objs):
+def time_dep_replace(injectsolve, target, solver_objs, objs, sregistry):
     target_time = injectsolve.expr.lhs
     target_time = [i for i, d in zip(target_time.indices,
                                      target_time.dimensions) if d.is_Time]
@@ -470,7 +471,7 @@ def time_dep_replace(injectsolve, target, solver_objs, objs):
     class StartPtr(LocalObject):
         dtype = CustomDtype(ctype_str, modifier=' *')
 
-    start_ptr = StartPtr(name='start_ptr_%s' % target.name)
+    start_ptr = StartPtr(sregistry.make_name(prefix='start_ptr_'))
 
     vec_get_size = petsc_call(
         'VecGetSize', [solver_objs['x_local'], Byref(objs['localsize'])]
