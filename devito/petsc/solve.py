@@ -4,7 +4,7 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-from devito.types import Eq
+from devito.types import Eq, Symbol
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
@@ -49,10 +49,11 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
             CallbackExpr(F_target.subs({target: arrays['x_formfunc']})),
             subdomain=eq.subdomain
         ))
-
+        time_dim = Symbol('t_tmp')
+        time_mapper = {target.grid.stepping_dim: time_dim}
         formrhs.append(Eq(
             arrays['b_tmp'],
-            CallbackExpr(b),
+            CallbackExpr(b).subs(time_mapper),
             subdomain=eq.subdomain
         ))
 
@@ -66,6 +67,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         formfuncs=formfuncs,
         formrhs=formrhs,
         arrays=arrays,
+        time_dim=time_dim
     ), subdomain=eq.subdomain)
 
     return [inject_solve]
