@@ -1,4 +1,3 @@
-from devito.ir.iet.nodes import Expression
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.ir.equations import OpInjectSolve
 from devito.ir.iet import (FindNodes, retrieve_iteration_tree,
@@ -36,18 +35,6 @@ def spatial_injectsolve_iter(iter, injectsolve):
 petsc_iet_mapper = {OpInjectSolve: InjectSolveDummy}
 
 
-def drop_callbackexpr(body):
-    # TODO: fix this circular import
-    from devito.petsc.types import CallbackExpr
-    nodes = FindNodes(Expression).visit(body)
-    mapper = {
-        expr: expr._rebuild(expr=expr.expr._rebuild(rhs=expr.expr.rhs.args[0]))
-        for expr in nodes
-        if isinstance(expr.expr.rhs, CallbackExpr)
-    }
-    return Transformer(mapper).visit(body)
-
-
 def assign_time_iters(iet, struct):
     """
     Assign time iterators to the struct within loops containing PETScCalls.
@@ -75,9 +62,14 @@ def assign_time_iters(iet, struct):
     return Transformer(mapper).visit(iet)
 
 
-def retrieve_mod_dims(iters):
-    outer_iter_dims = iters[0].dimensions
-    if any(dim.is_Time for dim in outer_iter_dims):
-        mod_dims = [dim for dim in outer_iter_dims if dim.is_Modulo]
-        return {dim.origin: dim for dim in mod_dims}
-    return {}
+def retrieve_time_dims(iters):
+    time_iter = [i for i in iters if any(dim.is_Time for dim in i.dimensions)]
+    mapper = {}
+    if not time_iter:
+        return mapper
+    for dim in time_iter[0].dimensions:
+        if dim.is_Modulo:
+            mapper[dim.origin] = dim
+        elif dim.is_Time:
+            mapper[dim] = dim
+    return mapper
