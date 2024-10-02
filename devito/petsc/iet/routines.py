@@ -359,7 +359,7 @@ class PETScCallbackBuilder:
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
-
+        # from IPython import embed; embed()
         body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
