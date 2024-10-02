@@ -4,11 +4,12 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-from devito.types import Eq, Symbol
+from devito.types import Eq, Symbol, SteppingDimension
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
+from devito.tools import as_tuple
+from devito.petsc.types import LinearSolveExpr, PETScArray
 
 
 __all__ = ['PETScSolve']
@@ -32,42 +33,45 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     formfuncs = []
     formrhs = []
 
-    eqns = eqns if isinstance(eqns, (list, tuple)) else [eqns]
+    eqns = as_tuple(eqns)
+    funcs = retrieve_functions(eqns)
+    time_mapper = generate_time_mapper(funcs)
+
     for eq in eqns:
         b, F_target = separate_eqn(eq, target)
+        b, F_target = b.subs(time_mapper), F_target.subs(time_mapper)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
         matvecs.append(Eq(
             arrays['y_matvec'],
-            CallbackExpr(F_target.subs({target: arrays['x_matvec']})),
+            F_target.subs({target: arrays['x_matvec']}),
             subdomain=eq.subdomain
         ))
 
         formfuncs.append(Eq(
             arrays['y_formfunc'],
-            CallbackExpr(F_target.subs({target: arrays['x_formfunc']})),
+            F_target.subs({target: arrays['x_formfunc']}),
             subdomain=eq.subdomain
         ))
-        time_dim = Symbol('t_tmp')
-        time_mapper = {target.grid.stepping_dim: time_dim}
+
         formrhs.append(Eq(
             arrays['b_tmp'],
-            CallbackExpr(b).subs(time_mapper),
+            b,
             subdomain=eq.subdomain
         ))
 
     # Placeholder equation for inserting calls to the solver and generating
     # correct time loop etc
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        expr=tuple(retrieve_functions(eqns)),
+        expr=tuple(funcs),
         target=target,
         solver_parameters=solver_parameters,
         matvecs=matvecs,
         formfuncs=formfuncs,
         formrhs=formrhs,
         arrays=arrays,
-        time_dim=time_dim
+        time_mapper=time_mapper,
     ), subdomain=eq.subdomain)
 
     return [inject_solve]
@@ -153,3 +157,25 @@ def _(expr, target):
         return 0
     args = [centre_stencil(a, target) for a in expr.evaluate.args]
     return expr.evaluate.func(*args)
+
+
+def generate_time_mapper(funcs):
+    """
+    Replace time indices with `Symbols` in equations used within
+    PETSc callback functions. These symbols are Uxreplaced at the IET
+    level to align with the `TimeDimension` and `ModuloDimension` objects
+    present in the inital lowering.
+    NOTE: All functions used in PETSc callback functions are attached to
+    the `LinearSolveExpr` object, which is passed through the initial lowering
+    (and subsequently dropped and replaced with calls to run the solver).
+    Therefore, the appropriate time loop will always be correctly generated inside
+    the main kernel.
+    """
+    time_indices = list({
+        i if isinstance(d, SteppingDimension) else d
+        for f in funcs
+        for i, d in zip(f.indices, f.dimensions)
+        if d.is_Time
+    })
+    tau_symbs = [Symbol('tau%d' % i) for i in range(len(time_indices))]
+    return {time: tau for time, tau in zip(time_indices, tau_symbs)}
