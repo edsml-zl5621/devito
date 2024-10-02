@@ -572,7 +572,7 @@ def test_start_ptr():
         op1 = Operator(petsc1)
 
     # Verify the case with modulo time stepping
-    assert 'float * start_ptr_0 = t1*localsize_0 + (float *)(u1_vec->data);' in str(op1)
+    assert 'float * start_ptr_0 = t1*localsize_0 + (float*)(u1_vec->data);' in str(op1)
 
     # Verify the case with no modulo time stepping
     u2 = TimeFunction(name='u2', grid=grid, space_order=2, dtype=np.float32, save=5)
@@ -583,7 +583,7 @@ def test_start_ptr():
         op2 = Operator(petsc2)
 
     assert 'float * start_ptr_0 = (time + 1)*localsize_0 + ' + \
-        '(float *)(u2_vec->data);' in str(op2)
+        '(float*)(u2_vec->data);' in str(op2)
 
 
 @skipif('petsc')
@@ -602,7 +602,8 @@ def test_time_loop():
     v1 = Function(name='v1', grid=grid, space_order=2)
     eq1 = Eq(v1.laplace, u1)
     petsc1 = PETScSolve(eq1, v1)
-    op1 = Operator(petsc1)
+    with switchconfig(openmp=False):
+        op1 = Operator(petsc1)
     body1 = str(op1.body)
     rhs1 = str(op1._func_table['FormRHS_0'].root.ccode)
 
@@ -616,7 +617,8 @@ def test_time_loop():
     v2 = Function(name='v2', grid=grid, space_order=2, save=5)
     eq2 = Eq(v2.laplace, u2)
     petsc2 = PETScSolve(eq2, v2)
-    op2 = Operator(petsc2)
+    with switchconfig(openmp=False):
+        op2 = Operator(petsc2)
     body2 = str(op2.body)
     rhs2 = str(op2._func_table['FormRHS_0'].root.ccode)
 
@@ -627,7 +629,8 @@ def test_time_loop():
     # used in one of the callback functions
     eq3 = Eq(v1.laplace, u1 + u1.forward)
     petsc3 = PETScSolve(eq3, v1)
-    op3 = Operator(petsc3)
+    with switchconfig(openmp=False):
+        op3 = Operator(petsc3)
     body3 = str(op3.body)
     rhs3 = str(op3._func_table['FormRHS_0'].root.ccode)
 
@@ -642,7 +645,8 @@ def test_time_loop():
     petsc4 = PETScSolve(eq4, v1)
     eq5 = Eq(v2.laplace, u1)
     petsc5 = PETScSolve(eq5, v2)
-    op4 = Operator(petsc4 + petsc5)
+    with switchconfig(openmp=False):
+        op4 = Operator(petsc4 + petsc5)
     body4 = str(op4.body)
 
     assert 'ctx.t0 = t0' in body4

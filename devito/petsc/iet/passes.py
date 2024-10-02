@@ -6,13 +6,14 @@ from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.tools import filter_ordered
 from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
-                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt)
+                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
+                                StartPtr)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
 from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
                                     spatial_injectsolve_iter, assign_time_iters,
-                                    retrieve_mod_dims)
+                                    retrieve_time_dims)
 
 
 @iet_pass
@@ -45,15 +46,12 @@ def lower_petsc(iet, **kwargs):
     builder = PETScCallbackBuilder(**kwargs)
 
     for iters, (injectsolve,) in injectsolve_mapper.items():
-        target = injectsolve.expr.rhs.target
-        solver_objs = build_solver_objs(target, **kwargs)
+        solver_objs = build_solver_objs(injectsolve, iters, **kwargs)
 
         # Generate the solver setup for each InjectSolveDummy
         solver_setup = generate_solver_setup(solver_objs, objs, injectsolve)
         setup.extend(solver_setup)
 
-        # Retrieve `ModuloDimensions` for use in callback functions
-        solver_objs['mod_dims'] = retrieve_mod_dims(iters)
         # Generate all PETSc callback functions for the target via recursive compilation
         matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
                                                         objs, solver_objs)
@@ -169,7 +167,8 @@ def create_dmda(dmda, objs):
     return dmda
 
 
-def build_solver_objs(target, **kwargs):
+def build_solver_objs(injectsolve, iters, **kwargs):
+    target = injectsolve.expr.rhs.target
     sreg = kwargs['sregistry']
     return {
         'Jac': Mat(sreg.make_name(prefix='J_')),
@@ -185,12 +184,16 @@ def build_solver_objs(target, **kwargs):
         'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
         'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
         'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
-        'localsize': PetscInt(sreg.make_name(prefix='localsize_'))
+        'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
+        'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
+        'true_dims': retrieve_time_dims(iters),
+        'target': target,
+        'time_mapper': injectsolve.expr.rhs.time_mapper,
     }
 
 
 def generate_solver_setup(solver_objs, objs, injectsolve):
-    target = injectsolve.expr.rhs.target
+    target = solver_objs['target']
 
     dmda = objs['da_so_%s' % target.space_order]
 
