@@ -1,5 +1,7 @@
 from devito.tools import timed_pass
 from devito.petsc.types import LinearSolveExpr, CallbackExpr
+from devito.symbolics import xreplace_indices
+from devito.ir.support import IterationSpace
 
 
 @timed_pass()
@@ -13,10 +15,31 @@ def petsc_lift(clusters):
         if isinstance(c.exprs[0].rhs, LinearSolveExpr):
             ispace = c.ispace.lift(c.exprs[0].rhs.target.space_dimensions)
             processed.append(c.rebuild(ispace=ispace))
+        
+        # elif isinstance(c.exprs[0].rhs, CallbackExpr):
+        #     exprs = c.exprs
+        #     # func = partial(xreplace_indices, mapper=c.exprs[0].rhs.time_mapper)
+        #     # exprs = [e.apply(func) for e in exprs]
+        #     tt = c.exprs[0].rhs.target.grid.stepping_dim
+        #     first_mapper = {c.exprs[0].rhs.time_dim: tt}
+        #     exprs = [xreplace_indices(e, first_mapper) for e in exprs]
+        #     # from IPython import embed; embed()
+        #     next_mapper = {key: value for key, value in c.exprs[0].rhs.time_mapper.items() if key != tt}
+        #     # from IPython import embed; embed()
+        #     # next_mapper = c.exprs[0].rhs.time_mapper
+        #     exprs = [xreplace_indices(e, next_mapper) for e in exprs]
+
+        #     ispace = IterationSpace(c.ispace.intervals, c.ispace.sub_iterators,
+        #                             c.ispace.directions)
+
+        #     processed.append(c.rebuild(exprs=exprs, ispace=ispace))
+            
         else:
             processed.append(c)
 
     return processed
+
+
 
 
 @timed_pass()

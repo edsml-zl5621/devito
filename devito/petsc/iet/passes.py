@@ -54,6 +54,11 @@ def lower_petsc(iet, **kwargs):
 
         # Retrieve `ModuloDimensions` for use in callback functions
         solver_objs['mod_dims'] = retrieve_mod_dims(iters)
+        solver_objs['time_dim'] = injectsolve.expr.rhs.time_dim
+        # from IPython import embed; embed()
+        # new_callbacks = []
+        # for callback in injectsolve.expr.rhs.formrhs:
+
         # Generate all PETSc callback functions for the target via recursive compilation
         matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
                                                         objs, solver_objs)

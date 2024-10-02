@@ -40,20 +40,23 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         # a jacobian. Hence, we can use F_target to form the jac-vec product
         matvecs.append(Eq(
             arrays['y_matvec'],
-            CallbackExpr(F_target.subs({target: arrays['x_matvec']})),
+            F_target.subs({target: arrays['x_matvec']}),
             subdomain=eq.subdomain
         ))
 
         formfuncs.append(Eq(
             arrays['y_formfunc'],
-            CallbackExpr(F_target.subs({target: arrays['x_formfunc']})),
+            F_target.subs({target: arrays['x_formfunc']}),
             subdomain=eq.subdomain
         ))
         time_dim = Symbol('t_tmp')
-        time_mapper = {target.grid.stepping_dim: time_dim}
+        # tao2 = Symbol('tao2')
+        # mapper = {b.indices[0]: tao1, b.indices[-1]: tao2}
+        # time_mapper = {target.grid.stepping_dim: time_dim}
+        # from IPython import embed; embed()
         formrhs.append(Eq(
             arrays['b_tmp'],
-            CallbackExpr(b).subs(time_mapper),
+            b,
             subdomain=eq.subdomain
         ))
 
@@ -67,7 +70,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         formfuncs=formfuncs,
         formrhs=formrhs,
         arrays=arrays,
-        time_dim=time_dim
+        time_dim={},
     ), subdomain=eq.subdomain)
 
     return [inject_solve]

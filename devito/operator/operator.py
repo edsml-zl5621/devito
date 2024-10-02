@@ -25,7 +25,7 @@ from devito.parameters import configuration
 from devito.passes import (Graph, lower_index_derivatives, generate_implicit,
                            generate_macros, minimize_symbols, unevaluate,
                            error_mapper, is_on_device)
-from devito.symbolics import estimate_cost, subs_op_args
+from devito.symbolics import estimate_cost, subs_op_args, xreplace_indices
 from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tuple,
                           flatten, filter_sorted, frozendict, is_integer,
                           split, timed_pass, timed_region, contains_val)
@@ -33,6 +33,7 @@ from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
 from devito.petsc.iet.passes import lower_petsc
 from devito.petsc.clusters import petsc_lift, petsc_project
+from devito.petsc.types import CallbackExpr
 
 __all__ = ['Operator']
 
@@ -343,12 +344,29 @@ class Operator(Callable):
 
         # "True" lowering (indexification, shifting, ...)
         expressions = lower_exprs(expressions, **kwargs)
-
+        # from IPython import embed; embed()
         # Turn user-defined SubDimensions into concrete SubDimensions,
         # in particular uniqueness across expressions is ensured
         expressions = concretize_subdims(expressions, **kwargs)
 
         processed = [LoweredEq(i) for i in expressions]
+        # from IPython import embed; embed()
+
+        new_processed = []
+        if isinstance(processed[0].rhs, CallbackExpr):
+            # from IPython import embed; embed()
+            timeee_mapper = expressions[0].rhs.target
+            # timeee_mapper_keys = [i for i in timeee_mapper.keys()]
+            # from IPython import embed; embed()
+            # from devito.types import Symbol
+            # tao1 = Symbol('tao1')
+            # tao2 = Symbol('tao2')
+            # from IPython import embed; embed()
+            new_dict = {inner_key: inner_value for outer_dict in timeee_mapper.values() for inner_key, inner_value in outer_dict.items()}
+            # new_mapper = {timeee_mapper_keys[0]: tao1, timeee_mapper_keys[1]: tao2}
+            tmp = xreplace_indices(processed[0], new_dict)
+            new_processed.append(tmp)
+            return new_processed
 
         return processed
 
@@ -383,7 +401,7 @@ class Operator(Callable):
 
         clusters = cls._specialize_clusters(clusters, **kwargs)
 
-        clusters = petsc_project(clusters)
+        # clusters = petsc_project(clusters)
 
         # Operation count after specialization
         final_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)

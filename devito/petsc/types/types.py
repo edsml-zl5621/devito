@@ -84,6 +84,10 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     def arrays(self):
         return self._arrays
 
+    @property
+    def time_dim(self):
+        return self._time_dim
+
     @classmethod
     def eval(cls, *args):
         return None
@@ -91,7 +95,64 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     func = Reconstructable._rebuild
 
 
-class CallbackExpr(sympy.Function):
+# class CallbackExpr(sympy.Function):
+#     @classmethod
+#     def eval(cls, *args):
+#         return None
+
+
+class CallbackExpr(sympy.Function, Reconstructable):
+
+    __rargs__ = ('expr',)
+    __rkwargs__ = ('target','time_mapper')
+
+    def __new__(cls, expr, target=None, time_mapper=None, **kwargs):
+
+        with sympy_mutex:
+            obj = sympy.Function.__new__(cls, expr)
+
+        obj._expr = expr
+        # obj._time_mapper = frozendict(kwargs.get('time_mapper', {}))
+        # TODO: make frozen dict
+        obj._time_mapper = kwargs.get('time_mapper', {})
+        obj._target = target
+        # obj._mapper = mapper
+        return obj
+
+    def __repr__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.expr)
+
+    __str__ = __repr__
+
+    def _sympystr(self, printer):
+        return str(self)
+
+    def __hash__(self):
+        return hash(self.expr)
+
+    # def __eq__(self, other):
+    #     return (isinstance(other, LinearSolveExpr) and
+    #             self.expr == other.expr and
+    #             self.target == other.target)
+
+    @property
+    def expr(self):
+        return self._expr
+    
+    @property
+    def target(self):
+        return self._target
+
+    # @property
+    # def mapper(self):
+    #     return self._mapper
+    
+    @property
+    def time_mapper(self):
+        return self._time_mapper
+
     @classmethod
     def eval(cls, *args):
         return None
+
+    func = Reconstructable._rebuild

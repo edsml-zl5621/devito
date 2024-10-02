@@ -364,7 +364,7 @@ class Stepper(Queue):
                 else:
                     subs = {md.origin: md for md in v}
                     sub_iterators[d].extend(v)
-
+                # from IPython import embed; embed()
                 func = partial(xreplace_indices, mapper=subs, key=key)
                 exprs = [e.apply(func) for e in exprs]
 
