@@ -7,7 +7,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
 
     __rargs__ = ('expr',)
     __rkwargs__ = ('target', 'solver_parameters', 'matvecs',
-                   'formfuncs', 'formrhs', 'arrays', 'time_dim')
+                   'formfuncs', 'formrhs', 'arrays', 'time_mapper')
 
     defaults = {
         'ksp_type': 'gmres',
@@ -19,7 +19,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     }
 
     def __new__(cls, expr, target=None, solver_parameters=None,
-                matvecs=None, formfuncs=None, formrhs=None, arrays=None, time_dim=None, **kwargs):
+                matvecs=None, formfuncs=None, formrhs=None,
+                arrays=None, time_mapper=None, **kwargs):
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -37,7 +38,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         obj._formfuncs = formfuncs
         obj._formrhs = formrhs
         obj._arrays = arrays
-        obj._time_dim = time_dim
+        obj._time_mapper = time_mapper
         return obj
 
     def __repr__(self):
@@ -84,14 +85,12 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     def arrays(self):
         return self._arrays
 
+    @property
+    def time_mapper(self):
+        return self._time_mapper
+
     @classmethod
     def eval(cls, *args):
         return None
 
     func = Reconstructable._rebuild
-
-
-class CallbackExpr(sympy.Function):
-    @classmethod
-    def eval(cls, *args):
-        return None
