@@ -411,6 +411,7 @@ class PETScCallbackBuilder:
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
                 i in struct.fields if not isinstance(i.function, AbstractFunction)}
+        # from IPython import embed; embed()
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
         self._struct_params.extend(struct.fields)
@@ -521,59 +522,13 @@ def uxreplace_mod_dims(body, solver_objs, target):
     uxreplace because all functions appearing in the callback functions are
     passed through the initial lowering.
     """
-    # old_mod_dims = [
-    #     i for i in FindSymbols('dimensions').visit(body) if isinstance(i, ModuloDimension)
-    # ]
-    # from IPython import embed; embed()
-    # if not old_mod_dims:
-    #     return body
-    # t_tmp = 
-    # from IPython import embed; embed()
-    # body = Uxreplace({i: mod_dims[i] for i in old_mod_dims}).visit(body)
-    # return Uxreplace({i: mod_dims[i.origin] for i in old_mod_dims}).visit(body)
-    # original_time_dim = target.grid.stepping_dim
-    # fake_time_dim = solver_objs['time_dim']
-    # body = Uxreplace({fake_time_dim: original_time_dim}).visit(body)
-    # exprs = FindNodes(Expression).visit(body)
-
-    # petsc = exprs[-1]
-
-    # tmp = xreplace_indices(exprs, solver_objs['mod_dims'])
 
     mapper = solver_objs['mod_dims']
 
     new_dict = {inner_value: outer_key for outer_key, inner_dict in mapper.items() for inner_value in inner_dict.values()}
-    # replaced = uxreplace(petsc, solver_objs['mod_dims'])
 
     body = Uxreplace(new_dict).visit(body)
-
-    # indexeds = FindSymbols('indexeds').visit(body)
-
-    # def replace_indices(indexed, dims):
-    #     new_indices = tuple(dims.get(index, index) for index in indexed.indices)
-    #     return indexed.func(*new_indices)
-
-    # for key, value in solver_objs['mod_dims'].items():
-    #     tmp = key
-
-    # new_indexeds = []
-    # for i in indexeds:
-    #     new_indexeds.append(i._rebuild(indices=))
-    
-
-    # Apply the index replacement to all indexed objects
-    # updated_indexeds = [replace_indices(indexed, solver_objs['mod_dims']) for indexed in indexeds]
-
-    # nodes = FindNodes(Expression).visit(body)
-
-    # body = Uxreplace(solver_objs['mod_dims']).visit(body)
-    # reversed_dict = dict(reversed(list(solver_objs['mod_dims'].items())))
-    # tmp = solver_objs['mod_dims'].pop(original_time_dim)
-
-
-    # filtered_dict = {key: value for key, value in solver_objs['mod_dims'].items() if key != original_time_dim}
-    # body = Transformer(filtered_dict).visit(body)
-    from IPython import embed; embed()
+    # from IPython import embed; embed()
     return body
 
 

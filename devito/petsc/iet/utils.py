@@ -84,11 +84,7 @@ def retrieve_mod_dims(iters):
         tao1 = Symbol('tao0')
         tao2 = Symbol('tao1')
         mod_associations = {mod_dims[0]: tao1, mod_dims[1]: tao2}
-        # from IPython import embed; embed()
-        # nested = {key: {mod1: {mod2: value}} for key, value in tmp.items()}
         nested_tmp = {dim: {dim.origin: mod_associations[dim]} for dim in mod_dims}
-        # from IPython import embed; embed()
-        # return {dim.origin: dim for dim in mod_dims}
         return nested_tmp
     return {}
 

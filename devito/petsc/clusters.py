@@ -15,24 +15,17 @@ def petsc_lift(clusters):
         if isinstance(c.exprs[0].rhs, LinearSolveExpr):
             ispace = c.ispace.lift(c.exprs[0].rhs.target.space_dimensions)
             processed.append(c.rebuild(ispace=ispace))
-        
-        # elif isinstance(c.exprs[0].rhs, CallbackExpr):
-        #     exprs = c.exprs
-        #     # func = partial(xreplace_indices, mapper=c.exprs[0].rhs.time_mapper)
-        #     # exprs = [e.apply(func) for e in exprs]
-        #     tt = c.exprs[0].rhs.target.grid.stepping_dim
-        #     first_mapper = {c.exprs[0].rhs.time_dim: tt}
-        #     exprs = [xreplace_indices(e, first_mapper) for e in exprs]
-        #     # from IPython import embed; embed()
-        #     next_mapper = {key: value for key, value in c.exprs[0].rhs.time_mapper.items() if key != tt}
-        #     # from IPython import embed; embed()
-        #     # next_mapper = c.exprs[0].rhs.time_mapper
-        #     exprs = [xreplace_indices(e, next_mapper) for e in exprs]
 
-        #     ispace = IterationSpace(c.ispace.intervals, c.ispace.sub_iterators,
-        #                             c.ispace.directions)
-
-        #     processed.append(c.rebuild(exprs=exprs, ispace=ispace))
+        elif isinstance(c.exprs[0].rhs, CallbackExpr):
+            exprs = c.exprs
+            timeee_mapper = exprs[0].rhs.target
+            new_dict = {inner_key: inner_value for outer_dict in timeee_mapper.values() for inner_key, inner_value in outer_dict.items()}
+            mod_dimss = [dim for dim in exprs[0].dimensions if dim.is_Modulo]
+            temp_mapper = {dim: new_dict[dim.origin] for dim in mod_dimss}
+            exprs_new = [xreplace_indices(exprs[0], temp_mapper)]
+            ispace = IterationSpace(c.ispace.intervals, c.ispace.sub_iterators,
+                                    c.ispace.directions)
+            processed.append(c.rebuild(exprs=exprs_new, ispace=ispace))
             
         else:
             processed.append(c)

@@ -350,23 +350,6 @@ class Operator(Callable):
         expressions = concretize_subdims(expressions, **kwargs)
 
         processed = [LoweredEq(i) for i in expressions]
-        # from IPython import embed; embed()
-
-        new_processed = []
-        if isinstance(processed[0].rhs, CallbackExpr):
-            # from IPython import embed; embed()
-            timeee_mapper = expressions[0].rhs.target
-            # timeee_mapper_keys = [i for i in timeee_mapper.keys()]
-            # from IPython import embed; embed()
-            # from devito.types import Symbol
-            # tao1 = Symbol('tao1')
-            # tao2 = Symbol('tao2')
-            # from IPython import embed; embed()
-            new_dict = {inner_key: inner_value for outer_dict in timeee_mapper.values() for inner_key, inner_value in outer_dict.items()}
-            # new_mapper = {timeee_mapper_keys[0]: tao1, timeee_mapper_keys[1]: tao2}
-            tmp = xreplace_indices(processed[0], new_dict)
-            new_processed.append(tmp)
-            return new_processed
 
         return processed
 
@@ -400,8 +383,6 @@ class Operator(Callable):
         init_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)
 
         clusters = cls._specialize_clusters(clusters, **kwargs)
-
-        # clusters = petsc_project(clusters)
 
         # Operation count after specialization
         final_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)

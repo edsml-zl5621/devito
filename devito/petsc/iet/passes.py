@@ -17,6 +17,7 @@ from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
+    # from IPython import embed; embed()
     # Check if PETScSolve was used
     injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
                                   'groupby').visit(iet)
