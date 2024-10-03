@@ -12,7 +12,7 @@ from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
 from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
                                     spatial_injectsolve_iter, assign_time_iters,
-                                    retrieve_mod_dims)
+                                    retrieve_time_dims)
 
 
 @iet_pass
@@ -53,12 +53,8 @@ def lower_petsc(iet, **kwargs):
         solver_setup = generate_solver_setup(solver_objs, objs, injectsolve)
         setup.extend(solver_setup)
 
-        # Retrieve `ModuloDimensions` for use in callback functions
-        solver_objs['mod_dims'] = retrieve_mod_dims(iters)
-        solver_objs['time_dim'] = injectsolve.expr.rhs.time_dim
-        # from IPython import embed; embed()
-        # new_callbacks = []
-        # for callback in injectsolve.expr.rhs.formrhs:
+        solver_objs['true_dims'] = retrieve_time_dims(iters)
+        solver_objs['time_mapper'] = injectsolve.expr.rhs.time_mapper
 
         # Generate all PETSc callback functions for the target via recursive compilation
         matvec_op, formfunc_op, runsolve = builder.make(injectsolve,

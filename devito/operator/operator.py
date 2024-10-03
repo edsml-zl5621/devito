@@ -32,8 +32,8 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tup
 from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
 from devito.petsc.iet.passes import lower_petsc
-from devito.petsc.clusters import petsc_lift, petsc_project
-from devito.petsc.types import CallbackExpr
+from devito.petsc.clusters import petsc_lift
+
 
 __all__ = ['Operator']
 
@@ -344,23 +344,12 @@ class Operator(Callable):
 
         # "True" lowering (indexification, shifting, ...)
         expressions = lower_exprs(expressions, **kwargs)
-        # from IPython import embed; embed()
+
         # Turn user-defined SubDimensions into concrete SubDimensions,
         # in particular uniqueness across expressions is ensured
         expressions = concretize_subdims(expressions, **kwargs)
 
         processed = [LoweredEq(i) for i in expressions]
-        # from IPython import embed; embed()
-
-        # new_processed = []
-        # if isinstance(processed[0].rhs, CallbackExpr):
-        #     # from IPython import embed; embed()
-        #     timeee_mapper = expressions[0].rhs.target
-        #     new_dict = {inner_key: inner_value for outer_dict in timeee_mapper.values() for inner_key, inner_value in outer_dict.items()}
-        #     tmp = xreplace_indices(processed[0], new_dict)
-        #     new_processed.append(tmp)
-        #     # from IPython import embed; embed()
-        #     return new_processed
 
         return processed
 

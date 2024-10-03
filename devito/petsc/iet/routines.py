@@ -10,10 +10,10 @@ from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import LocalObject, ModuloDimension, TimeDimension
 from devito.tools import ctypes_to_cstr, dtype_to_ctype, CustomDtype, as_tuple
-from devito.petsc.types import PETScArray, CallbackExpr
+from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
-from devito.petsc.iet.utils import petsc_call, petsc_struct, drop_callbackexpr
+from devito.petsc.iet.utils import petsc_call, petsc_struct
 from devito.ir.support import SymbolRegistry
 
 
@@ -68,19 +68,9 @@ class PETScCallbackBuilder:
         return matvec_callback, formfunc_callback, formrhs_callback
 
     def make_matvec(self, injectsolve, objs, solver_objs):
-        # from IPython import embed; embed()
         # Compile matvec `eqns` into an IET via recursive compilation
         matvecs = injectsolve.expr.rhs.matvecs
         target = injectsolve.expr.rhs.target
-        # temp = xreplace_indices(matvecs, solver_objs['mod_dims'])
-        # from IPython import embed; embed()
-        # new_matvecs = []
-        # # from IPython import embed; embed()
-        # for eq in matvecs:
-        #     new_rhs = CallbackExpr(eq.rhs, time_mapper=solver_objs['mod_dims'], target=solver_objs['mod_dims'])
-        #     new_eq = eq._rebuild(rhs=new_rhs)
-        #     new_matvecs.append(new_eq)
-        # from IPython import embed; embed()
         irs_matvec, _ = self.rcompile(matvecs,
                                       options={'mpi': False}, sregistry=SymbolRegistry())
         body_matvec = self.create_matvec_body(injectsolve,
@@ -99,11 +89,11 @@ class PETScCallbackBuilder:
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        body = drop_callbackexpr(body)
+        # body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
-        body = uxreplace_mod_dims(body, solver_objs, target=linsolveexpr.target)
+        body = uxreplace_time(body, solver_objs)
 
         struct = build_petsc_struct(body, 'matvec', liveness='eager')
 
@@ -228,11 +218,11 @@ class PETScCallbackBuilder:
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        body = drop_callbackexpr(body)
+        # body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
-        body = uxreplace_mod_dims(body, solver_objs, linsolveexpr.target)
+        body = uxreplace_time(body, solver_objs)
 
         struct = build_petsc_struct(body, 'formfunc', liveness='eager')
 
@@ -329,18 +319,8 @@ class PETScCallbackBuilder:
         return formfunc_body
 
     def make_formrhs(self, injectsolve, objs, solver_objs):
-
         formrhs = injectsolve.expr.rhs.formrhs
         target = injectsolve.expr.rhs.target
-    
-        # temp = xreplace_indices(formrhs, solver_objs['mod_dims'])
-        # from IPython import embed; embed()
-        # new_formrhs = []
-        # for eq in formrhs:
-        #     new_rhs = CallbackExpr(eq.rhs, time_mapper=solver_objs['mod_dims'], target=solver_objs['mod_dims'])
-        #     new_eq = eq._rebuild(rhs=new_rhs)
-        #     new_formrhs.append(new_eq)
-        # from IPython import embed; embed()
         # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(formrhs,
                                        options={'mpi': False}, sregistry=SymbolRegistry())
@@ -359,8 +339,8 @@ class PETScCallbackBuilder:
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
-        # from IPython import embed; embed()
-        body = drop_callbackexpr(body)
+
+        # body = drop_callbackexpr(body)
 
         dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
 
@@ -376,7 +356,7 @@ class PETScCallbackBuilder:
             'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
         )
 
-        body = uxreplace_mod_dims(body, solver_objs, linsolveexpr.target)
+        body = uxreplace_time(body, solver_objs)
 
         struct = build_petsc_struct(body, 'formrhs', liveness='eager')
 
@@ -411,7 +391,7 @@ class PETScCallbackBuilder:
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
                 i in struct.fields if not isinstance(i.function, AbstractFunction)}
-        # from IPython import embed; embed()
+
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
         self._struct_params.extend(struct.fields)
@@ -514,26 +494,11 @@ def time_dep_replace(injectsolve, target, solver_objs, objs, sregistry):
     return (vec_get_size, expr, vec_replace_array)
 
 
-def uxreplace_mod_dims(body, solver_objs, target):
-    """
-    Replace ModuloDimensions in callback functions with the corresponding
-    ModuloDimensions generated by the initial lowering. They must match because
-    they are assigned and updated in the struct at each time step. This is a valid
-    uxreplace because all functions appearing in the callback functions are
-    passed through the initial lowering.
-    """
-
-    mapper = solver_objs['mod_dims']
-
-    # new_dict = {inner_value: outer_key for outer_key, inner_dict in mapper.items() for inner_value in inner_dict.values()}
-
-    # body = Uxreplace(new_dict).visit(body)
-    # from IPython import embed; embed()
-
-    new_mapper = {tao: mapper[solver_objs['time_dim'][tao]] for tao in solver_objs['time_dim']}
-    body = Uxreplace(new_mapper).visit(body)
-    # from IPython import embed; e/mbed()
-    return body
+def uxreplace_time(body, solver_objs):
+    time_mapper = solver_objs['time_mapper']
+    true_dims = solver_objs['true_dims']
+    subs = {symb: true_dims[time_mapper[symb]] for symb in time_mapper}
+    return Uxreplace(subs).visit(body)
 
 
 Null = Macro('NULL')

@@ -4,11 +4,12 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-from devito.types import Eq, Symbol
+from devito.types import Eq, Symbol, SteppingDimension
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.petsc.types import LinearSolveExpr, PETScArray, CallbackExpr
+from devito.tools import filter_sorted
+from devito.petsc.types import LinearSolveExpr, PETScArray
 
 
 __all__ = ['PETScSolve']
@@ -33,6 +34,25 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     formrhs = []
 
     eqns = eqns if isinstance(eqns, (list, tuple)) else [eqns]
+    funcs = retrieve_functions(eqns)
+
+
+    time_indices = list({
+        i if isinstance(d, SteppingDimension) else d
+        for f in funcs
+        for i, d in zip(f.indices, f.dimensions)
+        if d.is_Time
+    })
+    tao_symbols = [Symbol(f'tao{i + 1}') for i in range(len(time_indices))]
+    time_spacing = target.grid.stepping_dim.spacing
+
+    time_mapper = {
+        tao: time.xreplace({time_spacing: 1, -time_spacing: -1})
+        for tao, time in zip(tao_symbols, time_indices)
+    }
+
+    mapper_temp = {time: tao for time, tao in zip(time_indices, tao_symbols)}
+
     for eq in eqns:
         b, F_target = separate_eqn(eq, target)
 
@@ -49,38 +69,26 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
             F_target.subs({target: arrays['x_formfunc']}),
             subdomain=eq.subdomain
         ))
-        # time_dim = Symbol('t_tmp')
-        tao1 = Symbol('tao1')
-        tao2 = Symbol('tao2')
-        tao3 = Symbol('tao3')
-        time_spacing = target.grid.stepping_dim.spacing
-        # from IPython import embed; embed()
-        mapper_main = {b.indices[0].xreplace({time_spacing: 1, -time_spacing: -1}): tao1, b.indices[-1].xreplace({time_spacing: 1, -time_spacing: -1}): tao2,
-                       b.indices[-2].xreplace({time_spacing: 1, -time_spacing: -1}): tao3}
-        mapper_main = {v: k for k, v in mapper_main.items()}
-        mapper_temp = {b.indices[0]: tao1, b.indices[-1]: tao2, b.indices[-2]: tao3}
-        # from IPython import embed; embed()
-        # time_mapper = {target.grid.stepping_dim: time_dim}
-        # from IPython import embed; embed()
+
         formrhs.append(Eq(
             arrays['b_tmp'],
-            CallbackExpr(b.subs(mapper_temp), time_mapper=mapper_main),
+            b.subs(mapper_temp),
             subdomain=eq.subdomain
         ))
 
     # Placeholder equation for inserting calls to the solver and generating
     # correct time loop etc
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        expr=tuple(retrieve_functions(eqns)),
+        expr=tuple(funcs),
         target=target,
         solver_parameters=solver_parameters,
         matvecs=matvecs,
         formfuncs=formfuncs,
         formrhs=formrhs,
         arrays=arrays,
-        time_dim=mapper_main,
+        time_mapper=time_mapper,
     ), subdomain=eq.subdomain)
-    # from IPython import embed; embed()
+
     return [inject_solve]
 
 
