@@ -34,7 +34,6 @@ from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
 from devito.petsc.iet.passes import lower_petsc
 from devito.petsc.clusters import petsc_lift
 
-
 __all__ = ['Operator']
 
 

@@ -262,8 +262,8 @@ def xreplace_indices(exprs, mapper, key=None):
         handle = [i for i in handle if i.base.label in key]
     elif callable(key):
         handle = [i for i in handle if key(i)]
-    mapper_new = dict(zip(handle, [i.xreplace(mapper) for i in handle]))
-    replaced = [uxreplace(i, mapper_new) for i in as_tuple(exprs)]
+    mapper = dict(zip(handle, [i.xreplace(mapper) for i in handle]))
+    replaced = [uxreplace(i, mapper) for i in as_tuple(exprs)]
     return replaced if isinstance(exprs, Iterable) else replaced[0]
 
 

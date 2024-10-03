@@ -160,11 +160,22 @@ def _(expr, target):
 
 
 def generate_time_mapper(funcs):
+    """
+    Replace time indices with `Symbols` in equations used within
+    PETSc callback functions. These symbols are Uxreplaced at the IET
+    level to align with the `TimeDimension` and `ModuloDimension` objects
+    present in the inital lowering.
+    NOTE: All functions used in PETSc callback functions are attached to
+    the `LinearSolveExpr` object, which is passed through the initial lowering
+    (and subsequently dropped and replaced with calls to run the solver).
+    Therefore, the appropriate time loop will always be correctly generated inside
+    the main kernel.
+    """
     time_indices = list({
         i if isinstance(d, SteppingDimension) else d
         for f in funcs
         for i, d in zip(f.indices, f.dimensions)
         if d.is_Time
     })
-    tao_symbols = [Symbol('tao%d' % i) for i in range(len(time_indices))]
-    return {time: tao for time, tao in zip(time_indices, tao_symbols)}
+    tau_symbs = [Symbol('tau%d' % i) for i in range(len(time_indices))]
+    return {time: tau for time, tau in zip(time_indices, tau_symbs)}

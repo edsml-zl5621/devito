@@ -63,10 +63,11 @@ def assign_time_iters(iet, struct):
 
 
 def retrieve_time_dims(iters):
-    outer_iter_dims = iters[0].dimensions
-
+    time_iter = [i for i in iters if any(dim.is_Time for dim in i.dimensions)]
     mapper = {}
-    for dim in outer_iter_dims:
+    if not time_iter:
+        return mapper
+    for dim in time_iter[0].dimensions:
         if dim.is_Modulo:
             mapper[dim.origin] = dim
         elif dim.is_Time:

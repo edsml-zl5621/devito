@@ -81,8 +81,7 @@ def _hoist_halospots(iet):
     # Precompute scopes to save time
     scopes = {}
     for i, v in MapNodes(child_types=Expression).visit(iet).items():
-        scope = Scope([e.expr for e in v])
-        scopes[i] = scope
+        scopes[i] = Scope([e.expr for e in v])
 
     # Analysis
     hsmapper = {}
