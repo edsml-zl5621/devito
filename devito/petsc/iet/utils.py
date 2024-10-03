@@ -75,26 +75,26 @@ def assign_time_iters(iet, struct):
     return Transformer(mapper).visit(iet)
 
 
+# def retrieve_mod_dims(iters):
+#     outer_iter_dims = iters[0].dimensions
+#     # from IPython import embed; embed()
+#     if any(dim.is_Time for dim in outer_iter_dims):
+#         mod_dims = [dim for dim in outer_iter_dims if dim.is_Modulo]
+#         from devito.types import Symbol
+#         tao1 = Symbol('tao0')
+#         tao2 = Symbol('tao1')
+#         mod_associations = {mod_dims[0]: tao1, mod_dims[1]: tao2}
+#         nested_tmp = {dim: {dim.origin: mod_associations[dim]} for dim in mod_dims}
+#         return nested_tmp
+#     return {}
+
+
 def retrieve_mod_dims(iters):
     outer_iter_dims = iters[0].dimensions
+    # indices = 
+    tmp = FindNodes(Expression).visit(iters[0])
     # from IPython import embed; embed()
     if any(dim.is_Time for dim in outer_iter_dims):
         mod_dims = [dim for dim in outer_iter_dims if dim.is_Modulo]
-        from devito.types import Symbol
-        tao1 = Symbol('tao0')
-        tao2 = Symbol('tao1')
-        mod_associations = {mod_dims[0]: tao1, mod_dims[1]: tao2}
-        nested_tmp = {dim: {dim.origin: mod_associations[dim]} for dim in mod_dims}
-        return nested_tmp
+        return {dim.origin: dim for dim in mod_dims}
     return {}
-
-
-# def retrieve_mod_dims(iters):
-#     outer_iter_dims = iters[0].dimensions
-#     # indices = 
-#     tmp = FindNodes(Expression).visit(iters[0])
-#     from IPython import embed; embed()
-#     if any(dim.is_Time for dim in outer_iter_dims):
-#         mod_dims = [dim for dim in outer_iter_dims if dim.is_Modulo]
-#         return {dim.origin: dim for dim in mod_dims}
-#     return {}

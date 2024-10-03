@@ -74,14 +74,14 @@ class PETScCallbackBuilder:
         target = injectsolve.expr.rhs.target
         # temp = xreplace_indices(matvecs, solver_objs['mod_dims'])
         # from IPython import embed; embed()
-        new_matvecs = []
+        # new_matvecs = []
+        # # from IPython import embed; embed()
+        # for eq in matvecs:
+        #     new_rhs = CallbackExpr(eq.rhs, time_mapper=solver_objs['mod_dims'], target=solver_objs['mod_dims'])
+        #     new_eq = eq._rebuild(rhs=new_rhs)
+        #     new_matvecs.append(new_eq)
         # from IPython import embed; embed()
-        for eq in matvecs:
-            new_rhs = CallbackExpr(eq.rhs, time_mapper=solver_objs['mod_dims'], target=solver_objs['mod_dims'])
-            new_eq = eq._rebuild(rhs=new_rhs)
-            new_matvecs.append(new_eq)
-        # from IPython import embed; embed()
-        irs_matvec, _ = self.rcompile(new_matvecs,
+        irs_matvec, _ = self.rcompile(matvecs,
                                       options={'mpi': False}, sregistry=SymbolRegistry())
         body_matvec = self.create_matvec_body(injectsolve,
                                               List(body=irs_matvec.uiet.body),
@@ -335,14 +335,14 @@ class PETScCallbackBuilder:
     
         # temp = xreplace_indices(formrhs, solver_objs['mod_dims'])
         # from IPython import embed; embed()
-        new_formrhs = []
-        for eq in formrhs:
-            new_rhs = CallbackExpr(eq.rhs, time_mapper=solver_objs['mod_dims'], target=solver_objs['mod_dims'])
-            new_eq = eq._rebuild(rhs=new_rhs)
-            new_formrhs.append(new_eq)
+        # new_formrhs = []
+        # for eq in formrhs:
+        #     new_rhs = CallbackExpr(eq.rhs, time_mapper=solver_objs['mod_dims'], target=solver_objs['mod_dims'])
+        #     new_eq = eq._rebuild(rhs=new_rhs)
+        #     new_formrhs.append(new_eq)
         # from IPython import embed; embed()
         # Compile formrhs `eqns` into an IET via recursive compilation
-        irs_formrhs, _ = self.rcompile(new_formrhs,
+        irs_formrhs, _ = self.rcompile(formrhs,
                                        options={'mpi': False}, sregistry=SymbolRegistry())
         body_formrhs = self.create_formrhs_body(injectsolve,
                                                 List(body=irs_formrhs.uiet.body),
@@ -525,10 +525,14 @@ def uxreplace_mod_dims(body, solver_objs, target):
 
     mapper = solver_objs['mod_dims']
 
-    new_dict = {inner_value: outer_key for outer_key, inner_dict in mapper.items() for inner_value in inner_dict.values()}
+    # new_dict = {inner_value: outer_key for outer_key, inner_dict in mapper.items() for inner_value in inner_dict.values()}
 
-    body = Uxreplace(new_dict).visit(body)
+    # body = Uxreplace(new_dict).visit(body)
     # from IPython import embed; embed()
+
+    new_mapper = {tao: mapper[solver_objs['time_dim'][tao]] for tao in solver_objs['time_dim']}
+    body = Uxreplace(new_mapper).visit(body)
+    # from IPython import embed; e/mbed()
     return body
 
 

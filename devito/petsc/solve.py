@@ -49,14 +49,22 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
             F_target.subs({target: arrays['x_formfunc']}),
             subdomain=eq.subdomain
         ))
-        time_dim = Symbol('t_tmp')
-        # tao2 = Symbol('tao2')
-        # mapper = {b.indices[0]: tao1, b.indices[-1]: tao2}
+        # time_dim = Symbol('t_tmp')
+        tao1 = Symbol('tao1')
+        tao2 = Symbol('tao2')
+        tao3 = Symbol('tao3')
+        time_spacing = target.grid.stepping_dim.spacing
+        # from IPython import embed; embed()
+        mapper_main = {b.indices[0].xreplace({time_spacing: 1, -time_spacing: -1}): tao1, b.indices[-1].xreplace({time_spacing: 1, -time_spacing: -1}): tao2,
+                       b.indices[-2].xreplace({time_spacing: 1, -time_spacing: -1}): tao3}
+        mapper_main = {v: k for k, v in mapper_main.items()}
+        mapper_temp = {b.indices[0]: tao1, b.indices[-1]: tao2, b.indices[-2]: tao3}
+        # from IPython import embed; embed()
         # time_mapper = {target.grid.stepping_dim: time_dim}
         # from IPython import embed; embed()
         formrhs.append(Eq(
             arrays['b_tmp'],
-            b,
+            CallbackExpr(b.subs(mapper_temp), time_mapper=mapper_main),
             subdomain=eq.subdomain
         ))
 
@@ -70,9 +78,9 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         formfuncs=formfuncs,
         formrhs=formrhs,
         arrays=arrays,
-        time_dim={},
+        time_dim=mapper_main,
     ), subdomain=eq.subdomain)
-
+    # from IPython import embed; embed()
     return [inject_solve]
 
 
