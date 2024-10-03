@@ -5,7 +5,7 @@ from devito.petsc.types import LinearSolveExpr
 @timed_pass()
 def petsc_lift(clusters):
     """
-    Lift the iteration space surrounding each PETSc equation to create
+    Lift the iteration space surrounding each PETSc solve to create
     distinct iteration loops.
     """
     processed = []

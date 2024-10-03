@@ -257,17 +257,13 @@ def xreplace_indices(exprs, mapper, key=None):
         callable, apply the replacement to a symbol S if and only if ``key(S)``
         gives True.
     """
-    # from IPython import embed; embed()
     handle = flatten(retrieve_indexed(i) for i in as_tuple(exprs))
     if isinstance(key, Iterable):
         handle = [i for i in handle if i.base.label in key]
     elif callable(key):
         handle = [i for i in handle if key(i)]
-    # from IPython import embed; embed()
     mapper_new = dict(zip(handle, [i.xreplace(mapper) for i in handle]))
-    # from IPython import embed; embed()
     replaced = [uxreplace(i, mapper_new) for i in as_tuple(exprs)]
-    # from IPython import embed; embed()
     return replaced if isinstance(exprs, Iterable) else replaced[0]
 
 

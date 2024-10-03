@@ -1,6 +1,6 @@
 from ctypes import POINTER
 
-from devito.tools import CustomDtype
+from devito.tools import CustomDtype, dtype_to_cstr
 from devito.types import LocalObject, CCompositeObject, ModuloDimension, TimeDimension
 from devito.symbolics import Byref
 
@@ -169,3 +169,9 @@ class PETScStruct(CCompositeObject):
             'eager' else self.dtype
 
     _C_modifier = ' *'
+
+
+class StartPtr(LocalObject):
+    def __init__(self, name, dtype):
+        super().__init__(name=name)
+        self.dtype = CustomDtype(dtype_to_cstr(dtype), modifier=' *')

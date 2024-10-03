@@ -6,7 +6,8 @@ from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
 from devito.symbolics import Byref, Macro, FieldFromPointer
 from devito.tools import filter_ordered
 from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
-                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt)
+                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
+                                StartPtr)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
@@ -17,7 +18,6 @@ from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
 
 @iet_pass
 def lower_petsc(iet, **kwargs):
-    # from IPython import embed; embed()
     # Check if PETScSolve was used
     injectsolve_mapper = MapNodes(Iteration, InjectSolveDummy,
                                   'groupby').visit(iet)
@@ -187,7 +187,8 @@ def build_solver_objs(target, **kwargs):
         'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
         'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
         'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
-        'localsize': PetscInt(sreg.make_name(prefix='localsize_'))
+        'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
+        'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype)
     }
 
 

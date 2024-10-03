@@ -572,7 +572,7 @@ def test_start_ptr():
         op1 = Operator(petsc1)
 
     # Verify the case with modulo time stepping
-    assert 'float * start_ptr_0 = t1*localsize_0 + (float *)(u1_vec->data);' in str(op1)
+    assert 'float * start_ptr_0 = t1*localsize_0 + (float*)(u1_vec->data);' in str(op1)
 
     # Verify the case with no modulo time stepping
     u2 = TimeFunction(name='u2', grid=grid, space_order=2, dtype=np.float32, save=5)
@@ -583,7 +583,7 @@ def test_start_ptr():
         op2 = Operator(petsc2)
 
     assert 'float * start_ptr_0 = (time + 1)*localsize_0 + ' + \
-        '(float *)(u2_vec->data);' in str(op2)
+        '(float*)(u2_vec->data);' in str(op2)
 
 
 @skipif('petsc')

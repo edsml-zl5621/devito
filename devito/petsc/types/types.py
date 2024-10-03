@@ -19,7 +19,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     }
 
     def __new__(cls, expr, target=None, solver_parameters=None,
-                matvecs=None, formfuncs=None, formrhs=None, arrays=None, time_mapper=None, **kwargs):
+                matvecs=None, formfuncs=None, formrhs=None,
+                arrays=None, time_mapper=None, **kwargs):
 
         if solver_parameters is None:
             solver_parameters = cls.defaults

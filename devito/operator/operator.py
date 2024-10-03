@@ -25,7 +25,7 @@ from devito.parameters import configuration
 from devito.passes import (Graph, lower_index_derivatives, generate_implicit,
                            generate_macros, minimize_symbols, unevaluate,
                            error_mapper, is_on_device)
-from devito.symbolics import estimate_cost, subs_op_args, xreplace_indices
+from devito.symbolics import estimate_cost, subs_op_args
 from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tuple,
                           flatten, filter_sorted, frozendict, is_integer,
                           split, timed_pass, timed_region, contains_val)
@@ -377,6 +377,8 @@ class Operator(Callable):
         # Build a sequence of Clusters from a sequence of Eqs
         clusters = clusterize(expressions, **kwargs)
 
+        # Lift iteration space surrounding each PETSc solve to create
+        # distinct iteration loops
         clusters = petsc_lift(clusters)
 
         # Operation count before specialization

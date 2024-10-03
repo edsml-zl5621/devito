@@ -8,7 +8,7 @@ from devito.types import Eq, Symbol, SteppingDimension
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.tools import filter_sorted
+from devito.tools import as_tuple
 from devito.petsc.types import LinearSolveExpr, PETScArray
 
 
@@ -33,28 +33,13 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     formfuncs = []
     formrhs = []
 
-    eqns = eqns if isinstance(eqns, (list, tuple)) else [eqns]
+    eqns = as_tuple(eqns)
     funcs = retrieve_functions(eqns)
-
-
-    time_indices = list({
-        i if isinstance(d, SteppingDimension) else d
-        for f in funcs
-        for i, d in zip(f.indices, f.dimensions)
-        if d.is_Time
-    })
-    tao_symbols = [Symbol(f'tao{i + 1}') for i in range(len(time_indices))]
-    # time_spacing = target.grid.stepping_dim.spacing
-
-    # time_mapper = {
-    #     tao: time.xreplace({time_spacing: 1, -time_spacing: -1})
-    #     for tao, time in zip(tao_symbols, time_indices)
-    # }
-
-    time_mapper = {time: tao for time, tao in zip(time_indices, tao_symbols)}
+    time_mapper = generate_time_mapper(funcs)
 
     for eq in eqns:
         b, F_target = separate_eqn(eq, target)
+        b, F_target = b.subs(time_mapper), F_target.subs(time_mapper)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
@@ -72,7 +57,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
 
         formrhs.append(Eq(
             arrays['b_tmp'],
-            b.subs(time_mapper),
+            b,
             subdomain=eq.subdomain
         ))
 
@@ -172,3 +157,14 @@ def _(expr, target):
         return 0
     args = [centre_stencil(a, target) for a in expr.evaluate.args]
     return expr.evaluate.func(*args)
+
+
+def generate_time_mapper(funcs):
+    time_indices = list({
+        i if isinstance(d, SteppingDimension) else d
+        for f in funcs
+        for i, d in zip(f.indices, f.dimensions)
+        if d.is_Time
+    })
+    tao_symbols = [Symbol('tao%d' % i) for i in range(len(time_indices))]
+    return {time: tao for time, tao in zip(time_indices, tao_symbols)}

@@ -1,4 +1,3 @@
-from devito.ir.iet.nodes import Expression
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.ir.equations import OpInjectSolve
 from devito.ir.iet import (FindNodes, retrieve_iteration_tree,
@@ -65,7 +64,7 @@ def assign_time_iters(iet, struct):
 
 def retrieve_time_dims(iters):
     outer_iter_dims = iters[0].dimensions
-    
+
     mapper = {}
     for dim in outer_iter_dims:
         if dim.is_Modulo:
