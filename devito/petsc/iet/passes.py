@@ -55,7 +55,7 @@ def lower_petsc(iet, **kwargs):
 
         solver_objs['true_dims'] = retrieve_time_dims(iters)
         solver_objs['time_mapper'] = injectsolve.expr.rhs.time_mapper
-
+        solver_objs['target'] = target
         # Generate all PETSc callback functions for the target via recursive compilation
         matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
                                                         objs, solver_objs)

@@ -70,7 +70,8 @@ class PETScCallbackBuilder:
     def make_matvec(self, injectsolve, objs, solver_objs):
         # Compile matvec `eqns` into an IET via recursive compilation
         matvecs = injectsolve.expr.rhs.matvecs
-        target = injectsolve.expr.rhs.target
+        # target = injectsolve.expr.rhs.target
+        # target = solver_objs['target']
         irs_matvec, _ = self.rcompile(matvecs,
                                       options={'mpi': False}, sregistry=SymbolRegistry())
         body_matvec = self.create_matvec_body(injectsolve,
@@ -320,7 +321,7 @@ class PETScCallbackBuilder:
 
     def make_formrhs(self, injectsolve, objs, solver_objs):
         formrhs = injectsolve.expr.rhs.formrhs
-        target = injectsolve.expr.rhs.target
+        # target = injectsolve.expr.rhs.target
         # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(formrhs,
                                        options={'mpi': False}, sregistry=SymbolRegistry())
@@ -410,7 +411,7 @@ class PETScCallbackBuilder:
 
         if any(i.is_Time for i in target.dimensions):
             vec_replace_array = time_dep_replace(
-                injectsolve, target, solver_objs, objs, self.sregistry
+                injectsolve, solver_objs, objs, self.sregistry
             )
         else:
             field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
@@ -462,7 +463,8 @@ def build_petsc_struct(iet, name, liveness):
     return petsc_struct(name, fields, liveness)
 
 
-def time_dep_replace(injectsolve, target, solver_objs, objs, sregistry):
+def time_dep_replace(injectsolve, solver_objs, objs, sregistry):
+    target = injectsolve.expr.rhs.target
     target_time = injectsolve.expr.lhs
     target_time = [i for i, d in zip(target_time.indices,
                                      target_time.dimensions) if d.is_Time]
@@ -495,8 +497,13 @@ def time_dep_replace(injectsolve, target, solver_objs, objs, sregistry):
 
 
 def uxreplace_time(body, solver_objs):
-    time_mapper = solver_objs['time_mapper']
+    time_spacing = solver_objs['target'].grid.stepping_dim.spacing
     true_dims = solver_objs['true_dims']
+
+    time_mapper = {
+        v: k.xreplace({time_spacing: 1, -time_spacing: -1})
+        for k, v in solver_objs['time_mapper'].items()
+    }
     subs = {symb: true_dims[time_mapper[symb]] for symb in time_mapper}
     return Uxreplace(subs).visit(body)
 

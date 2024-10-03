@@ -44,14 +44,14 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         if d.is_Time
     })
     tao_symbols = [Symbol(f'tao{i + 1}') for i in range(len(time_indices))]
-    time_spacing = target.grid.stepping_dim.spacing
+    # time_spacing = target.grid.stepping_dim.spacing
 
-    time_mapper = {
-        tao: time.xreplace({time_spacing: 1, -time_spacing: -1})
-        for tao, time in zip(tao_symbols, time_indices)
-    }
+    # time_mapper = {
+    #     tao: time.xreplace({time_spacing: 1, -time_spacing: -1})
+    #     for tao, time in zip(tao_symbols, time_indices)
+    # }
 
-    mapper_temp = {time: tao for time, tao in zip(time_indices, tao_symbols)}
+    time_mapper = {time: tao for time, tao in zip(time_indices, tao_symbols)}
 
     for eq in eqns:
         b, F_target = separate_eqn(eq, target)
@@ -72,7 +72,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
 
         formrhs.append(Eq(
             arrays['b_tmp'],
-            b.subs(mapper_temp),
+            b.subs(time_mapper),
             subdomain=eq.subdomain
         ))
 
