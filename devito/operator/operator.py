@@ -32,7 +32,7 @@ from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tup
 from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
 from devito.petsc.iet.passes import lower_petsc
-from devito.petsc.clusters import petsc_lift
+from devito.petsc.clusters import petsc_preprocess
 
 __all__ = ['Operator']
 
@@ -376,9 +376,8 @@ class Operator(Callable):
         # Build a sequence of Clusters from a sequence of Eqs
         clusters = clusterize(expressions, **kwargs)
 
-        # Lift iteration space surrounding each PETSc solve to create
-        # distinct iteration loops
-        clusters = petsc_lift(clusters)
+        # Preprocess clusters for PETSc lowering
+        clusters = petsc_preprocess(clusters)
 
         # Operation count before specialization
         init_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)
