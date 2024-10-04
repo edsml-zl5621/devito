@@ -3,11 +3,12 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           Dereference, DummyExpr, BlankLine)
+                           Dereference, DummyExpr, BlankLine, Callable)
 from devito.symbolics import Byref, FieldFromPointer, Macro, cast_mapper
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import ModuloDimension, TimeDimension, Temp
+from devito.tools import filter_ordered
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
@@ -89,7 +90,7 @@ class PETScCallbackBuilder:
 
         body = uxreplace_time(body, solver_objs)
 
-        struct = build_petsc_struct(body, 'matvec', liveness='eager')
+        struct = build_local_struct(body, 'matvec', liveness='eager')
 
         y_matvec = linsolveexpr.arrays['y_matvec']
         x_matvec = linsolveexpr.arrays['x_matvec']
@@ -216,7 +217,7 @@ class PETScCallbackBuilder:
 
         body = uxreplace_time(body, solver_objs)
 
-        struct = build_petsc_struct(body, 'formfunc', liveness='eager')
+        struct = build_local_struct(body, 'formfunc', liveness='eager')
 
         y_formfunc = linsolveexpr.arrays['y_formfunc']
         x_formfunc = linsolveexpr.arrays['x_formfunc']
@@ -346,7 +347,7 @@ class PETScCallbackBuilder:
 
         body = uxreplace_time(body, solver_objs)
 
-        struct = build_petsc_struct(body, 'formrhs', liveness='eager')
+        struct = build_local_struct(body, 'formrhs', liveness='eager')
 
         dm_get_app_context = petsc_call(
             'DMGetApplicationContext', [dmda, Byref(struct._C_symbol)]
@@ -435,8 +436,36 @@ class PETScCallbackBuilder:
             BlankLine,
         )
 
+    def make_main_struct(self, unique_dmdas, objs):
+        struct_main = petsc_struct('ctx', filter_ordered(self.struct_params))
+        struct_callback = self.generate_struct_callback(struct_main, objs)
+        call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
+        calls_set_app_ctx = [
+            petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
+            for i in unique_dmdas
+        ]
+        calls = [call_struct_callback] + calls_set_app_ctx
 
-def build_petsc_struct(iet, name, liveness):
+        self._efuncs[struct_callback.name] = struct_callback
+        return struct_main, calls
+
+    def generate_struct_callback(self, struct, objs):
+        body = [
+            DummyExpr(FieldFromPointer(i._C_symbol, struct), i._C_symbol)
+            for i in struct.fields if i not in struct.time_dim_fields
+        ]
+        struct_callback_body = CallableBody(
+            List(body=body), init=tuple([petsc_func_begin_user]),
+            retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
+        )
+        struct_callback = Callable(
+            'PopulateMatContext', struct_callback_body, objs['err'],
+            parameters=[struct]
+        )
+        return struct_callback
+
+
+def build_local_struct(iet, name, liveness):
     # Place all context data required by the shell routines into a struct
     fields = [
         i.function for i in FindSymbols('basics').visit(iet)
@@ -474,6 +503,9 @@ def time_dep_replace(injectsolve, solver_objs, objs, sregistry):
 
 
 def uxreplace_time(body, solver_objs):
+    # TODO: Potentially introduce a TimeIteration abstraction to simplify
+    # all the time processing that is done (searches, replacements, ...)
+    # "manually" via free functions
     time_spacing = solver_objs['target'].grid.stepping_dim.spacing
     true_dims = solver_objs['true_dims']
 
