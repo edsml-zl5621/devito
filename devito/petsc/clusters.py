@@ -3,6 +3,15 @@ from devito.petsc.types import LinearSolveExpr
 
 
 @timed_pass()
+def petsc_preprocess(clusters):
+    """
+    Preprocess the clusters to make them suitable for PETSc
+    code generation.
+    """
+    clusters = petsc_lift(clusters)
+    return clusters
+
+
 def petsc_lift(clusters):
     """
     Lift the iteration space surrounding each PETSc solve to create

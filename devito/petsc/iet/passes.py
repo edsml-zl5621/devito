@@ -2,18 +2,16 @@ import cgen as c
 
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
-                           Callable, CallableBody, DummyExpr, Call)
-from devito.symbolics import Byref, Macro, FieldFromPointer
-from devito.tools import filter_ordered
+                           DummyExpr, FindNodes, retrieve_iteration_tree,
+                           filter_iterations)
+from devito.symbolics import Byref, Macro, FieldFromComposite
 from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
                                 StartPtr)
-from devito.petsc.iet.nodes import InjectSolveDummy
+from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
-from devito.petsc.iet.utils import (petsc_call, petsc_call_mpi, petsc_struct,
-                                    spatial_injectsolve_iter, assign_time_iters,
-                                    retrieve_time_dims)
+from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
 
 
 @iet_pass
@@ -61,16 +59,12 @@ def lower_petsc(iet, **kwargs):
         subs.update({space_iter: List(body=runsolve)})
 
     # Generate callback to populate main struct object
-    struct_main = petsc_struct('ctx', filter_ordered(builder.struct_params))
-    struct_callback = generate_struct_callback(struct_main)
-    call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
-    calls_set_app_ctx = [petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
-                         for i in unique_dmdas]
-    setup.extend([call_struct_callback] + calls_set_app_ctx)
+    struct, struct_calls = builder.make_main_struct(unique_dmdas, objs)
+    setup.extend(struct_calls)
 
     iet = Transformer(subs).visit(iet)
 
-    iet = assign_time_iters(iet, struct_main)
+    iet = assign_time_iters(iet, struct)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
@@ -79,7 +73,7 @@ def lower_petsc(iet, **kwargs):
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
-    efuncs = tuple(builder.efuncs.values())+(struct_callback,)
+    efuncs = tuple(builder.efuncs.values())
     metadata.update({'efuncs': efuncs})
 
     return iet, metadata
@@ -260,20 +254,53 @@ def generate_solver_setup(solver_objs, objs, injectsolve):
     )
 
 
-def generate_struct_callback(struct):
-    body = [
-        DummyExpr(FieldFromPointer(i._C_symbol, struct), i._C_symbol)
-        for i in struct.fields if i not in struct.time_dim_fields
+def assign_time_iters(iet, struct):
+    """
+    Assign time iterators to the struct within loops containing PETScCalls.
+    Ensure that assignment occurs only once per time loop, if necessary.
+    Assign only the iterators that are common between the struct fields
+    and the actual Iteration.
+    """
+    time_iters = [
+        i for i in FindNodes(Iteration).visit(iet)
+        if i.dim.is_Time and FindNodes(PETScCall).visit(i)
     ]
-    struct_callback_body = CallableBody(
-        List(body=body), init=tuple([petsc_func_begin_user]),
-        retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
-    )
-    struct_callback = Callable(
-        'PopulateMatContext', struct_callback_body, PetscErrorCode(name='err'),
-        parameters=[struct]
-    )
-    return struct_callback
+
+    if not time_iters:
+        return iet
+
+    mapper = {}
+    for iter in time_iters:
+        common_dims = [dim for dim in iter.dimensions if dim in struct.fields]
+        common_dims = [
+            DummyExpr(FieldFromComposite(dim, struct), dim) for dim in common_dims
+        ]
+        iter_new = iter._rebuild(nodes=List(body=tuple(common_dims)+iter.nodes))
+        mapper.update({iter: iter_new})
+
+    return Transformer(mapper).visit(iet)
+
+
+def retrieve_time_dims(iters):
+    time_iter = [i for i in iters if any(dim.is_Time for dim in i.dimensions)]
+    mapper = {}
+    if not time_iter:
+        return mapper
+    for dim in time_iter[0].dimensions:
+        if dim.is_Modulo:
+            mapper[dim.origin] = dim
+        elif dim.is_Time:
+            mapper[dim] = dim
+    return mapper
+
+
+def spatial_injectsolve_iter(iter, injectsolve):
+    spatial_body = []
+    for tree in retrieve_iteration_tree(iter[0]):
+        root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
+        if injectsolve in FindNodes(InjectSolveDummy).visit(root):
+            spatial_body.append(root)
+    return spatial_body
 
 
 Null = Macro('NULL')
