@@ -24,13 +24,15 @@ from devito.mpi import MPI
 from devito.parameters import configuration
 from devito.passes import (Graph, lower_index_derivatives, generate_implicit,
                            generate_macros, minimize_symbols, unevaluate,
-                           error_mapper, is_on_device, petsc_lift, lower_petsc)
+                           error_mapper, is_on_device)
 from devito.symbolics import estimate_cost, subs_op_args
 from devito.tools import (DAG, OrderedSet, Signer, ReducerMap, as_mapper, as_tuple,
                           flatten, filter_sorted, frozendict, is_integer,
                           split, timed_pass, timed_region, contains_val)
 from devito.types import (Buffer, Grid, Evaluable, host_layer, device_layer,
                           disk_layer)
+from devito.petsc.iet.passes import lower_petsc
+from devito.petsc.clusters import petsc_preprocess
 
 __all__ = ['Operator']
 
@@ -374,9 +376,8 @@ class Operator(Callable):
         # Build a sequence of Clusters from a sequence of Eqs
         clusters = clusterize(expressions, **kwargs)
 
-        # Lift iteration spaces surrounding PETSc equations to produce
-        # distinct iteration loops.
-        clusters = petsc_lift(clusters)
+        # Preprocess clusters for PETSc lowering
+        clusters = petsc_preprocess(clusters)
 
         # Operation count before specialization
         init_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)
@@ -509,7 +510,7 @@ class Operator(Callable):
 
         # During compilation other Dimensions may have been produced
         dimensions = FindSymbols('dimensions').visit(self)
-        ret.update(d for d in dimensions if d.is_PerfKnob)
+        ret.update(dimensions)
 
         ret = tuple(sorted(ret, key=attrgetter('name')))
 

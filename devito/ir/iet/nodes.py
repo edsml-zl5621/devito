@@ -1,6 +1,7 @@
 """The Iteration/Expression Tree (IET) hierarchy."""
 
 import abc
+import ctypes
 import inspect
 from functools import cached_property
 from collections import OrderedDict, namedtuple
@@ -10,7 +11,7 @@ import cgen as c
 from sympy import IndexedBase, sympify
 
 from devito.data import FULL
-from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax, OpMatVec, OpRHS
+from devito.ir.equations import DummyEq, OpInc, OpMin, OpMax
 from devito.ir.support import (INBOUND, SEQUENTIAL, PARALLEL, PARALLEL_IF_ATOMIC,
                                PARALLEL_IF_PVT, VECTORIZED, AFFINE, Property,
                                Forward, WithLock, PrefetchUpdate, detect_io)
@@ -28,7 +29,7 @@ __all__ = ['Node', 'MultiTraversable', 'Block', 'Expression', 'Callable',
            'Increment', 'Return', 'While', 'ListMajor', 'ParallelIteration',
            'ParallelBlock', 'Dereference', 'Lambda', 'SyncSpot', 'Pragma',
            'DummyExpr', 'BlankLine', 'ParallelTree', 'BusyWait', 'UsingNamespace',
-           'CallableBody', 'Transfer', 'Callback', 'MatVecAction', 'RHSLinearSystem']
+           'CallableBody', 'Transfer', 'Callback', 'FixedArgsCallable']
 
 # First-class IET nodes
 
@@ -484,35 +485,6 @@ class Increment(AugmentedExpression):
         super().__init__(expr, pragmas=pragmas, operation=OpInc)
 
 
-class LinearSolverExpression(Expression):
-
-    """
-    Base class for general expressions required by a
-    matrix-free linear solve of the form Ax=b.
-    """
-    pass
-
-
-class MatVecAction(LinearSolverExpression):
-
-    """
-    Expression representing matrix-vector multiplication.
-    """
-
-    def __init__(self, expr, pragmas=None, operation=OpMatVec):
-        super().__init__(expr, pragmas=pragmas, operation=operation)
-
-
-class RHSLinearSystem(LinearSolverExpression):
-
-    """
-    Expression to build the RHS of a linear system.
-    """
-
-    def __init__(self, expr, pragmas=None, operation=OpRHS):
-        super().__init__(expr, pragmas=pragmas, operation=operation)
-
-
 class Iteration(Node):
 
     """
@@ -777,6 +749,15 @@ class Callable(Node):
     @property
     def defines(self):
         return self.all_parameters
+
+
+class FixedArgsCallable(Callable):
+
+    """
+    A Callable class that enforces a fixed function signature.
+    """
+
+    pass
 
 
 class CallableBody(MultiTraversable):
@@ -1057,8 +1038,8 @@ class Dereference(ExprStmt, Node):
     The following cases are supported:
 
         * `pointer` is a PointerArray or TempFunction, and `pointee` is an Array.
-        * `pointer` is an ArrayObject representing a pointer to a C struct, and
-          `pointee` is a field in `pointer`.
+        * `pointer` is an ArrayObject or CCompositeObject representing a pointer
+           to a C struct, and `pointee` is a field in `pointer`.
     """
 
     is_Dereference = True
@@ -1077,13 +1058,14 @@ class Dereference(ExprStmt, Node):
 
     @property
     def expr_symbols(self):
-        ret = [self.pointer.indexed]
+        ret = []
         if self.pointer.is_PointerArray or self.pointer.is_TempFunction:
-            ret.append(self.pointee.indexed)
+            ret.extend([self.pointer.indexed, self.pointee.indexed])
             ret.extend(flatten(i.free_symbols for i in self.pointee.symbolic_shape[1:]))
             ret.extend(self.pointer.free_symbols)
         else:
-            ret.append(self.pointee._C_symbol)
+            assert issubclass(self.pointer._C_ctype, ctypes._Pointer)
+            ret.extend([self.pointer._C_symbol, self.pointee._C_symbol])
         return tuple(filter_ordered(ret))
 
     @property
@@ -1151,7 +1133,7 @@ class Lambda(Node):
 
 class Callback(Call):
     """
-    Callback as a function pointer.
+    Base class for special callback types.
 
     Parameters
     ----------
@@ -1164,16 +1146,28 @@ class Callback(Call):
 
     Notes
     -----
-    The reason Callback is an IET type rather than a SymPy type is
+    - The reason Callback is an IET type rather than a SymPy type is
     due to the fact that, when represented at the SymPy level, the IET
     engine fails to bind the callback to a specific Call. Consequently,
     errors occur during the creation of the call graph.
     """
-
-    def __init__(self, name, retval, param_types):
+    # TODO: Create a common base class for Call and Callback to avoid
+    # having arguments=None here
+    def __init__(self, name, retval=None, param_types=None, arguments=None):
         super().__init__(name=name)
         self.retval = retval
         self.param_types = as_tuple(param_types)
+
+    @property
+    def callback_form(self):
+        """
+        A string representation of the callback form.
+
+        Notes
+        -----
+        To be overridden by subclasses.
+        """
+        return
 
 
 class Section(List):
