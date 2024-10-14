@@ -52,7 +52,7 @@ jobs:
     - name: Install dependencies
       run: |
         source venv/bin/activate
-        pip install -e .[tests, extras]
+        pip install -e .[tests,extras]
 
     - name: Tests in examples
       run: |
