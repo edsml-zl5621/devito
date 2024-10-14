@@ -43,9 +43,16 @@ jobs:
        environment-file: environment-dev.yml
        auto-activate-base: false
 
+    - name: Create and activate virtual environment
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+
     - name: Install dependencies
       run: |
-        pip install -e .[tests,extras]
+        source venv/bin/activate
+        pip install -e .[tests, extras]
 
     - name: Tests in examples
       run: |
