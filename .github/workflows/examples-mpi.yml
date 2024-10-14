@@ -53,10 +53,16 @@ jobs:
       with:
         mpi: ${{ matrix.mpi }}
 
+    - name: Create and activate virtual environment
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+
     - name: Install dependencies
       run: |
-        pip install --user --upgrade pip
-        pip install --user -e .[extras,mpi,tests]
+        source venv/bin/activate
+        pip install -e .[extras,mpi,tests]
         python3 scripts/clear_devito_cache.py
 
     - name: Test mpi notebooks
