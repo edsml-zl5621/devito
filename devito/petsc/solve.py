@@ -38,20 +38,20 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     time_mapper = generate_time_mapper(funcs)
 
     for eq in eqns:
-        b, F_target = separate_eqn(eq, target)
+        b, F_target, targets = separate_eqn(eq, target)
         b, F_target = b.subs(time_mapper), F_target.subs(time_mapper)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
         matvecs.append(Eq(
             arrays['y_matvec'],
-            F_target.subs({target: arrays['x_matvec']}),
+            F_target.subs(targets_to_arrays(arrays['x_matvec'], targets)),
             subdomain=eq.subdomain
         ))
 
         formfuncs.append(Eq(
             arrays['y_formfunc'],
-            F_target.subs({target: arrays['x_formfunc']}),
+            F_target.subs(targets_to_arrays(arrays['x_formfunc'], targets)),
             subdomain=eq.subdomain
         ))
 
@@ -83,38 +83,77 @@ def separate_eqn(eqn, target):
     where F(target) = b.
     """
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
-    tmp = eval_time_derivatives(zeroed_eqn.lhs)
-    b, F_target = remove_target(tmp, target)
-    return -b, F_target
+    zeroed_eqn = eval_time_derivatives(zeroed_eqn.lhs)
+    target_funcs = set(generate_targets(zeroed_eqn, target))
+    b, F_target = remove_target(zeroed_eqn, target_funcs)
+    return -b, F_target, target_funcs
+
+
+def generate_targets(eq, target):
+    """
+    Extract all the functions that share the same time index as the target,
+    but may have different spatial indices.
+    """
+    funcs = retrieve_functions(eq)
+    if any(dim.is_Time for dim in target.dimensions):
+        time_idx = [
+            i for i, d in zip(target.indices, target.dimensions) if d.is_Time
+        ]
+        targets = [
+            func for func in funcs
+            if func.function is target.function and time_idx[0]
+            in func.indices
+        ]
+    else:
+        targets = [
+            func for func in funcs
+            if func.function is target.function
+        ]
+    return targets
+
+
+def targets_to_arrays(array, targets):
+    space_indices = [
+        tuple(
+            i for i, d in zip(func.indices, func.dimensions) if d.is_Space
+        ) for func in targets
+    ]
+    array_targets = [
+        array.subs(
+            {arr_idx: target_idx for arr_idx, target_idx in zip(array.indices, indices)}
+        )
+        for indices in space_indices
+    ]
+    return {target: array for target, array in zip(targets, array_targets)}
 
 
 @singledispatch
-def remove_target(expr, target):
-    return (0, expr) if expr == target else (expr, 0)
+def remove_target(expr, targets):
+    return (0, expr) if expr in targets else (expr, 0)
 
 
 @remove_target.register(sympy.Add)
-def _(expr, target):
-    if not expr.has(target):
+def _(expr, targets):
+    if not any(expr.has(t) for t in targets):
         return (expr, 0)
 
-    args_b, args_F = zip(*(remove_target(a, target) for a in expr.args))
+    args_b, args_F = zip(*(remove_target(a, targets) for a in expr.args))
     return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
 @remove_target.register(Mul)
-def _(expr, target):
-    if not expr.has(target):
+def _(expr, targets):
+    if not any(expr.has(t) for t in targets):
         return (expr, 0)
 
-    args_b, args_F = zip(*[remove_target(a, target) if a.has(target)
+    args_b, args_F = zip(*[remove_target(a, targets) if any(a.has(t) for t in targets)
                            else (a, a) for a in expr.args])
     return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
 @remove_target.register(Derivative)
-def _(expr, target):
-    return (0, expr) if expr.has(target) else (expr, 0)
+def _(expr, targets):
+    return (0, expr) if any(expr.has(t) for t in targets) else (expr, 0)
 
 
 @singledispatch
