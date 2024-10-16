@@ -369,7 +369,139 @@ def test_separate_eqn(eqn, target, expected):
     f2 = TimeFunction(name='f2', grid=grid, space_order=so)  # noqa
     g2 = TimeFunction(name='g2', grid=grid, space_order=so)  # noqa
 
-    b, F = separate_eqn(eval(eqn), eval(target))
+    b, F, _ = separate_eqn(eval(eqn), eval(target))
+    expected_b, expected_F = expected
+
+    assert str(b) == expected_b
+    assert str(F) == expected_F
+
+
+@skipif('petsc')
+@pytest.mark.parametrize('eqn, target, expected', [
+    ('Eq(f1.laplace, g1).evaluate', 'f1',
+        (
+            'g1(x, y)',
+            '-2.0*f1(x, y)/h_x**2 + f1(x - h_x, y)/h_x**2 + f1(x + h_x, y)/h_x**2 '
+            '- 2.0*f1(x, y)/h_y**2 + f1(x, y - h_y)/h_y**2 + f1(x, y + h_y)/h_y**2'
+        )),
+    ('Eq(g1, f1.laplace).evaluate', 'f1',
+        (
+            '-g1(x, y)',
+            '-(-2.0*f1(x, y)/h_x**2 + f1(x - h_x, y)/h_x**2 + f1(x + h_x, y)/h_x**2) '
+            '- (-2.0*f1(x, y)/h_y**2 + f1(x, y - h_y)/h_y**2 + f1(x, y + h_y)/h_y**2)'
+        )),
+    ('Eq(g1, f1.laplace).evaluate', 'g1',
+        (
+            '-2.0*f1(x, y)/h_x**2 + f1(x - h_x, y)/h_x**2 + f1(x + h_x, y)/h_x**2 '
+            '- 2.0*f1(x, y)/h_y**2 + f1(x, y - h_y)/h_y**2 + f1(x, y + h_y)/h_y**2',
+            'g1(x, y)'
+        )),
+    ('Eq(f1 + f1.laplace, g1).evaluate', 'f1',
+        (
+            'g1(x, y)',
+            '-2.0*f1(x, y)/h_x**2 + f1(x - h_x, y)/h_x**2 + f1(x + h_x, y)/h_x**2 - 2.0'
+            '*f1(x, y)/h_y**2 + f1(x, y - h_y)/h_y**2 + f1(x, y + h_y)/h_y**2 + f1(x, y)'
+        )),
+    ('Eq(g1.dx + f1.dx, g1).evaluate', 'f1',
+        (
+            '-(-g1(x, y)/h_x + g1(x + h_x, y)/h_x) + g1(x, y)',
+            '-f1(x, y)/h_x + f1(x + h_x, y)/h_x'
+        )),
+    ('Eq(g1.dx + f1.dx, g1).evaluate', 'g1',
+        (
+            '-(-f1(x, y)/h_x + f1(x + h_x, y)/h_x)',
+            '-g1(x, y)/h_x + g1(x + h_x, y)/h_x - g1(x, y)'
+        )),
+    ('Eq(f1 * g1.dx, g1).evaluate', 'g1',
+        (
+            '0', '(-g1(x, y)/h_x + g1(x + h_x, y)/h_x)*f1(x, y) - g1(x, y)'
+        )),
+    ('Eq(f1 * g1.dx, g1).evaluate', 'f1',
+        (
+            'g1(x, y)', '(-g1(x, y)/h_x + g1(x + h_x, y)/h_x)*f1(x, y)'
+        )),
+    ('Eq((f1 * g1.dx).dy, f1).evaluate', 'f1',
+        (
+            '0', '(-1/h_y)*(-g1(x, y)/h_x + g1(x + h_x, y)/h_x)*f1(x, y) '
+            '+ (-g1(x, y + h_y)/h_x + g1(x + h_x, y + h_y)/h_x)*f1(x, y + h_y)/h_y '
+            '- f1(x, y)'
+        )),
+    ('Eq((f1 * g1.dx).dy, f1).evaluate', 'g1',
+        (
+            'f1(x, y)', '(-1/h_y)*(-g1(x, y)/h_x + g1(x + h_x, y)/h_x)*f1(x, y) + '
+            '(-g1(x, y + h_y)/h_x + g1(x + h_x, y + h_y)/h_x)*f1(x, y + h_y)/h_y'
+        )),
+    ('Eq(f2.laplace, g2).evaluate', 'g2',
+        (
+            '-(-2.0*f2(t, x, y)/h_x**2 + f2(t, x - h_x, y)/h_x**2 + f2(t, x + h_x, y)'
+            '/h_x**2) - (-2.0*f2(t, x, y)/h_y**2 + f2(t, x, y - h_y)/h_y**2 + '
+            'f2(t, x, y + h_y)/h_y**2)', '-g2(t, x, y)'
+        )),
+    ('Eq(f2.laplace, g2).evaluate', 'f2',
+        (
+            'g2(t, x, y)', '-2.0*f2(t, x, y)/h_x**2 + f2(t, x - h_x, y)/h_x**2 + '
+            'f2(t, x + h_x, y)/h_x**2 - 2.0*f2(t, x, y)/h_y**2 + f2(t, x, y - h_y)'
+            '/h_y**2 + f2(t, x, y + h_y)/h_y**2'
+        )),
+    ('Eq(f2.laplace, f2).evaluate', 'f2',
+        (
+            '0', '-2.0*f2(t, x, y)/h_x**2 + f2(t, x - h_x, y)/h_x**2 + '
+            'f2(t, x + h_x, y)/h_x**2 - 2.0*f2(t, x, y)/h_y**2 + f2(t, x, y - h_y)/h_y**2'
+            ' + f2(t, x, y + h_y)/h_y**2 - f2(t, x, y)'
+        )),
+    ('Eq(g2*f2.laplace, f2).evaluate', 'g2',
+        (
+            'f2(t, x, y)', '(-2.0*f2(t, x, y)/h_x**2 + f2(t, x - h_x, y)/h_x**2 + '
+            'f2(t, x + h_x, y)/h_x**2 - 2.0*f2(t, x, y)/h_y**2 + f2(t, x, y - h_y)/h_y**2'
+            ' + f2(t, x, y + h_y)/h_y**2)*g2(t, x, y)'
+        )),
+    ('Eq(f2.forward.laplace, f2).evaluate', 'f2.forward',
+        (
+            'f2(t, x, y)', '-2.0*f2(t + dt, x, y)/h_x**2 + f2(t + dt, x - h_x, y)/h_x**2'
+            ' + f2(t + dt, x + h_x, y)/h_x**2 - 2.0*f2(t + dt, x, y)/h_y**2 + '
+            'f2(t + dt, x, y - h_y)/h_y**2 + f2(t + dt, x, y + h_y)/h_y**2'
+        )),
+    ('Eq(f2.forward.laplace, f2).evaluate', 'f2',
+        (
+            '-(-2.0*f2(t + dt, x, y)/h_x**2 + f2(t + dt, x - h_x, y)/h_x**2 + '
+            'f2(t + dt, x + h_x, y)/h_x**2) - (-2.0*f2(t + dt, x, y)/h_y**2 + '
+            'f2(t + dt, x, y - h_y)/h_y**2 + f2(t + dt, x, y + h_y)/h_y**2)',
+            '-f2(t, x, y)'
+        )),
+    ('Eq(f2.laplace + f2.forward.laplace, g2).evaluate', 'f2.forward',
+        (
+            '-(-2.0*f2(t, x, y)/h_x**2 + f2(t, x - h_x, y)/h_x**2 + f2(t, x + h_x, y)/'
+            'h_x**2) - (-2.0*f2(t, x, y)/h_y**2 + f2(t, x, y - h_y)/h_y**2 + '
+            'f2(t, x, y + h_y)/h_y**2) + g2(t, x, y)', '-2.0*f2(t + dt, x, y)/h_x**2 + '
+            'f2(t + dt, x - h_x, y)/h_x**2 + f2(t + dt, x + h_x, y)/h_x**2 - 2.0*'
+            'f2(t + dt, x, y)/h_y**2 + f2(t + dt, x, y - h_y)/h_y**2 + '
+            'f2(t + dt, x, y + h_y)/h_y**2'
+        )),
+    ('Eq(g2.laplace, f2 + g2.forward).evaluate', 'g2.forward',
+        (
+            '-(-2.0*g2(t, x, y)/h_x**2 + g2(t, x - h_x, y)/h_x**2 + '
+            'g2(t, x + h_x, y)/h_x**2) - (-2.0*g2(t, x, y)/h_y**2 + g2(t, x, y - h_y)'
+            '/h_y**2 + g2(t, x, y + h_y)/h_y**2) + f2(t, x, y)', '-g2(t + dt, x, y)'
+        ))
+])
+def test_separate_eval_eqn(eqn, target, expected):
+    """
+    Test the separate_eqn function on pre-evaluated equations.
+    This ensures that evaluated equations can be passed to PETScSolve,
+    allowing users to modify stencils for specific boundary conditions,
+    such as implementing free surface boundary conditions.
+    """
+    grid = Grid((2, 2))
+
+    so = 2
+
+    f1 = Function(name='f1', grid=grid, space_order=so)  # noqa
+    g1 = Function(name='g1', grid=grid, space_order=so)  # noqa
+
+    f2 = TimeFunction(name='f2', grid=grid, space_order=so)  # noqa
+    g2 = TimeFunction(name='g2', grid=grid, space_order=so)  # noqa
+
+    b, F, _ = separate_eqn(eval(eqn), eval(target))
     expected_b, expected_F = expected
 
     assert str(b) == expected_b
