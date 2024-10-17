@@ -34,12 +34,9 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     formrhs = []
 
     eqns = as_tuple(eqns)
-    funcs = retrieve_functions(eqns)
-    time_mapper = generate_time_mapper(funcs)
 
     for eq in eqns:
         b, F_target, targets = separate_eqn(eq, target)
-        b, F_target = b.subs(time_mapper), F_target.subs(time_mapper)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
@@ -61,6 +58,11 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
             subdomain=eq.subdomain
         ))
 
+    funcs = retrieve_functions(eqns)
+    time_mapper = generate_time_mapper(funcs)
+    matvecs, formfuncs, formrhs = (
+        [eq.subs(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
+    )
     # Placeholder equation for inserting calls to the solver and generating
     # correct time loop etc
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
