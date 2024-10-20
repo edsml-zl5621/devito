@@ -271,9 +271,9 @@ def assign_time_iters(iet, struct):
 
     mapper = {}
     for iter in time_iters:
-        common_dims = [dim for dim in iter.dimensions if dim in struct.fields]
+        common_dims = [d for d in iter.dimensions if d in struct.fields]
         common_dims = [
-            DummyExpr(FieldFromComposite(dim, struct), dim) for dim in common_dims
+            DummyExpr(FieldFromComposite(d, struct), d) for d in common_dims
         ]
         iter_new = iter._rebuild(nodes=List(body=tuple(common_dims)+iter.nodes))
         mapper.update({iter: iter_new})
@@ -282,15 +282,15 @@ def assign_time_iters(iet, struct):
 
 
 def retrieve_time_dims(iters):
-    time_iter = [i for i in iters if any(dim.is_Time for dim in i.dimensions)]
+    time_iter = [i for i in iters if any(d.is_Time for d in i.dimensions)]
     mapper = {}
     if not time_iter:
         return mapper
-    for dim in time_iter[0].dimensions:
-        if dim.is_Modulo:
-            mapper[dim.origin] = dim
-        elif dim.is_Time:
-            mapper[dim] = dim
+    for d in time_iter[0].dimensions:
+        if d.is_Modulo:
+            mapper[d.origin] = d
+        elif d.is_Time:
+            mapper[d] = d
     return mapper
 
 
