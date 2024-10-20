@@ -4,7 +4,7 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-from devito.types import Eq, Symbol, SteppingDimension
+from devito.types import Eq, Symbol, SteppingDimension, TimeFunction
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
@@ -87,73 +87,79 @@ def separate_eqn(eqn, target):
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
     zeroed_eqn = eval_time_derivatives(zeroed_eqn.lhs)
     target_funcs = set(generate_targets(zeroed_eqn, target))
-    b, F_target = remove_target(zeroed_eqn, target_funcs)
+    b, F_target = remove_targets(zeroed_eqn, target_funcs)
     return -b, F_target, target_funcs
 
 
 def generate_targets(eq, target):
     """
-    Extract all the functions that share the same time index as the target,
+    Extract all the functions that share the same time index as the target
     but may have different spatial indices.
     """
     funcs = retrieve_functions(eq)
-    if any(dim.is_Time for dim in target.dimensions):
-        time_idx = [
-            i for i, d in zip(target.indices, target.dimensions) if d.is_Time
-        ]
+    if isinstance(target, TimeFunction):
+        time_idx = target.indices[target.time_dim]
         targets = [
-            func for func in funcs
-            if func.function is target.function and time_idx[0]
-            in func.indices
+            f for f in funcs if f.function is target.function and time_idx
+            in f.indices
         ]
     else:
-        targets = [
-            func for func in funcs
-            if func.function is target.function
-        ]
+        targets = [f for f in funcs if f.function is target.function]
     return targets
 
 
 def targets_to_arrays(array, targets):
+    """
+    Map each target in `targets` to a corresponding array generated from `array`,
+    matching the spatial indices of the target.
+
+    Example:
+    --------
+    >>> array
+    vec_u(x, y)
+
+    >>> targets
+    {u(t + dt, x + h_x, y), u(t + dt, x - h_x, y), u(t + dt, x, y)}
+
+    >>> targets_to_arrays(array, targets)
+    {u(t + dt, x - h_x, y): vec_u(x - h_x, y),
+     u(t + dt, x + h_x, y): vec_u(x + h_x, y),
+     u(t + dt, x, y): vec_u(x, y)}
+    """
     space_indices = [
-        tuple(
-            i for i, d in zip(func.indices, func.dimensions) if d.is_Space
-        ) for func in targets
+        tuple(f.indices[d] for d in f.space_dimensions) for f in targets
     ]
     array_targets = [
-        array.subs(
-            {arr_idx: target_idx for arr_idx, target_idx in zip(array.indices, indices)}
-        )
-        for indices in space_indices
+        array.subs(dict(zip(array.indices, i))) for i in space_indices
     ]
-    return {target: array for target, array in zip(targets, array_targets)}
+    return dict(zip(targets, array_targets))
 
 
 @singledispatch
-def remove_target(expr, targets):
+def remove_targets(expr, targets):
     return (0, expr) if expr in targets else (expr, 0)
 
 
-@remove_target.register(sympy.Add)
+@remove_targets.register(sympy.Add)
 def _(expr, targets):
     if not any(expr.has(t) for t in targets):
         return (expr, 0)
 
-    args_b, args_F = zip(*(remove_target(a, targets) for a in expr.args))
+    args_b, args_F = zip(*(remove_targets(a, targets) for a in expr.args))
     return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
-@remove_target.register(Mul)
+@remove_targets.register(Mul)
 def _(expr, targets):
     if not any(expr.has(t) for t in targets):
         return (expr, 0)
 
-    args_b, args_F = zip(*[remove_target(a, targets) if any(a.has(t) for t in targets)
+    args_b, args_F = zip(*[remove_targets(a, targets) if any(a.has(t) for t in targets)
                            else (a, a) for a in expr.args])
     return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
-@remove_target.register(Derivative)
+@remove_targets.register(Derivative)
 def _(expr, targets):
     return (0, expr) if any(expr.has(t) for t in targets) else (expr, 0)
 
@@ -219,4 +225,4 @@ def generate_time_mapper(funcs):
         if d.is_Time
     })
     tau_symbs = [Symbol('tau%d' % i) for i in range(len(time_indices))]
-    return {time: tau for time, tau in zip(time_indices, tau_symbs)}
+    return dict(zip(time_indices, tau_symbs))
