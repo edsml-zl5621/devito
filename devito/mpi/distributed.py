@@ -259,10 +259,8 @@ class Distributor(AbstractDistributor):
             self._topology = tuple(1 for _ in range(len(shape)))
 
         # The domain decomposition
-        self._decomposition = [
-            Decomposition(np.array_split(np.arange(i, dtype=d.dtype), j), c)
-            for i, j, c, d in zip(shape, self.topology, self.mycoords, dimensions)
-        ]
+        self._decomposition = [Decomposition(np.array_split(range(i), j), c)
+                               for i, j, c in zip(shape, self.topology, self.mycoords)]
 
     @property
     def comm(self):
