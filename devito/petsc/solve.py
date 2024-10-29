@@ -9,14 +9,17 @@ from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
 from devito.tools import as_tuple
-from devito.petsc.types import LinearSolveExpr, PETScArray
+from devito.petsc.types import LinearSolveExpr, PETScArray, DM
 
 
 __all__ = ['PETScSolve']
 
 
 def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
+
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
+
+    dmda = DM(name='da_%s' % target.name, liveness='eager', stencil_width=target.space_order)
 
     arrays = {
         p: PETScArray(name='%s_%s' % (p, target.name),
@@ -25,7 +28,8 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
                            shape=target.grid.shape,
                            liveness='eager',
                            halo=[target.halo[d] for d in target.space_dimensions],
-                           space_order=target.space_order)
+                           space_order=target.space_order,
+                           dmda=dmda)
         for p in prefixes
     }
 
@@ -74,6 +78,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         formrhs=formrhs,
         arrays=arrays,
         time_mapper=time_mapper,
+        dmda=dmda
     ), subdomain=eq.subdomain)
 
     return [inject_solve]

@@ -30,7 +30,7 @@ class PETScArray(ArrayBasic, Differentiable):
 
     __rkwargs__ = (AbstractFunction.__rkwargs__ +
                    ('dimensions', 'shape', 'liveness', 'coefficients',
-                    'space_order'))
+                    'space_order', 'dmda'))
 
     def __init_finalize__(self, *args, **kwargs):
 
@@ -43,6 +43,7 @@ class PETScArray(ArrayBasic, Differentiable):
                              " not %s" % (str(fd_weights_registry), self._coefficients))
         self._shape = kwargs.get('shape')
         self._space_order = kwargs.get('space_order', 1)
+        self._dmda = kwargs.get('dmda')
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
@@ -113,5 +114,4 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @cached_property
     def dmda(self):
-        name = 'da_so_%s' % self.space_order
-        return DM(name=name, liveness='eager', stencil_width=self.space_order)
+        return self._dmda

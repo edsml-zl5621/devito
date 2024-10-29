@@ -86,7 +86,8 @@ class PETScCallbackBuilder:
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
+        # dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
+        dmda = linsolveexpr.dmda
 
         body = uxreplace_time(body, solver_objs)
 
@@ -213,7 +214,8 @@ class PETScCallbackBuilder:
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
+        # dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
+        dmda = linsolveexpr.dmda
 
         body = uxreplace_time(body, solver_objs)
 
@@ -331,7 +333,8 @@ class PETScCallbackBuilder:
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
+        # dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
+        dmda = linsolveexpr.dmda
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
@@ -390,7 +393,8 @@ class PETScCallbackBuilder:
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
         target = injectsolve.expr.rhs.target
 
-        dmda = objs['da_so_%s' % target.space_order]
+        # dmda = objs['da_so_%s' % target.space_order]
+        dmda = injectsolve.expr.rhs.dmda
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
 
@@ -436,17 +440,19 @@ class PETScCallbackBuilder:
             BlankLine,
         )
 
-    def make_main_struct(self, unique_dmdas, objs):
+    def make_main_struct(self, objs):
         struct_main = petsc_struct('ctx', filter_ordered(self.struct_params))
         struct_callback = self.generate_struct_callback(struct_main, objs)
-        call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
+        call_struct_callback = [petsc_call(struct_callback.name, [Byref(struct_main)])]
         calls_set_app_ctx = [
             petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
-            for i in unique_dmdas
+            for i in objs['dmdas']
         ]
-        calls = [call_struct_callback] + calls_set_app_ctx
-
+        # calls = [call_struct_callback]
+        calls = call_struct_callback + calls_set_app_ctx
+        # from IPython import embed; embed()
         self._efuncs[struct_callback.name] = struct_callback
+        # from IPython import embed; embed()
         return struct_main, calls
 
     def generate_struct_callback(self, struct, objs):

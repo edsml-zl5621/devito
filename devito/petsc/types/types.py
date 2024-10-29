@@ -7,7 +7,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
 
     __rargs__ = ('expr',)
     __rkwargs__ = ('target', 'solver_parameters', 'matvecs',
-                   'formfuncs', 'formrhs', 'arrays', 'time_mapper')
+                   'formfuncs', 'formrhs', 'arrays', 'time_mapper',
+                   'dmda')
 
     defaults = {
         'ksp_type': 'gmres',
@@ -20,7 +21,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
 
     def __new__(cls, expr, target=None, solver_parameters=None,
                 matvecs=None, formfuncs=None, formrhs=None,
-                arrays=None, time_mapper=None, **kwargs):
+                arrays=None, time_mapper=None, dmda=None, **kwargs):
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -39,6 +40,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         obj._formrhs = formrhs
         obj._arrays = arrays
         obj._time_mapper = time_mapper
+        obj._dmda = dmda
         return obj
 
     def __repr__(self):
@@ -88,6 +90,10 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     @property
     def time_mapper(self):
         return self._time_mapper
+
+    @property
+    def dmda(self):
+        return self._dmda
 
     @classmethod
     def eval(cls, *args):

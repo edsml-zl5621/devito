@@ -35,12 +35,6 @@ def lower_petsc(iet, **kwargs):
     setup = []
     subs = {}
 
-    # Create a different DMDA for each target with a unique space order
-    unique_dmdas = create_dmda_objs(targets)
-    objs.update(unique_dmdas)
-    for dmda in unique_dmdas.values():
-        setup.extend(create_dmda_calls(dmda, objs))
-
     builder = PETScCallbackBuilder(**kwargs)
 
     for iters, (injectsolve,) in injectsolve_mapper.items():
@@ -57,9 +51,10 @@ def lower_petsc(iet, **kwargs):
         # Only Transform the spatial iteration loop
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
+        objs['dmdas'].append(injectsolve.expr.rhs.dmda)
 
     # Generate callback to populate main struct object
-    struct, struct_calls = builder.make_main_struct(unique_dmdas, objs)
+    struct, struct_calls = builder.make_main_struct(objs)
     setup.extend(struct_calls)
 
     iet = Transformer(subs).visit(iet)
@@ -106,7 +101,8 @@ def build_core_objects(target, **kwargs):
         'size': PetscMPIInt(name='size'),
         'comm': communicator,
         'err': PetscErrorCode(name='err'),
-        'grid': target.grid
+        'grid': target.grid,
+        'dmdas': []
     }
 
 
@@ -123,8 +119,8 @@ def create_dmda_calls(dmda, objs):
     dmda_create = create_dmda(dmda, objs)
     dm_setup = petsc_call('DMSetUp', [dmda])
     dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
-    dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
-    return dmda_create, dm_setup, dm_mat_type, dm_get_local_info, BlankLine
+    # dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
+    return dmda_create, dm_setup, dm_mat_type, BlankLine
 
 
 def create_dmda(dmda, objs):
@@ -189,9 +185,16 @@ def build_solver_objs(injectsolve, iters, **kwargs):
 def generate_solver_setup(solver_objs, objs, injectsolve):
     target = solver_objs['target']
 
-    dmda = objs['da_so_%s' % target.space_order]
+    # dmda = objs['da_so_%s' % target.space_order]
+    dmda = injectsolve.expr.rhs.dmda
 
     solver_params = injectsolve.expr.rhs.solver_parameters
+
+    dmda_create = create_dmda(dmda, objs)
+
+    dm_setup = petsc_call('DMSetUp', [dmda])
+
+    dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
 
     snes_create = petsc_call('SNESCreate', [objs['comm'], Byref(solver_objs['snes'])])
 
@@ -237,6 +240,9 @@ def generate_solver_setup(solver_objs, objs, injectsolve):
     ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
     return (
+        dmda_create,
+        dm_setup,
+        dm_mat_type,
         snes_create,
         snes_set_dm,
         create_matrix,
