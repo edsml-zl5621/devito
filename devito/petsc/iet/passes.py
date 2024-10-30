@@ -5,7 +5,7 @@ from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
                            DummyExpr, FindNodes, retrieve_iteration_tree,
                            filter_iterations)
 from devito.symbolics import Byref, Macro, FieldFromComposite
-from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
+from devito.petsc.types import (PetscMPIInt, Mat, CallbackDM, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
                                 StartPtr)
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
@@ -106,13 +106,13 @@ def build_core_objects(target, **kwargs):
     }
 
 
-def create_dmda_objs(unique_targets):
-    unique_dmdas = {}
-    for target in unique_targets:
-        name = 'da_so_%s' % target.space_order
-        unique_dmdas[name] = DM(name=name, liveness='eager',
-                                stencil_width=target.space_order)
-    return unique_dmdas
+# def create_dmda_objs(unique_targets):
+#     unique_dmdas = {}
+#     for target in unique_targets:
+#         name = 'da_so_%s' % target.space_order
+#         unique_dmdas[name] = DM(name=name, liveness='eager',
+#                                 stencil_width=target.space_order)
+#     return unique_dmdas
 
 
 def create_dmda_calls(dmda, objs):
@@ -158,7 +158,7 @@ def create_dmda(dmda, objs):
 
 
 def build_solver_objs(injectsolve, iters, **kwargs):
-    target = injectsolve.expr.rhs.target
+    rhs = injectsolve.expr.rhs
     sreg = kwargs['sregistry']
     return {
         'Jac': Mat(sreg.make_name(prefix='J_')),
@@ -175,17 +175,15 @@ def build_solver_objs(injectsolve, iters, **kwargs):
         'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
         'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
         'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
-        'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
+        'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), rhs.target.dtype),
         'true_dims': retrieve_time_dims(iters),
-        'target': target,
-        'time_mapper': injectsolve.expr.rhs.time_mapper,
+        'target': rhs.target,
+        'time_mapper': rhs.time_mapper,
+        'CallbackDM': CallbackDM(rhs.dmda.name, stencil_width=rhs.dmda.stencil_width),
     }
 
 
 def generate_solver_setup(solver_objs, objs, injectsolve):
-    target = solver_objs['target']
-
-    # dmda = objs['da_so_%s' % target.space_order]
     dmda = injectsolve.expr.rhs.dmda
 
     solver_params = injectsolve.expr.rhs.solver_parameters

@@ -7,7 +7,7 @@ from devito.symbolics import Byref
 from devito.petsc.iet.utils import petsc_call
 
 
-class DM(LocalObject):
+class BasicDM(LocalObject):
     """
     PETSc Data Management object (DM).
     """
@@ -27,11 +27,25 @@ class DM(LocalObject):
 
     @property
     def _C_free(self):
+        return
+
+    @property
+    def _C_free_priority(self):
+        return
+
+
+class DM(BasicDM):
+    @property
+    def _C_free(self):
         return petsc_call('DMDestroy', [Byref(self.function)])
 
     @property
     def _C_free_priority(self):
-        return 3
+        return 2
+
+
+class CallbackDM(BasicDM):
+    pass
 
 
 class Mat(LocalObject):
@@ -107,7 +121,7 @@ class SNES(LocalObject):
 
     @property
     def _C_free_priority(self):
-        return 2
+        return 3
 
 
 class PC(LocalObject):

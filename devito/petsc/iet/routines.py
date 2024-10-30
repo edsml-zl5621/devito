@@ -3,7 +3,7 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           Dereference, DummyExpr, BlankLine, Callable)
+                           Dereference, DummyExpr, Callable)
 from devito.symbolics import Byref, FieldFromPointer, Macro, cast_mapper
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
@@ -86,8 +86,7 @@ class PETScCallbackBuilder:
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        # dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
-        dmda = linsolveexpr.dmda
+        dmda = solver_objs['CallbackDM']
 
         body = uxreplace_time(body, solver_objs)
 
@@ -214,8 +213,7 @@ class PETScCallbackBuilder:
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        # dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
-        dmda = linsolveexpr.dmda
+        dmda = solver_objs['CallbackDM']
 
         body = uxreplace_time(body, solver_objs)
 
@@ -333,8 +331,7 @@ class PETScCallbackBuilder:
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        # dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
-        dmda = linsolveexpr.dmda
+        dmda = solver_objs['CallbackDM']
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
@@ -393,7 +390,6 @@ class PETScCallbackBuilder:
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
         target = injectsolve.expr.rhs.target
 
-        # dmda = objs['da_so_%s' % target.space_order]
         dmda = injectsolve.expr.rhs.dmda
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
@@ -436,8 +432,7 @@ class PETScCallbackBuilder:
             dm_local_to_global_x,
             dm_local_to_global_b,
             snes_solve,
-            dm_global_to_local_x,
-            BlankLine,
+            dm_global_to_local_x
         )
 
     def make_main_struct(self, objs):

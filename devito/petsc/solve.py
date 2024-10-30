@@ -19,7 +19,9 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
 
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
-    dmda = DM(name='da_%s' % target.name, liveness='eager', stencil_width=target.space_order)
+    dmda = DM(
+        name='da_%s' % target.name, liveness='eager', stencil_width=target.space_order
+    )
 
     arrays = {
         p: PETScArray(name='%s_%s' % (p, target.name),
