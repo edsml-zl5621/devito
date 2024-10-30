@@ -68,7 +68,7 @@ class PETScCallbackBuilder:
 
     def make_matvec(self, injectsolve, objs, solver_objs):
         # Compile matvec `eqns` into an IET via recursive compilation
-        irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
+        irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.fielddata.matvecs,
                                       options={'mpi': False}, sregistry=SymbolRegistry())
         body_matvec = self.create_matvec_body(injectsolve,
                                               List(body=irs_matvec.uiet.body),
@@ -84,7 +84,7 @@ class PETScCallbackBuilder:
         return matvec_callback
 
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
-        linsolveexpr = injectsolve.expr.rhs
+        linsolveexpr = injectsolve.expr.rhs.fielddata
 
         dmda = solver_objs['CallbackDM']
 
@@ -195,7 +195,7 @@ class PETScCallbackBuilder:
     def make_formfunc(self, injectsolve, objs, solver_objs):
         # Compile formfunc `eqns` into an IET via recursive compilation
         irs_formfunc, _ = self.rcompile(
-            injectsolve.expr.rhs.formfuncs,
+            injectsolve.expr.rhs.fielddata.formfuncs,
             options={'mpi': False}, sregistry=SymbolRegistry()
         )
         body_formfunc = self.create_formfunc_body(injectsolve,
@@ -211,7 +211,7 @@ class PETScCallbackBuilder:
         return formfunc_callback
 
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
-        linsolveexpr = injectsolve.expr.rhs
+        linsolveexpr = injectsolve.expr.rhs.fielddata
 
         dmda = solver_objs['CallbackDM']
 
@@ -313,7 +313,7 @@ class PETScCallbackBuilder:
 
     def make_formrhs(self, injectsolve, objs, solver_objs):
         # Compile formrhs `eqns` into an IET via recursive compilation
-        irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
+        irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.fielddata.formrhs,
                                        options={'mpi': False}, sregistry=SymbolRegistry())
         body_formrhs = self.create_formrhs_body(injectsolve,
                                                 List(body=irs_formrhs.uiet.body),
@@ -329,7 +329,7 @@ class PETScCallbackBuilder:
         return formrhs_callback
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
-        linsolveexpr = injectsolve.expr.rhs
+        linsolveexpr = injectsolve.expr.rhs.fielddata
 
         dmda = solver_objs['CallbackDM']
 
@@ -388,9 +388,9 @@ class PETScCallbackBuilder:
         return formrhs_body
 
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
-        target = injectsolve.expr.rhs.target
+        target = injectsolve.expr.rhs.fielddata.target
 
-        dmda = injectsolve.expr.rhs.dmda
+        dmda = injectsolve.expr.rhs.fielddata.dmda
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
 
@@ -443,11 +443,8 @@ class PETScCallbackBuilder:
             petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
             for i in objs['dmdas']
         ]
-        # calls = [call_struct_callback]
         calls = call_struct_callback + calls_set_app_ctx
-        # from IPython import embed; embed()
         self._efuncs[struct_callback.name] = struct_callback
-        # from IPython import embed; embed()
         return struct_main, calls
 
     def generate_struct_callback(self, struct, objs):
@@ -477,7 +474,7 @@ def build_local_struct(iet, name, liveness):
 
 
 def time_dep_replace(injectsolve, solver_objs, objs, sregistry):
-    target = injectsolve.expr.lhs
+    target = injectsolve.expr.rhs.fielddata.target
     target_time = [
         i for i, d in zip(target.indices, target.dimensions) if d.is_Time
     ]

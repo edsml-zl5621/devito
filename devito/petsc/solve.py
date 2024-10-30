@@ -4,21 +4,61 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
+<<<<<<< HEAD
 from devito.types import Eq, Symbol, SteppingDimension, TimeFunction
+=======
+from devito.types import Eq, Symbol, SteppingDimension, Function
+>>>>>>> 8e0f7c5d5 (dsl: Add FieldDataNest for coupled problems)
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
 from devito.tools import as_tuple
-from devito.petsc.types import LinearSolveExpr, PETScArray, DM
+from devito.petsc.types import (LinearSolver, PETScArray, DM,
+                                FieldData, FieldDataNest)
 
 
 __all__ = ['PETScSolve']
 
 
-def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
+def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
+    injectsolves = []
+    if target is not None:
+        eqns_targets = {target: eqns_targets}
+    
+    if len(eqns_targets.keys()) == 1:
+        for target, eqns in eqns_targets.items():
+            expr, field_data = generate_field_solve(eqns, target)
+            # Placeholder equation for inserting calls to the solver and generating
+            # correct time loop etc.
+            inject_solve = InjectSolveEq(
+                target,
+                LinearSolver(expr, solver_parameters,
+                fielddata=field_data)
+            )
+            injectsolves.append(inject_solve)
+        return injectsolves
+    else:
+        exprs = []
+        nest = FieldDataNest()
+        for target, eqns in eqns_targets.items():
+            expr, field_data = generate_field_solve(eqns, target)
+            exprs.extend(expr)
+            nest.add_field_data(field_data)
 
+        # Doesn't actually matter which target we place on the lhs here
+        inject_solve = InjectSolveEq(
+            target,
+            LinearSolver(tuple(exprs),
+            solver_parameters, fielddata=nest)
+        )
+        injectsolves.append(inject_solve)
+        return injectsolves
+
+
+def generate_field_solve(eqns, target):
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
+    # field DMDA
     dmda = DM(
         name='da_%s' % target.name, liveness='eager', stencil_width=target.space_order
     )
@@ -64,26 +104,15 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
             subdomain=eq.subdomain
         ))
 
-    funcs = retrieve_functions(eqns)
-    time_mapper = generate_time_mapper(funcs)
-    matvecs, formfuncs, formrhs = (
-        [eq.subs(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
-    )
-    # Placeholder equation for inserting calls to the solver and generating
-    # correct time loop etc
-    inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        expr=tuple(funcs),
-        target=target,
-        solver_parameters=solver_parameters,
-        matvecs=matvecs,
-        formfuncs=formfuncs,
-        formrhs=formrhs,
-        arrays=arrays,
-        time_mapper=time_mapper,
-        dmda=dmda
-    ), subdomain=eq.subdomain)
-
-    return [inject_solve]
+        return tuple(set(funcs)), FieldData(
+            target=target,
+            matvecs=matvecs,
+            formfuncs=formfuncs,
+            formrhs=formrhs,
+            arrays=arrays,
+            time_mapper=time_mapper,
+            dmda=dmda
+        )
 
 
 def separate_eqn(eqn, target):
@@ -220,7 +249,7 @@ def generate_time_mapper(funcs):
     level to align with the `TimeDimension` and `ModuloDimension` objects
     present in the inital lowering.
     NOTE: All functions used in PETSc callback functions are attached to
-    the `LinearSolveExpr` object, which is passed through the initial lowering
+    the `LinearSolver` object, which is passed through the initial lowering
     (and subsequently dropped and replaced with calls to run the solver).
     Therefore, the appropriate time loop will always be correctly generated inside
     the main kernel.

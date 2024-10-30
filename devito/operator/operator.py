@@ -375,7 +375,7 @@ class Operator(Callable):
         """
         # Build a sequence of Clusters from a sequence of Eqs
         clusters = clusterize(expressions, **kwargs)
-
+        # from IPython import embed; embed()
         # Preprocess clusters for PETSc lowering
         clusters = petsc_preprocess(clusters)
 
@@ -400,7 +400,7 @@ class Operator(Callable):
         # Make sure no reconstructions can unpick any of the symbolic
         # optimizations performed so far
         clusters = unevaluate(clusters)
-
+        # from IPython import embed; embed()
         return ClusterGroup(clusters)
 
     # Compilation -- ScheduleTree level

@@ -23,7 +23,7 @@ def lower_petsc(iet, **kwargs):
     if not injectsolve_mapper:
         return iet, {}
 
-    targets = [i.expr.rhs.target for (i,) in injectsolve_mapper.values()]
+    targets = [i.expr.lhs.function for (i,) in injectsolve_mapper.values()]
     init = init_petsc(**kwargs)
 
     # Assumption is that all targets have the same grid so can use any target here
@@ -36,8 +36,14 @@ def lower_petsc(iet, **kwargs):
     subs = {}
 
     builder = PETScCallbackBuilder(**kwargs)
-
+    # from IPython import embed; embed()
     for iters, (injectsolve,) in injectsolve_mapper.items():
+
+        #TODO: THIS IS WHERE WE CHECK IF FIELD_DATA IS NEST OR NOT
+        #TODO: INSTEAD OF GRABBING THE LHS OF INJECTSOLVEDUMMY FOR THE VECCREPLACEARRAY,
+        # YOU WILL HAVE TO SEARCH THE RHS .expr FOR THE INDEXIFIED target and use that instead 
+        # potentially when you build the solver_objs you can crwate one called target and search the exprs for the one
+        # that matches the target attached to the field data ......
         solver_objs = build_solver_objs(injectsolve, iters, **kwargs)
 
         # Generate the solver setup for each InjectSolveDummy
@@ -51,7 +57,7 @@ def lower_petsc(iet, **kwargs):
         # Only Transform the spatial iteration loop
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
-        objs['dmdas'].append(injectsolve.expr.rhs.dmda)
+        objs['dmdas'].append(injectsolve.expr.rhs.fielddata.dmda)
 
     # Generate callback to populate main struct object
     struct, struct_calls = builder.make_main_struct(objs)
@@ -106,23 +112,6 @@ def build_core_objects(target, **kwargs):
     }
 
 
-# def create_dmda_objs(unique_targets):
-#     unique_dmdas = {}
-#     for target in unique_targets:
-#         name = 'da_so_%s' % target.space_order
-#         unique_dmdas[name] = DM(name=name, liveness='eager',
-#                                 stencil_width=target.space_order)
-#     return unique_dmdas
-
-
-def create_dmda_calls(dmda, objs):
-    dmda_create = create_dmda(dmda, objs)
-    dm_setup = petsc_call('DMSetUp', [dmda])
-    dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
-    # dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
-    return dmda_create, dm_setup, dm_mat_type, BlankLine
-
-
 def create_dmda(dmda, objs):
     no_of_space_dims = len(objs['grid'].dimensions)
 
@@ -158,7 +147,7 @@ def create_dmda(dmda, objs):
 
 
 def build_solver_objs(injectsolve, iters, **kwargs):
-    rhs = injectsolve.expr.rhs
+    rhs = injectsolve.expr.rhs.fielddata
     sreg = kwargs['sregistry']
     return {
         'Jac': Mat(sreg.make_name(prefix='J_')),
@@ -184,7 +173,7 @@ def build_solver_objs(injectsolve, iters, **kwargs):
 
 
 def generate_solver_setup(solver_objs, objs, injectsolve):
-    dmda = injectsolve.expr.rhs.dmda
+    dmda = injectsolve.expr.rhs.fielddata.dmda
 
     solver_params = injectsolve.expr.rhs.solver_parameters
 
