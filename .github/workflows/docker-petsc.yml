@@ -85,7 +85,7 @@ jobs:
           context: .
           file: ./docker/Dockerfile.devito
           push: true
-          tags: petsc-dev
+          tags: 'zoeleibowitz/petsc-dev'
           build-args: base=zoeleibowitz/bases:cpu-gcc
 
       - name: Remove dangling layers
