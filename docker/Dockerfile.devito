@@ -3,7 +3,7 @@
 ##############################################################
 
 # Base image with compilers
-ARG base=devitocodes/bases:cpu-gcc
+ARG base=zoeleibowitz/bases:cpu-gcc
 ARG petscinstall=""
 
 FROM $base as copybase
