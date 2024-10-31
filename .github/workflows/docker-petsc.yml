@@ -93,4 +93,4 @@ jobs:
 
       - name: Run tests
         run: |
-         docker run ${{ matrix.flag }} --rm -t --name testrun 'devitocodes/devito:petsc-dev' pytest ${{ matrix.test }}
+         docker run ${{ matrix.flag }} --rm -t --name testrun 'zoeleibowitz/petsc-dev' pytest tests/test_operator.py
