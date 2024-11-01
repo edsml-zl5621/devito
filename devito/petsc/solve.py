@@ -14,7 +14,7 @@ from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
 from devito.tools import as_tuple
 from devito.petsc.types import (LinearSolver, PETScArray, DM,
-                                FieldData, FieldDataNest)
+                                FieldData, FieldDataNest, DMComposite)
 
 
 __all__ = ['PETScSolve']
@@ -24,7 +24,8 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
     injectsolves = []
     if target is not None:
         eqns_targets = {target: eqns_targets}
-    
+
+    # TODO: If target is a vector, also default to MATNEST (same as FD)
     if len(eqns_targets.keys()) == 1:
         for target, eqns in eqns_targets.items():
             expr, field_data = generate_field_solve(eqns, target)
@@ -33,23 +34,33 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
             inject_solve = InjectSolveEq(
                 target,
                 LinearSolver(expr, solver_parameters,
-                fielddata=field_data)
+                fielddata=field_data,
+                parent_dm=field_data.dmda)
             )
             injectsolves.append(inject_solve)
         return injectsolves
+    # NEST
     else:
         exprs = []
         nest = FieldDataNest()
+        children_dms = []
+        targets = []
+        # from IPython import embed; embed()
         for target, eqns in eqns_targets.items():
             expr, field_data = generate_field_solve(eqns, target)
             exprs.extend(expr)
             nest.add_field_data(field_data)
+            children_dms.append(field_data.dmda)
+            targets.append(target)
+
+        # TOOD: obviously improve this
+        parent_dm = DMComposite(name='da_%s%s' % (targets[0].name, targets[1].name), targets=targets)
 
         # Doesn't actually matter which target we place on the lhs here
         inject_solve = InjectSolveEq(
             target,
             LinearSolver(tuple(exprs),
-            solver_parameters, fielddata=nest)
+            solver_parameters, fielddata=nest, parent_dm=parent_dm, children_dms=children_dms)
         )
         injectsolves.append(inject_solve)
         return injectsolves

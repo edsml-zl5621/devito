@@ -44,6 +44,16 @@ class DM(BasicDM):
         return 2
 
 
+class DMComposite(DM):
+    def __init__(self, *args, targets=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._targets = targets
+    
+    @property
+    def targets(self):
+        return self._targets
+
+
 class CallbackDM(BasicDM):
     pass
 

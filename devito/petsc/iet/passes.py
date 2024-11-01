@@ -7,7 +7,7 @@ from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
 from devito.symbolics import Byref, Macro, FieldFromComposite
 from devito.petsc.types import (PetscMPIInt, Mat, CallbackDM, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
-                                StartPtr)
+                                StartPtr, FieldDataNest, DMComposite)
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
@@ -42,22 +42,28 @@ def lower_petsc(iet, **kwargs):
         #TODO: THIS IS WHERE WE CHECK IF FIELD_DATA IS NEST OR NOT
         #TODO: INSTEAD OF GRABBING THE LHS OF INJECTSOLVEDUMMY FOR THE VECCREPLACEARRAY,
         # YOU WILL HAVE TO SEARCH THE RHS .expr FOR THE INDEXIFIED target and use that instead 
-        # potentially when you build the solver_objs you can crwate one called target and search the exprs for the one
+        # potentially when you build the solver_objs you can create one called target and search the exprs for the one
         # that matches the target attached to the field data ......
-        solver_objs = build_solver_objs(injectsolve, iters, **kwargs)
+        linsolve = injectsolve.expr.rhs
+        # data = injectsolve.expr.rhs.fielddata
+        solver_objs = build_solver_objs(linsolve.fielddata, iters, **kwargs)
 
-        # Generate the solver setup for each InjectSolveDummy
-        solver_setup = generate_solver_setup(solver_objs, objs, injectsolve)
+        # Setup DMs
+        # from IPython import embed; embed()
+        dm_setup = generate_dm_setup(objs, linsolve)
+        setup.extend(dm_setup)
+        # Setup solver
+        solver_setup = generate_solver_setup(solver_objs, objs, linsolve)
         setup.extend(solver_setup)
 
-        # Generate all PETSc callback functions for the target via recursive compilation
-        matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
+        # # Generate all PETSc callback functions for the target via recursive compilation
+        matvec_op, formfunc_op, runsolve = builder.make(linsolve,
                                                         objs, solver_objs)
         setup.extend([matvec_op, formfunc_op, BlankLine])
-        # Only Transform the spatial iteration loop
+        # # Only Transform the spatial iteration loop
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
-        objs['dmdas'].append(injectsolve.expr.rhs.fielddata.dmda)
+        objs['dmdas'].append(linsolve.parent_dm)
 
     # Generate callback to populate main struct object
     struct, struct_calls = builder.make_main_struct(objs)
@@ -146,65 +152,146 @@ def create_dmda(dmda, objs):
     return dmda
 
 
-def build_solver_objs(injectsolve, iters, **kwargs):
-    rhs = injectsolve.expr.rhs.fielddata
+# def build_solver_objs(injectsolve, iters, **kwargs):
+#     from IPython import embed; embed()
+#     # solver_objs = {}
+#     field_objs = {}
+
+#     solver_objs = 
+#     data = injectsolve.expr.rhs.fielddata
+#     if instance(data, FieldDataNest):
+
+
+
+#     sreg = kwargs['sregistry']
+#     return {
+#         'Jac': Mat(sreg.make_name(prefix='J_')),
+#         'x_global': GlobalVec(sreg.make_name(prefix='x_global_')),
+#         'x_local': LocalVec(sreg.make_name(prefix='x_local_'), liveness='eager'),
+#         'b_global': GlobalVec(sreg.make_name(prefix='b_global_')),
+#         'b_local': LocalVec(sreg.make_name(prefix='b_local_')),
+#         'ksp': KSP(sreg.make_name(prefix='ksp_')),
+#         'pc': PC(sreg.make_name(prefix='pc_')),
+#         'snes': SNES(sreg.make_name(prefix='snes_')),
+#         'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
+#         'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
+#         'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
+#         'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
+#         'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
+#         'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
+#         'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), rhs.target.dtype),
+#         'true_dims': retrieve_time_dims(iters),
+#         'target': rhs.target,
+#         'time_mapper': rhs.time_mapper,
+#         'CallbackDM': CallbackDM(rhs.dmda.name, stencil_width=rhs.dmda.stencil_width),
+#     }
+
+
+def build_solver_objs(data, iters, **kwargs):
     sreg = kwargs['sregistry']
-    return {
+
+    solver_objs = {
         'Jac': Mat(sreg.make_name(prefix='J_')),
-        'x_global': GlobalVec(sreg.make_name(prefix='x_global_')),
-        'x_local': LocalVec(sreg.make_name(prefix='x_local_'), liveness='eager'),
-        'b_global': GlobalVec(sreg.make_name(prefix='b_global_')),
-        'b_local': LocalVec(sreg.make_name(prefix='b_local_')),
         'ksp': KSP(sreg.make_name(prefix='ksp_')),
         'pc': PC(sreg.make_name(prefix='pc_')),
         'snes': SNES(sreg.make_name(prefix='snes_')),
-        'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
-        'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
-        'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
-        'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
         'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
         'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
-        'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), rhs.target.dtype),
         'true_dims': retrieve_time_dims(iters),
-        'target': rhs.target,
-        'time_mapper': rhs.time_mapper,
-        'CallbackDM': CallbackDM(rhs.dmda.name, stencil_width=rhs.dmda.stencil_width),
+        'x_global': GlobalVec(sreg.make_name(prefix='x_global_')),
+        'b_global': GlobalVec(sreg.make_name(prefix='b_global_')),
+        'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
+        'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
+        'time_mapper': data.time_mapper
+    }
+
+    # data = injectsolve.expr.rhs.fielddata
+    func = build_objs_nest if isinstance(data, FieldDataNest) else build_field_objs
+    solver_objs.update(func(data, sreg))
+    # from IPython import embed; embed()
+    return solver_objs
+
+
+def build_field_objs(fielddata, sreg):
+    target = fielddata.target
+    name = target.name
+    return {
+        'x_local_%s' % name: LocalVec(sreg.make_name(prefix='x_local_'), liveness='eager'),
+        'b_local_%s' % name: LocalVec(sreg.make_name(prefix='b_local_')),
+        'X_local_%s' %name: LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
+        'Y_local_%s' %name: LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
+        'start_ptr_%s' % name: StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
+        # 'da_%s' % name: fielddata.dmda
     }
 
 
-def generate_solver_setup(solver_objs, objs, injectsolve):
-    dmda = injectsolve.expr.rhs.fielddata.dmda
 
-    solver_params = injectsolve.expr.rhs.solver_parameters
+def build_objs_nest(fielddata, sreg):
+    objs = {}
+    for field_data in fielddata.field_data_list:
+        objs.update(build_field_objs(field_data, sreg))
+    nest_objs = {
+        'DMComposite': DMComposite(sreg.make_name(prefix='pack_'), targets=fielddata.targets),
+    }
+    objs.update(nest_objs)
+    return objs
 
-    dmda_create = create_dmda(dmda, objs)
 
-    dm_setup = petsc_call('DMSetUp', [dmda])
+def generate_dm_setup(objs, linsolve):
+    params = linsolve.solver_parameters
+    parent_dm = linsolve.parent_dm
+    children_dms = linsolve.children_dms
+    calls = []
 
-    dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
+    for dm in children_dms:
+        calls.append(create_dmda(dm, objs))
+        calls.append(petsc_call('DMSetUp', [dm]))
+        calls.append(petsc_call('DMSetMatType', [dm, 'MATSHELL']))
+        calls.append(BlankLine)
+
+    if isinstance(parent_dm, DMComposite):
+        calls.append(petsc_call('DMCompositeCreate', [objs['comm'], Byref(parent_dm)]))
+        calls.extend([petsc_call('DMCompositeAddDMs', [parent_dm, child]) for child in children_dms])
+        calls.append(petsc_call('DMSetMatType', [parent_dm, 'MATNEST']))
+        calls.append(BlankLine)
+
+    return tuple(calls)
+
+
+def generate_solver_setup(solver_objs, objs, linsolve):
+    dm = linsolve.parent_dm
+    solver_params = linsolve.solver_parameters
 
     snes_create = petsc_call('SNESCreate', [objs['comm'], Byref(solver_objs['snes'])])
 
-    snes_set_dm = petsc_call('SNESSetDM', [solver_objs['snes'], dmda])
+    snes_set_dm = petsc_call('SNESSetDM', [solver_objs['snes'], dm])
 
-    create_matrix = petsc_call('DMCreateMatrix', [dmda, Byref(solver_objs['Jac'])])
+    create_matrix = petsc_call('DMCreateMatrix', [dm, Byref(solver_objs['Jac'])])
 
     # NOTE: Assumming all solves are linear for now.
     snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
-
+    
+    # TOOD: move this to builder -> makes more sense 
     snes_set_jac = petsc_call(
         'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
                             solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
     )
 
     global_x = petsc_call('DMCreateGlobalVector',
-                          [dmda, Byref(solver_objs['x_global'])])
+                          [dm, Byref(solver_objs['x_global'])])
 
     global_b = petsc_call('DMCreateGlobalVector',
-                          [dmda, Byref(solver_objs['b_global'])])
+                          [dm, Byref(solver_objs['b_global'])])
 
-    local_b = petsc_call('DMCreateLocalVector',
-                         [dmda, Byref(solver_objs['b_local'])])
+    # insert calls to get local b vectors (maybe not local x vectors not sure yet)
+    if isinstance(dm, DMComposite):
+        targets = dm.targets
+        local_b_refs = [Byref(solver_objs['b_local_%s'%target.name]) for target in targets]
+        local_b = petsc_call('DMCompsositeGetLocalVectors', [dm] + local_b_refs)
+
+    else:
+        local_b = petsc_call('DMCreateLocalVector',
+                             [dm, Byref(solver_objs['b_local_%s'%linsolve.fielddata.target.name])])
 
     snes_get_ksp = petsc_call('SNESGetKSP',
                               [solver_objs['snes'], Byref(solver_objs['ksp'])])
@@ -227,9 +314,9 @@ def generate_solver_setup(solver_objs, objs, injectsolve):
     ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
     return (
-        dmda_create,
-        dm_setup,
-        dm_mat_type,
+        # dmda_create,
+        # dm_setup,
+        # dm_mat_type,
         snes_create,
         snes_set_dm,
         create_matrix,
@@ -243,7 +330,8 @@ def generate_solver_setup(solver_objs, objs, injectsolve):
         ksp_set_type,
         ksp_get_pc,
         pc_set_type,
-        ksp_set_from_ops
+        ksp_set_from_ops,
+        BlankLine
     )
 
 
