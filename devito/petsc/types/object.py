@@ -79,6 +79,13 @@ class Mat(LocalObject):
         return 1
 
 
+class SubMat(LocalObject):
+    """
+    SubMatrix of a PETSc Matrix of type MATNEST.
+    """
+    dtype = CustomDtype('Mat')
+
+
 class LocalVec(LocalObject):
     """
     PETSc Vector object (Vec).
