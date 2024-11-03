@@ -21,52 +21,54 @@ __all__ = ['PETScSolve']
 
 
 def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
-    injectsolves = []
     if target is not None:
         eqns_targets = {target: eqns_targets}
 
     # TODO: If target is a vector, also default to MATNEST (same as FD)
     if len(eqns_targets.keys()) == 1:
-        for target, eqns in eqns_targets.items():
-            expr, field_data = generate_field_solve(eqns, target)
-            # Placeholder equation for inserting calls to the solver and generating
-            # correct time loop etc.
-            inject_solve = InjectSolveEq(
-                target,
-                LinearSolver(expr, solver_parameters,
-                fielddata=field_data,
-                parent_dm=field_data.dmda)
-            )
-            injectsolves.append(inject_solve)
-        return injectsolves
-    # NEST
-    else:
-        exprs = []
-        nest = FieldDataNest()
-        children_dms = []
-        targets = []
-        # from IPython import embed; embed()
-        for target, eqns in eqns_targets.items():
-            expr, field_data = generate_field_solve(eqns, target)
-            exprs.extend(expr)
-            nest.add_field_data(field_data)
-            children_dms.append(field_data.dmda)
-            targets.append(target)
-
-        # TOOD: obviously improve this
-        parent_dm = DMComposite(name='da_%s%s' % (targets[0].name, targets[1].name), targets=targets)
-
-        # Doesn't actually matter which target we place on the lhs here
+        target, eqns = next(iter(eqns_targets.items())) 
+        eqns = as_tuple(eqns)
+        funcs = retrieve_functions(eqns)
+        time_mapper = generate_time_mapper(funcs)
+        field_data = generate_field_solve(eqns, target, time_mapper)
+        # Placeholder equation for inserting calls to the solver and generating
+        # correct time loop etc.
         inject_solve = InjectSolveEq(
             target,
-            LinearSolver(tuple(exprs),
+            LinearSolver(set(funcs), solver_parameters, time_mapper=time_mapper,
+            fielddata=field_data, parent_dm=field_data.dmda)
+        )
+        return [inject_solve]
+    # NEST
+    else:
+        # from IPython import embed; embed()
+        # TODO : improve this, probs move whole matnest bit into separate function
+        combined_eqns = [item for sublist in eqns_targets.values() for item in sublist]
+        funcs = retrieve_functions(combined_eqns)
+        time_mapper = generate_time_mapper(funcs)
+        nest = FieldDataNest()
+        children_dms = []
+
+        for target, eqns in eqns_targets.items():
+            eqns = as_tuple(eqns)
+            field_data = generate_field_solve(eqns, target, time_mapper)
+            nest.add_field_data(field_data)
+            children_dms.append(field_data.dmda)
+
+        # TOOD: obviously improve this
+        targets = list(eqns_targets.keys())
+        parent_dm = DMComposite(name='da_%s' % '_'.join(t.name for t in targets), targets=targets)
+
+        # Can place any target within targets on the lhs here
+        inject_solve = InjectSolveEq(
+            target,
+            LinearSolver(set(funcs),
             solver_parameters, fielddata=nest, parent_dm=parent_dm, children_dms=children_dms)
         )
-        injectsolves.append(inject_solve)
-        return injectsolves
+        return [inject_solve]
 
 
-def generate_field_solve(eqns, target):
+def generate_field_solve(eqns, target, time_mapper):
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
     # field DMDA
@@ -90,7 +92,9 @@ def generate_field_solve(eqns, target):
     formfuncs = []
     formrhs = []
 
-    eqns = as_tuple(eqns)
+    # eqns = as_tuple(eqns)
+    # funcs = retrieve_functions(eqns)
+    # time_mapper = generate_time_mapper(funcs)
 
     for eq in eqns:
         b, F_target, targets = separate_eqn(eq, target)
@@ -115,16 +119,24 @@ def generate_field_solve(eqns, target):
             subdomain=eq.subdomain
         ))
 
-        return tuple(set(funcs)), FieldData(
+        # return tuple(set(funcs)), FieldData(
+        #     target=target,
+        #     matvecs=matvecs,
+        #     formfuncs=formfuncs,
+        #     formrhs=formrhs,
+        #     arrays=arrays,
+        #     # time_mapper=time_mapper,
+        #     dmda=dmda
+        # )
+
+        return FieldData(
             target=target,
             matvecs=matvecs,
             formfuncs=formfuncs,
             formrhs=formrhs,
             arrays=arrays,
-            time_mapper=time_mapper,
             dmda=dmda
         )
-
 
 def separate_eqn(eqn, target):
     """

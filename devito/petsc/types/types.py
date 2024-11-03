@@ -6,7 +6,8 @@ from devito.tools import Reconstructable, sympy_mutex, as_tuple
 class LinearSolver(sympy.Function, Reconstructable):
 
     __rargs__ = ('expr',)
-    __rkwargs__ = ('solver_parameters', 'fielddata', 'parent_dm', 'children_dms')
+    __rkwargs__ = ('solver_parameters', 'fielddata', 'parent_dm', 'children_dms',
+                   'time_mapper')
 
     defaults = {
         'ksp_type': 'gmres',
@@ -18,7 +19,8 @@ class LinearSolver(sympy.Function, Reconstructable):
     }
 
     def __new__(cls, expr, solver_parameters=None,
-                fielddata=None, parent_dm=None, children_dms=None, **kwargs):
+                fielddata=None, parent_dm=None, children_dms=None,
+                time_mapper=None, **kwargs):
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -34,6 +36,7 @@ class LinearSolver(sympy.Function, Reconstructable):
         obj._fielddata = fielddata if fielddata else FieldData()
         obj._parent_dm = parent_dm
         obj._children_dms = children_dms
+        obj._time_mapper = time_mapper
         return obj
 
     def __repr__(self):
@@ -79,6 +82,10 @@ class LinearSolver(sympy.Function, Reconstructable):
             'parent': self.parent_dm,
             'children': self.children_dms
         }
+
+    @property
+    def time_mapper(self):
+        return self._time_mapper
     
     @classmethod
     def eval(cls, *args):
@@ -90,13 +97,12 @@ class LinearSolver(sympy.Function, Reconstructable):
 # make reconstructable?
 class FieldData:
     def __init__(self, target=None, matvecs=None, formfuncs=None, formrhs=None,
-                 arrays=None, time_mapper=None, dmda=None):
+                 arrays=None, dmda=None):
         self.target = target
         self.matvecs = matvecs
         self.formfuncs = formfuncs
         self.formrhs = formrhs
         self.arrays = arrays
-        self.time_mapper = time_mapper
         self.dmda = dmda
 
 

@@ -3,13 +3,13 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           Dereference, DummyExpr, Callable)
+                           Dereference, DummyExpr, Callable, BlankLine)
 from devito.symbolics import Byref, FieldFromPointer, Macro, cast_mapper
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import ModuloDimension, TimeDimension, Temp
 from devito.tools import filter_ordered
-from devito.petsc.types import PETScArray
+from devito.petsc.types import PETScArray, FieldDataNest
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
 from devito.petsc.iet.utils import petsc_call, petsc_struct
@@ -38,8 +38,21 @@ class PETScCallbackBuilder:
         return self._struct_params
 
     def make(self, linsolve, objs, solver_objs):
+        if isinstance(linsolve.fielddata, FieldDataNest):
+            return (), []
+        else:
+            callback_setup, runsolve = self.make_all_single(linsolve, objs, solver_objs)
+            return callback_setup, runsolve
+
+
+    def make_all_single(self, linsolve, objs, solver_objs):
         matvec_callback, formfunc_callback, formrhs_callback = self.make_all(
             linsolve, objs, solver_objs
+        )
+
+        snes_set_jac = petsc_call(
+            'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
+                                solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
         )
 
         matvec_operation = petsc_call(
@@ -54,7 +67,8 @@ class PETScCallbackBuilder:
         runsolve = self.runsolve(
             solver_objs, objs, formrhs_callback, linsolve.fielddata)
 
-        return matvec_operation, formfunc_operation, runsolve
+        return (snes_set_jac, matvec_operation, formfunc_operation, BlankLine), runsolve
+
 
     def make_all(self, linsolve, objs, solver_objs):
         fielddata = linsolve.fielddata

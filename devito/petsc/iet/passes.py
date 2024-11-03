@@ -46,10 +46,9 @@ def lower_petsc(iet, **kwargs):
         # that matches the target attached to the field data ......
         linsolve = injectsolve.expr.rhs
         # data = injectsolve.expr.rhs.fielddata
-        solver_objs = build_solver_objs(linsolve.fielddata, iters, **kwargs)
+        solver_objs = build_solver_objs(linsolve, iters, **kwargs)
 
         # Setup DMs
-        # from IPython import embed; embed()
         dm_setup = generate_dm_setup(objs, linsolve)
         setup.extend(dm_setup)
         # Setup solver
@@ -57,9 +56,10 @@ def lower_petsc(iet, **kwargs):
         setup.extend(solver_setup)
 
         # # Generate all PETSc callback functions for the target via recursive compilation
-        matvec_op, formfunc_op, runsolve = builder.make(linsolve,
-                                                        objs, solver_objs)
-        setup.extend([matvec_op, formfunc_op, BlankLine])
+        callback_setup, runsolve = builder.make(
+            linsolve, objs, solver_objs
+        )
+        setup.extend(callback_setup)
         # # Only Transform the spatial iteration loop
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
@@ -187,7 +187,7 @@ def create_dmda(dmda, objs):
 #     }
 
 
-def build_solver_objs(data, iters, **kwargs):
+def build_solver_objs(linsolve, iters, **kwargs):
     sreg = kwargs['sregistry']
 
     solver_objs = {
@@ -202,13 +202,12 @@ def build_solver_objs(data, iters, **kwargs):
         'b_global': GlobalVec(sreg.make_name(prefix='b_global_')),
         'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
         'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
-        'time_mapper': data.time_mapper
+        'time_mapper': linsolve.time_mapper
     }
 
-    # data = injectsolve.expr.rhs.fielddata
-    func = build_objs_nest if isinstance(data, FieldDataNest) else build_field_objs
-    solver_objs.update(func(data, sreg))
-    # from IPython import embed; embed()
+    func = build_objs_nest if isinstance(linsolve.fielddata, FieldDataNest) else build_field_objs
+    solver_objs.update(func(linsolve.fielddata, sreg))
+
     return solver_objs
 
 
@@ -251,7 +250,7 @@ def generate_dm_setup(objs, linsolve):
 
     if isinstance(parent_dm, DMComposite):
         calls.append(petsc_call('DMCompositeCreate', [objs['comm'], Byref(parent_dm)]))
-        calls.extend([petsc_call('DMCompositeAddDMs', [parent_dm, child]) for child in children_dms])
+        calls.extend([petsc_call('DMCompositeAddDM', [parent_dm, child]) for child in children_dms])
         calls.append(petsc_call('DMSetMatType', [parent_dm, 'MATNEST']))
         calls.append(BlankLine)
 
@@ -271,11 +270,11 @@ def generate_solver_setup(solver_objs, objs, linsolve):
     # NOTE: Assumming all solves are linear for now.
     snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
     
-    # TOOD: move this to builder -> makes more sense 
-    snes_set_jac = petsc_call(
-        'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
-                            solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
-    )
+    # # TOOD: move this to builder -> makes more sense 
+    # snes_set_jac = petsc_call(
+    #     'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
+    #                         solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
+    # )
 
     global_x = petsc_call('DMCreateGlobalVector',
                           [dm, Byref(solver_objs['x_global'])])
@@ -287,7 +286,7 @@ def generate_solver_setup(solver_objs, objs, linsolve):
     if isinstance(dm, DMComposite):
         targets = dm.targets
         local_b_refs = [Byref(solver_objs['b_local_%s'%target.name]) for target in targets]
-        local_b = petsc_call('DMCompsositeGetLocalVectors', [dm] + local_b_refs)
+        local_b = petsc_call('DMCompositeGetLocalVectors', [dm] + local_b_refs)
 
     else:
         local_b = petsc_call('DMCreateLocalVector',
@@ -320,7 +319,7 @@ def generate_solver_setup(solver_objs, objs, linsolve):
         snes_create,
         snes_set_dm,
         create_matrix,
-        snes_set_jac,
+        # snes_set_jac,
         snes_set_type,
         global_x,
         global_b,
