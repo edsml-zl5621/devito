@@ -1,7 +1,8 @@
 from ctypes import POINTER
 
-from devito.tools import CustomDtype, dtype_to_cstr
-from devito.types import LocalObject, CCompositeObject, ModuloDimension, TimeDimension
+from devito.tools import CustomDtype, dtype_to_cstr, as_tuple
+from devito.types import (LocalObject, CCompositeObject, ModuloDimension,
+                          TimeDimension, ArrayObject, CustomDimension)
 from devito.symbolics import Byref
 
 from devito.petsc.iet.utils import petsc_call
@@ -13,13 +14,18 @@ class BasicDM(LocalObject):
     """
     dtype = CustomDtype('DM')
 
-    def __init__(self, *args, stencil_width=None, **kwargs):
+    def __init__(self, *args, target=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self._stencil_width = stencil_width
+        # self._stencil_width = stencil_width
+        self._target = target
+
+    @property
+    def target(self):
+        return self._target
 
     @property
     def stencil_width(self):
-        return self._stencil_width
+        return self.target.space_order
 
     @property
     def info(self):
@@ -167,6 +173,38 @@ class PetscErrorCode(LocalObject):
 
 class DummyArg(LocalObject):
     dtype = CustomDtype('void', modifier='*')
+
+
+class IS(ArrayObject):
+    """
+    Index set object used for efficient indexing into vector and matrices.
+    """
+    _data_alignment = False
+
+    @classmethod
+    def __indices_setup__(cls, **kwargs):
+        try:
+            return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
+        except KeyError:
+            nindices = kwargs['nindices']
+            dim = CustomDimension(name='wi', symbolic_size=nindices)
+            return (dim,), (dim,)
+
+    @property
+    def dim(self):
+        assert len(self.dimensions) == 1
+        return self.dimensions[0]
+
+    @property
+    def nindices(self):
+        return self.dim.symbolic_size
+
+    @property
+    def index(self):
+        if self.size == 1:
+            return 0
+        else:
+            return self.dim
 
 
 class PETScStruct(CCompositeObject):

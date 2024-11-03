@@ -7,7 +7,7 @@ from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
 from devito.symbolics import Byref, Macro, FieldFromComposite
 from devito.petsc.types import (PetscMPIInt, Mat, CallbackDM, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
-                                StartPtr, FieldDataNest, DMComposite)
+                                StartPtr, FieldDataNest, DMComposite, IS)
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
@@ -214,6 +214,7 @@ def build_solver_objs(linsolve, iters, **kwargs):
 def build_field_objs(fielddata, sreg):
     target = fielddata.target
     name = target.name
+    #TODO: dont think i need double local vecs ..
     return {
         'x_local_%s' % name: LocalVec(sreg.make_name(prefix='x_local_'), liveness='eager'),
         'b_local_%s' % name: LocalVec(sreg.make_name(prefix='b_local_')),
@@ -227,11 +228,14 @@ def build_field_objs(fielddata, sreg):
 
 def build_objs_nest(fielddata, sreg):
     objs = {}
+    # from IPython import embed; embed()
     for field_data in fielddata.field_data_list:
         objs.update(build_field_objs(field_data, sreg))
     nest_objs = {
         'DMComposite': DMComposite(sreg.make_name(prefix='pack_'), targets=fielddata.targets),
+        'indexset': IS(name=sreg.make_name(prefix='is_'), nindices=len(fielddata.targets))
     }
+    # from IPython import embed; embed()
     objs.update(nest_objs)
     return objs
 

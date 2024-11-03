@@ -35,8 +35,9 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
         # correct time loop etc.
         inject_solve = InjectSolveEq(
             target,
-            LinearSolver(set(funcs), solver_parameters, time_mapper=time_mapper,
-            fielddata=field_data, parent_dm=field_data.dmda)
+            LinearSolver(set(funcs), solver_parameters,
+            fielddata=field_data, parent_dm=field_data.dmda,
+            time_mapper=time_mapper)
         )
         return [inject_solve]
     # NEST
@@ -63,7 +64,8 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
         inject_solve = InjectSolveEq(
             target,
             LinearSolver(set(funcs),
-            solver_parameters, fielddata=nest, parent_dm=parent_dm, children_dms=children_dms)
+            solver_parameters, fielddata=nest, parent_dm=parent_dm,
+            children_dms=children_dms, time_mapper=time_mapper)
         )
         return [inject_solve]
 
@@ -73,7 +75,7 @@ def generate_field_solve(eqns, target, time_mapper):
 
     # field DMDA
     dmda = DM(
-        name='da_%s' % target.name, liveness='eager', stencil_width=target.space_order
+        name='da_%s' % target.name, liveness='eager', target=target
     )
 
     arrays = {
