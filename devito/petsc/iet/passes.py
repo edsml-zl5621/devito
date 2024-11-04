@@ -3,15 +3,16 @@ import cgen as c
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
                            DummyExpr, FindNodes, retrieve_iteration_tree,
-                           filter_iterations)
-from devito.symbolics import Byref, Macro, FieldFromComposite
+                           filter_iterations, CallableBody, Call, Callable)
+from devito.symbolics import Byref, Macro, FieldFromComposite, FieldFromPointer
 from devito.petsc.types import (PetscMPIInt, Mat, CallbackDM, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
                                 StartPtr, FieldDataNest, DMComposite, IS, SubMat)
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import PETScCallbackBuilder
-from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
+from devito.petsc.iet.utils import petsc_call, petsc_call_mpi, petsc_struct
+from devito.tools import filter_ordered
 
 
 @iet_pass
@@ -34,11 +35,15 @@ def lower_petsc(iet, **kwargs):
 
     setup = []
     subs = {}
-
-    builder = PETScCallbackBuilder(**kwargs)
+    
+    efuncs = []
+    struct_params = []
+    # builder = PETScCallbackBuilder(**kwargs)
     # from IPython import embed; embed()
     for iters, (injectsolve,) in injectsolve_mapper.items():
-
+        # There should be a builder per "snes solve"
+        # TOOD: if solve is NEST, use a PETSCCallbackNestedBuilder or something...
+        builder = PETScCallbackBuilder(**kwargs)
         #TODO: THIS IS WHERE WE CHECK IF FIELD_DATA IS NEST OR NOT
         #TODO: INSTEAD OF GRABBING THE LHS OF INJECTSOLVEDUMMY FOR THE VECCREPLACEARRAY,
         # YOU WILL HAVE TO SEARCH THE RHS .expr FOR THE INDEXIFIED target and use that instead 
@@ -64,14 +69,29 @@ def lower_petsc(iet, **kwargs):
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
         objs['dmdas'].append(linsolve.parent_dm)
+        # from IPython import embed; embed()
+        efuncs.extend(builder.efuncs.values())
+        struct_params.extend(builder.struct_params)
 
     # Generate callback to populate main struct object
-    struct, struct_calls = builder.make_main_struct(objs)
-    setup.extend(struct_calls)
+    # TODO: move all struct stuff into a single function
+    struct_main = objs['struct']._rebuild(fields=filter_ordered(struct_params))
+    struct_callback = generate_struct_callback(struct_main, objs)
+    efuncs.append(struct_callback)
+    struct_calls = make_struct_calls(struct_callback, struct_main, objs)
+    # from IPython import embed; embed()
+    # TODO: clean this up
+    setup.extend(list(struct_calls))
 
+    # builder.make_main_struct(objs)
+    # setup.extend(struct_calls)
+    # from IPython import embed; embed()
     iet = Transformer(subs).visit(iet)
-
-    iet = assign_time_iters(iet, struct)
+    
+    # Assign time iterators 
+    # THIS SHOULD BE established within the builder I think
+    # Perhaps assign all time iters necessary then drop duplicates
+    # iet = assign_time_iters(iet, struct)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
@@ -80,9 +100,9 @@ def lower_petsc(iet, **kwargs):
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
-    efuncs = tuple(builder.efuncs.values())
-    metadata.update({'efuncs': efuncs})
-
+    # efuncs = tuple(builder.efuncs.values())
+    metadata.update({'efuncs': tuple(efuncs)})
+    # from IPython import embed; embed()
     return iet, metadata
 
 
@@ -108,13 +128,14 @@ def build_core_objects(target, **kwargs):
         communicator = target.grid.distributor._obj_comm
     else:
         communicator = 'PETSC_COMM_SELF'
-
+    #TODO: think i can remove dmda here
     return {
         'size': PetscMPIInt(name='size'),
         'comm': communicator,
         'err': PetscErrorCode(name='err'),
         'grid': target.grid,
-        'dmdas': []
+        'dmdas': [],
+        'struct': petsc_struct(name='ctx')
     }
 
 
@@ -203,9 +224,8 @@ def build_solver_objs(linsolve, iters, **kwargs):
         'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
         'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
         'F_global': GlobalVec(sreg.make_name(prefix='F_global_')),
-        'time_mapper': linsolve.time_mapper
+        'time_mapper': linsolve.time_mapper,
     }
-
     func = build_objs_nest if isinstance(linsolve.fielddata, FieldDataNest) else build_field_objs
     solver_objs.update(func(linsolve.fielddata, sreg))
 
@@ -216,6 +236,7 @@ def build_field_objs(fielddata, sreg):
     target = fielddata.target
     name = target.name
     #TODO: dont think i need double local vecs ..
+    # plus can probbaly get rid of y?
     return {
         'x_local_%s' % name: LocalVec(sreg.make_name(prefix='x_local_'), liveness='eager'),
         'b_local_%s' % name: LocalVec(sreg.make_name(prefix='b_local_')),
@@ -223,7 +244,6 @@ def build_field_objs(fielddata, sreg):
         'Y_local_%s' % name: LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
         'F_local_%s' % name: LocalVec(sreg.make_name(prefix='F_local_'), liveness='eager'),
         'start_ptr_%s' % name: StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
-        # 'da_%s' % name: fielddata.dmda
     }
 
 
@@ -397,6 +417,40 @@ def spatial_injectsolve_iter(iter, injectsolve):
         if injectsolve in FindNodes(InjectSolveDummy).visit(root):
             spatial_body.append(root)
     return spatial_body
+
+
+def generate_struct_callback(struct, objs):
+    body = [
+        DummyExpr(FieldFromPointer(i._C_symbol, struct), i._C_symbol)
+        for i in struct.fields if i not in struct.time_dim_fields
+    ]
+    struct_callback_body = CallableBody(
+        List(body=body), init=tuple([petsc_func_begin_user]),
+        retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
+    )
+    struct_callback = Callable(
+        'PopulateMatContext', struct_callback_body, objs['err'],
+        parameters=[struct]
+    )
+    return struct_callback
+
+
+def make_struct_calls(struct_callback, struct_main, objs):
+    # struct_main = objs['struct']
+    # struct_main = petsc_struct('ctx', filter_ordered(self.struct_params))
+    # struct_main = objs['struct']._rebuild(fields=self.struct_params)
+    # from IPython import embed; embed()
+    # struct_main = objs['struct']._rebuild(fields=filter_ordered(self.struct_params), liveness='lazy')
+    # struct_main = petsc_struct('ctx', filter_ordered(self.struct_params))
+    # struct_callback = self.generate_struct_callback(struct_main, objs)
+    call_struct_callback = [petsc_call(struct_callback.name, [Byref(struct_main)])]
+    calls_set_app_ctx = [
+        petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
+        for i in objs['dmdas']
+    ]
+    calls = call_struct_callback + calls_set_app_ctx
+    # self._efuncs[struct_callback.name] = struct_callback
+    return tuple(calls)
 
 
 Null = Macro('NULL')
