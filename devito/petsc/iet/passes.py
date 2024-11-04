@@ -189,7 +189,7 @@ def create_dmda(dmda, objs):
 
 def build_solver_objs(linsolve, iters, **kwargs):
     sreg = kwargs['sregistry']
-
+    # TODO: change y to F etc
     solver_objs = {
         'Jac': Mat(sreg.make_name(prefix='J_')),
         'ksp': KSP(sreg.make_name(prefix='ksp_')),
@@ -202,6 +202,7 @@ def build_solver_objs(linsolve, iters, **kwargs):
         'b_global': GlobalVec(sreg.make_name(prefix='b_global_')),
         'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
         'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
+        'F_global': GlobalVec(sreg.make_name(prefix='F_global_')),
         'time_mapper': linsolve.time_mapper
     }
 
@@ -220,6 +221,7 @@ def build_field_objs(fielddata, sreg):
         'b_local_%s' % name: LocalVec(sreg.make_name(prefix='b_local_')),
         'X_local_%s' % name: LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
         'Y_local_%s' % name: LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
+        'F_local_%s' % name: LocalVec(sreg.make_name(prefix='F_local_'), liveness='eager'),
         'start_ptr_%s' % name: StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
         # 'da_%s' % name: fielddata.dmda
     }

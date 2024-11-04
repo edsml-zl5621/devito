@@ -124,6 +124,7 @@ class FieldDataNest(FieldData):
     def targets(self):
         return tuple(field_data.target for field_data in self.field_data_list)
 
+
 # class FieldData(sympy.Function, Reconstructable):
 
 #     # __rargs__ = ('expr',)
