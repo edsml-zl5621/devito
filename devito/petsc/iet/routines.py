@@ -604,7 +604,7 @@ class PETScCallbackBuilder:
         mat_assembly_begin = petsc_call('MatAssemblyBegin', [solver_objs['Jac'], 'MAT_FINAL_ASSEMBLY'])
         mat_assembly_end = petsc_call('MatAssemblyEnd', [solver_objs['Jac'], 'MAT_FINAL_ASSEMBLY'])
 
-        body = [snes_get_dm, dm_get_app_context, get_local_vecs, scatter] + set_ctx + matshell_set_op + [restore_local_vecs, mat_assembly_begin, mat_assembly_end]
+        body = [snes_get_dm, dm_get_app_context, get_local_vecs, scatter, get_local_is] + set_ctx + matshell_set_op + [restore_local_vecs, mat_assembly_begin, mat_assembly_end]
 
         body = CallableBody(
             List(body=body),

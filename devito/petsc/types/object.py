@@ -16,7 +16,6 @@ class BasicDM(LocalObject):
 
     def __init__(self, *args, target=None, **kwargs):
         super().__init__(*args, **kwargs)
-        # self._stencil_width = stencil_width
         self._target = target
 
     @property
@@ -194,7 +193,7 @@ class IS(ArrayObject):
             return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
         except KeyError:
             nindices = kwargs['nindices']
-            dim = CustomDimension(name='wi', symbolic_size=nindices)
+            dim = CustomDimension(name='d', symbolic_size=nindices)
             return (dim,), (dim,)
 
     @property

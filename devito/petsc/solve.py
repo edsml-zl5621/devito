@@ -56,7 +56,6 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
             nest.add_field_data(field_data)
             children_dms.append(field_data.dmda)
 
-        # TOOD: obviously improve this
         targets = list(eqns_targets.keys())
         parent_dm = DMComposite(name='da_%s' % '_'.join(t.name for t in targets), targets=targets)
 
@@ -97,7 +96,7 @@ def generate_field_solve(eqns, target, time_mapper):
     # eqns = as_tuple(eqns)
     # funcs = retrieve_functions(eqns)
     # time_mapper = generate_time_mapper(funcs)
-
+    # from IPython import embed; embed()
     for eq in eqns:
         b, F_target, targets = separate_eqn(eq, target)
 
@@ -121,24 +120,15 @@ def generate_field_solve(eqns, target, time_mapper):
             subdomain=eq.subdomain
         ))
 
-        # return tuple(set(funcs)), FieldData(
-        #     target=target,
-        #     matvecs=matvecs,
-        #     formfuncs=formfuncs,
-        #     formrhs=formrhs,
-        #     arrays=arrays,
-        #     # time_mapper=time_mapper,
-        #     dmda=dmda
-        # )
 
-        return FieldData(
-            target=target,
-            matvecs=matvecs,
-            formfuncs=formfuncs,
-            formrhs=formrhs,
-            arrays=arrays,
-            dmda=dmda
-        )
+    return FieldData(
+        target=target,
+        matvecs=matvecs,
+        formfuncs=formfuncs,
+        formrhs=formrhs,
+        arrays=arrays,
+        dmda=dmda
+    )
 
 def separate_eqn(eqn, target):
     """

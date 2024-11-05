@@ -224,7 +224,7 @@ def build_solver_objs(linsolve, iters, **kwargs):
         'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
         'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
         'F_global': GlobalVec(sreg.make_name(prefix='F_global_')),
-        'time_mapper': linsolve.time_mapper,
+        'time_mapper': linsolve.time_mapper
     }
     func = build_objs_nest if isinstance(linsolve.fielddata, FieldDataNest) else build_field_objs
     solver_objs.update(func(linsolve.fielddata, sreg))
