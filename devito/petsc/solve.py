@@ -21,6 +21,9 @@ __all__ = ['PETScSolve']
 
 
 def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
+    """
+    Linear PETSc solver
+    """
     if target is not None:
         eqns_targets = {target: eqns_targets}
 
@@ -70,6 +73,7 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
 
 
 def generate_field_solve(eqns, target, time_mapper):
+    #TODO: change these names
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
     # field DMDA
@@ -120,7 +124,7 @@ def generate_field_solve(eqns, target, time_mapper):
             subdomain=eq.subdomain
         ))
 
-
+    # TODO: Add corresponding submatrix as an argument
     return FieldData(
         target=target,
         matvecs=matvecs,

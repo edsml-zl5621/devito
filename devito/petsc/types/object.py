@@ -2,10 +2,12 @@ from ctypes import POINTER
 
 from devito.tools import CustomDtype, dtype_to_cstr, as_tuple
 from devito.types import (LocalObject, CCompositeObject, ModuloDimension,
-                          TimeDimension, ArrayObject, CustomDimension)
+                          TimeDimension, ArrayObject, CustomDimension, Array)
+from devito.types.array import ArrayBasic
 from devito.symbolics import Byref
 
 from devito.petsc.iet.utils import petsc_call
+from devito.petsc.types import PETScArray
 
 
 class BasicDM(LocalObject):
@@ -14,13 +16,18 @@ class BasicDM(LocalObject):
     """
     dtype = CustomDtype('DM')
 
-    def __init__(self, *args, target=None, **kwargs):
+    def __init__(self, *args, target=None, destroy=True, **kwargs):
         super().__init__(*args, **kwargs)
         self._target = target
+        self._destroy = destroy
 
     @property
     def target(self):
         return self._target
+    
+    @property
+    def destroy(self):
+        return self._destroy
 
     @property
     def stencil_width(self):
@@ -42,6 +49,8 @@ class BasicDM(LocalObject):
 class DM(BasicDM):
     @property
     def _C_free(self):
+        if not self.destroy:
+            return None
         return petsc_call('DMDestroy', [Byref(self.function)])
 
     @property
@@ -57,10 +66,6 @@ class DMComposite(DM):
     @property
     def targets(self):
         return self._targets
-
-
-class CallbackDM(BasicDM):
-    pass
 
 
 class Mat(LocalObject):
@@ -83,6 +88,19 @@ class SubMat(LocalObject):
     SubMatrix of a PETSc Matrix of type MATNEST.
     """
     dtype = CustomDtype('Mat')
+
+    def __init__(self, *args, row=None, col=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._row = row
+        self._col = col
+
+    @property
+    def row(self):
+        return self._row
+    
+    @property
+    def col(self):
+        return self._col
 
 
 class LocalVec(LocalObject):
@@ -183,16 +201,21 @@ class DummyArg(LocalObject):
 
 class IS(ArrayObject):
     """
-    Index set object used for efficient indexing into vector and matrices.
+    Index set object used for efficient indexing into vectors and matrices.
+    https://petsc.org/release/manualpages/IS/IS/
     """
     _data_alignment = False
+
+    def __init_finalize__(self, *args, **kwargs):
+        self._nindices = kwargs.pop('nindices', ())
+        super().__init_finalize__(*args, **kwargs)
 
     @classmethod
     def __indices_setup__(cls, **kwargs):
         try:
             return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
         except KeyError:
-            nindices = kwargs['nindices']
+            nindices = kwargs.get('nindices', ())
             dim = CustomDimension(name='d', symbolic_size=nindices)
             return (dim,), (dim,)
 
@@ -203,14 +226,28 @@ class IS(ArrayObject):
 
     @property
     def nindices(self):
-        return self.dim.symbolic_size
+        return self._nindices
 
     @property
-    def index(self):
-        if self.size == 1:
-            return 0
-        else:
-            return self.dim
+    def dtype(self):
+        return CustomDtype('IS', modifier=' *')
+
+    @property
+    def _C_name(self):
+        return self.name
+
+    @property
+    def _mem_stack(self):
+        return False
+
+    @property
+    def _C_free(self):
+        destroy_calls = [
+            petsc_call('ISDestroy', [Byref(self.indexify().subs({self.dim: i}))])
+            for i in range(self._nindices)
+        ]
+        destroy_calls.append(petsc_call('PetscFree', [self.function]))
+        return destroy_calls
 
 
 class PETScStruct(CCompositeObject):

@@ -5,14 +5,14 @@ from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
                            DummyExpr, FindNodes, retrieve_iteration_tree,
                            filter_iterations, CallableBody, Call, Callable)
 from devito.symbolics import Byref, Macro, FieldFromComposite, FieldFromPointer
-from devito.petsc.types import (PetscMPIInt, Mat, CallbackDM, LocalVec, GlobalVec,
+from devito.petsc.types import (PetscMPIInt, Mat, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
                                 StartPtr, FieldDataNest, DMComposite, IS, SubMat)
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.petsc.utils import solver_mapper, core_metadata
-from devito.petsc.iet.routines import PETScCallbackBuilder
+from devito.petsc.iet.routines import NestedCallbackBuilder, CallbackBuilder
 from devito.petsc.iet.utils import petsc_call, petsc_call_mpi, petsc_struct
-from devito.tools import filter_ordered
+from devito.tools import filter_ordered, CustomDtype, dtype_to_ctype
 
 
 @iet_pass
@@ -38,19 +38,24 @@ def lower_petsc(iet, **kwargs):
     
     efuncs = []
     struct_params = []
-    # builder = PETScCallbackBuilder(**kwargs)
-    # from IPython import embed; embed()
+
     for iters, (injectsolve,) in injectsolve_mapper.items():
-        # There should be a builder per "snes solve"
-        # TOOD: if solve is NEST, use a PETSCCallbackNestedBuilder or something...
-        builder = PETScCallbackBuilder(**kwargs)
+        linsolve = injectsolve.expr.rhs
+
+        builder_class = (
+            NestedCallbackBuilder if isinstance(linsolve.fielddata, FieldDataNest)
+            else CallbackBuilder
+        )
+        builder = builder_class(**kwargs)
+
         #TODO: THIS IS WHERE WE CHECK IF FIELD_DATA IS NEST OR NOT
         #TODO: INSTEAD OF GRABBING THE LHS OF INJECTSOLVEDUMMY FOR THE VECCREPLACEARRAY,
         # YOU WILL HAVE TO SEARCH THE RHS .expr FOR THE INDEXIFIED target and use that instead 
         # potentially when you build the solver_objs you can create one called target and search the exprs for the one
         # that matches the target attached to the field data ......
         linsolve = injectsolve.expr.rhs
-        # data = injectsolve.expr.rhs.fielddata
+
+        # TODO: I think these can now be moved to the builder
         solver_objs = build_solver_objs(linsolve, iters, **kwargs)
 
         # Setup DMs
@@ -83,15 +88,12 @@ def lower_petsc(iet, **kwargs):
     # TODO: clean this up
     setup.extend(list(struct_calls))
 
-    # builder.make_main_struct(objs)
-    # setup.extend(struct_calls)
-    # from IPython import embed; embed()
     iet = Transformer(subs).visit(iet)
     
     # Assign time iterators 
     # THIS SHOULD BE established within the builder I think
     # Perhaps assign all time iters necessary then drop duplicates
-    # iet = assign_time_iters(iet, struct)
+    iet = assign_time_iters(iet, struct_main)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
@@ -254,19 +256,18 @@ def build_objs_nest(fielddata, sreg):
 
     for field_data in fielddata.field_data_list:
         objs.update(build_field_objs(field_data, sreg))
-
-    nest_objs = {
-        'DMComposite': DMComposite(sreg.make_name(prefix='pack_'), targets=targets),
-        # TODO: fix .. this is wrong
-        'indexset': IS(name='is_', nindices=len(targets)),
-    }
+    import numpy as np
     sub_mats = {
         # submatrices
-        'J%s%s' % (t1.name, t2.name): SubMat(name='J%s%s' % (t1.name, t2.name))
-        for t1 in targets
-        for t2 in targets
+        'J%s%s' % (t1.name, t2.name): SubMat(name='J%s%s' % (t1.name, t2.name), row=i, col=j)
+        for i, t1 in enumerate(targets)
+        for j, t2 in enumerate(targets)
     }
-
+    nest_objs = {
+        'DMComposite': DMComposite(sreg.make_name(prefix='pack_'), targets=targets),
+        # TODO: remove restrict qualifier 
+        'indexset': IS(name='is', nindices=2),
+    }
     objs.update(nest_objs)
     objs.update(sub_mats)
     return objs

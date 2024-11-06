@@ -241,6 +241,7 @@ class LocalObject(AbstractObject, LocalType):
         return self._is_global
 
 
+
 class CCompositeObject(CompositeObject, LocalType):
 
     """
