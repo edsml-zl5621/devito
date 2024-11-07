@@ -33,12 +33,11 @@ def lower_petsc(iet, **kwargs):
     # Create core PETSc calls (not specific to each PETScSolve)
     core = make_core_petsc_calls(objs, **kwargs)
 
-    setup = []
+    # Shared between each solve
+    setup, efuncs, struct_params = [], [], []
     subs = {}
-    
-    efuncs = []
-    struct_params = []
 
+    # Specific to each solve
     for iters, (injectsolve,) in injectsolve_mapper.items():
         linsolve = injectsolve.expr.rhs
 
@@ -48,17 +47,17 @@ def lower_petsc(iet, **kwargs):
         )
         builder = builder_class(**kwargs)
 
-        #TODO: THIS IS WHERE WE CHECK IF FIELD_DATA IS NEST OR NOT
         #TODO: INSTEAD OF GRABBING THE LHS OF INJECTSOLVEDUMMY FOR THE VECCREPLACEARRAY,
         # YOU WILL HAVE TO SEARCH THE RHS .expr FOR THE INDEXIFIED target and use that instead 
         # potentially when you build the solver_objs you can create one called target and search the exprs for the one
         # that matches the target attached to the field data ......
         linsolve = injectsolve.expr.rhs
 
-        # TODO: I think these can now be moved to the builder
+        # TODO: I think these can now (SHOULD BE )be moved to the builder
         solver_objs = build_solver_objs(linsolve, iters, **kwargs)
 
         # Setup DMs
+        # I think both of these should be moved to the builder? i.e both generate_dm_setup and generate_solver_setup?
         dm_setup = generate_dm_setup(objs, linsolve)
         setup.extend(dm_setup)
         # Setup solver
@@ -74,7 +73,7 @@ def lower_petsc(iet, **kwargs):
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
         objs['dmdas'].append(linsolve.parent_dm)
-        # from IPython import embed; embed()
+
         efuncs.extend(builder.efuncs.values())
         struct_params.extend(builder.struct_params)
 
@@ -84,15 +83,12 @@ def lower_petsc(iet, **kwargs):
     struct_callback = generate_struct_callback(struct_main, objs)
     efuncs.append(struct_callback)
     struct_calls = make_struct_calls(struct_callback, struct_main, objs)
-    # from IPython import embed; embed()
     # TODO: clean this up
     setup.extend(list(struct_calls))
 
     iet = Transformer(subs).visit(iet)
     
     # Assign time iterators 
-    # THIS SHOULD BE established within the builder I think
-    # Perhaps assign all time iters necessary then drop duplicates
     iet = assign_time_iters(iet, struct_main)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
@@ -102,9 +98,8 @@ def lower_petsc(iet, **kwargs):
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
-    # efuncs = tuple(builder.efuncs.values())
     metadata.update({'efuncs': tuple(efuncs)})
-    # from IPython import embed; embed()
+
     return iet, metadata
 
 
@@ -173,41 +168,6 @@ def create_dmda(dmda, objs):
     dmda = petsc_call('DMDACreate%sd' % no_of_space_dims, args)
 
     return dmda
-
-
-# def build_solver_objs(injectsolve, iters, **kwargs):
-#     from IPython import embed; embed()
-#     # solver_objs = {}
-#     field_objs = {}
-
-#     solver_objs = 
-#     data = injectsolve.expr.rhs.fielddata
-#     if instance(data, FieldDataNest):
-
-
-
-#     sreg = kwargs['sregistry']
-#     return {
-#         'Jac': Mat(sreg.make_name(prefix='J_')),
-#         'x_global': GlobalVec(sreg.make_name(prefix='x_global_')),
-#         'x_local': LocalVec(sreg.make_name(prefix='x_local_'), liveness='eager'),
-#         'b_global': GlobalVec(sreg.make_name(prefix='b_global_')),
-#         'b_local': LocalVec(sreg.make_name(prefix='b_local_')),
-#         'ksp': KSP(sreg.make_name(prefix='ksp_')),
-#         'pc': PC(sreg.make_name(prefix='pc_')),
-#         'snes': SNES(sreg.make_name(prefix='snes_')),
-#         'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
-#         'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
-#         'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
-#         'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
-#         'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
-#         'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
-#         'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), rhs.target.dtype),
-#         'true_dims': retrieve_time_dims(iters),
-#         'target': rhs.target,
-#         'time_mapper': rhs.time_mapper,
-#         'CallbackDM': CallbackDM(rhs.dmda.name, stencil_width=rhs.dmda.stencil_width),
-#     }
 
 
 def build_solver_objs(linsolve, iters, **kwargs):
@@ -306,12 +266,6 @@ def generate_solver_setup(solver_objs, objs, linsolve):
 
     # NOTE: Assumming all solves are linear for now.
     snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
-    
-    # # TOOD: move this to builder -> makes more sense 
-    # snes_set_jac = petsc_call(
-    #     'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
-    #                         solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
-    # )
 
     global_x = petsc_call('DMCreateGlobalVector',
                           [dm, Byref(solver_objs['x_global'])])
@@ -350,13 +304,9 @@ def generate_solver_setup(solver_objs, objs, linsolve):
     ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
     return (
-        # dmda_create,
-        # dm_setup,
-        # dm_mat_type,
         snes_create,
         snes_set_dm,
         create_matrix,
-        # snes_set_jac,
         snes_set_type,
         global_x,
         global_b,

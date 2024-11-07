@@ -38,10 +38,6 @@ class CallbackBuilder:
         return self._struct_params
 
     def make(self, linsolve, objs, solver_objs):
-        callback_setup, runsolve = self.make_all_single(linsolve, objs, solver_objs)
-        return callback_setup, runsolve
-
-    def make_all_single(self, linsolve, objs, solver_objs):
         matvec_callback, formfunc_callback, formrhs_callback = self.make_all(
             linsolve.fielddata, objs, solver_objs
         )
@@ -55,6 +51,7 @@ class CallbackBuilder:
             'MatShellSetOperation', [solver_objs['Jac'], 'MATOP_MULT',
                                      MatVecCallback(matvec_callback.name, void, void)]
         )
+
         formfunc_operation = petsc_call(
             'SNESSetFunction',
             [solver_objs['snes'], Null,
@@ -65,63 +62,10 @@ class CallbackBuilder:
 
         return (snes_set_jac, matvec_operation, formfunc_operation, BlankLine), runsolve
 
-    # def make_all_nest(self, linsolve, objs, solver_objs):
-    #     matvec_callbacks = []
-    #     formfunc_callbacks = []
-    #     formrhs_callbacks = []
-
-    #     all_fielddata = linsolve.fielddata.field_data_list
-    #     for fielddata in all_fielddata:
-    #         matvec_callback, formfunc_callback, formrhs_callback = self.make_all(
-    #             fielddata, objs, solver_objs, nested=True
-    #         )
-    #         matvec_callbacks.append(matvec_callback)
-    #         formfunc_callbacks.append(formfunc_callback)
-    #         formrhs_callbacks.append(formrhs_callback)
-
-    #     form_jac_all = self.form_jacobian_all(linsolve, matvec_callbacks, objs, solver_objs)
-    #     self._efuncs[form_jac_all.name] = form_jac_all
-
-    #     form_func_all = self.form_function_all(linsolve, formfunc_callbacks, objs, solver_objs)
-    #     self._efuncs[form_func_all.name] = form_func_all
-
-    #     # TODO: change this to not use FormFunctionCallback but a jac one
-    #     snes_set_jac = petsc_call(
-    #         'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
-    #                             solver_objs['Jac'], FormFunctionCallback(form_jac_all.name, void, void), Null]
-    #     )
-
-    #     formfunc_operation1 = petsc_call(
-    #         'SNESSetFunction',
-    #         [solver_objs['snes'], Null,
-    #          FormFunctionCallback(formfunc_callbacks[0].name, void, void), Null]
-    #     )
-
-    #     formfunc_operation2 = petsc_call(
-    #         'SNESSetFunction',
-    #         [solver_objs['snes'], Null,
-    #          FormFunctionCallback(formfunc_callbacks[1].name, void, void), Null]
-    #     )
-
-    #     # TODO: should this be using the FormFunctionCallback? check
-    #     snes_set_function = petsc_call('SNESSetFunction', [solver_objs['snes'], Null, FormFunctionCallback(form_func_all.name, void, void), Null])
-
-    #     # TODO: fielddata nest should obvs be passed in here
-    #     runsolve = self.runsolve(
-    #         solver_objs, objs, formrhs_callbacks, fielddata)
-
-    #     calls = (snes_set_jac, snes_set_function, formfunc_operation1, formfunc_operation2)
-    #     return calls, runsolve
-
-    def make_all(self, fielddata, objs, solver_objs, nested=False):
+    def make_all(self, fielddata, objs, solver_objs):
         matvec_callback = self.make_matvec(fielddata, objs, solver_objs)
         formrhs_callback = self.make_formrhs(fielddata, objs, solver_objs)
-        # from IPython import embed; embed()
-        # TODO: use single assigment here
-        if nested:
-            formfunc_callback = self.make_formfunc_nested(fielddata, objs, solver_objs)
-        else:
-            formfunc_callback = self.make_formfunc(fielddata, objs, solver_objs)
+        formfunc_callback = self.make_formfunc(fielddata, objs, solver_objs)
 
         self._efuncs[matvec_callback.name] = matvec_callback
         self._efuncs[formfunc_callback.name] = formfunc_callback
@@ -131,8 +75,6 @@ class CallbackBuilder:
 
     def make_matvec(self, fielddata, objs, solver_objs):
         # Compile matvec `eqns` into an IET via recursive compilation
-        # from IPython import embed; embed()
-
         irs_matvec, _ = self.rcompile(fielddata.matvecs,
                                       options={'mpi': False}, sregistry=SymbolRegistry())
         body_matvec = self.create_matvec_body(fielddata,
@@ -150,9 +92,6 @@ class CallbackBuilder:
         return matvec_callback
 
     def create_matvec_body(self, fielddata, body, solver_objs, objs):
-
-        # TODO: somehow create a CallbackDM version which doesn't get destroyed
-        # or maybe the CallbackDM should acc be created here.
         dmda = fielddata.dmda._rebuild(destroy=False)
         target = fielddata.target
 
@@ -160,7 +99,6 @@ class CallbackBuilder:
 
         struct_params = add_struct_params(body)
         struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
-        # struct = solver_objs['struct']
 
         y_matvec = fielddata.arrays['y_matvec']
         x_matvec = fielddata.arrays['x_matvec']
@@ -258,8 +196,6 @@ class CallbackBuilder:
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         matvec_body = Uxreplace(subs).visit(matvec_body)
 
-        # TODO: this should be adjusted i think to not use struct.fields..
-        # struct_params = add_struct_params()
         self._struct_params.extend(struct.fields)
 
         return matvec_body
@@ -291,7 +227,6 @@ class CallbackBuilder:
 
         struct_params = add_struct_params(body)
         struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
-        # struct = solver_objs['struct']
 
         y_formfunc = fielddata.arrays['y_formfunc']
         x_formfunc = fielddata.arrays['x_formfunc']
@@ -385,30 +320,6 @@ class CallbackBuilder:
 
         return formfunc_body
 
-    def make_formfunc_nested(self, fielddata, objs, solver_objs):
-        # Compile formfunc `eqns` into an IET via recursive compilation
-        irs_formfunc, _ = self.rcompile(
-            fielddata.formfuncs,
-            options={'mpi': False}, sregistry=SymbolRegistry()
-        )
-        # body = irs_formfunc.uiet.body
-
-        # from IPython import embed; embed()
-        body_formfunc = CallableBody(
-            List(body=irs_formfunc.uiet.body),
-            init=(petsc_func_begin_user,),
-            retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
-        )
-        
-        formfunc_callback = PETScCallable(
-            self.sregistry.make_name(prefix='FormFunction_'), body_formfunc,
-            retval=objs['err'],
-            parameters=(solver_objs['snes'], solver_objs['X_global'],
-                        solver_objs['Y_global'], solver_objs['dummy']),
-            target = fielddata.target
-        )
-        return formfunc_callback
-
     def make_formrhs(self, fielddata, objs, solver_objs):
         target = fielddata.target
         # Compile formrhs `eqns` into an IET via recursive compilation
@@ -483,8 +394,6 @@ class CallbackBuilder:
 
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
-        # fields = add_struct_params()
-        # struct_params = add_struct_params(formrhs_body)
         self._struct_params.extend(struct_params)
 
         return formrhs_body
@@ -493,7 +402,7 @@ class CallbackBuilder:
         target = fielddata.target
 
         dmda = fielddata.dmda
-        # from IPython import embed; embed()
+
         # TODO: clean this up i.e don't use [rhs_callbacks]
         if not isinstance(rhs_callbacks, list):
             rhs_callbacks = [rhs_callbacks]
@@ -541,12 +450,7 @@ class CallbackBuilder:
         )
 
     def make_main_struct(self, solver_objs, objs):
-        # struct_main = objs['struct']
-        # struct_main = petsc_struct('ctx', filter_ordered(self.struct_params))
-        # struct_main = objs['struct']._rebuild(fields=self.struct_params)
-        # from IPython import embed; embed()
         struct_main = objs['struct']._rebuild(fields=filter_ordered(self.struct_params), liveness='lazy')
-        # struct_main = petsc_struct('ctx', filter_ordered(self.struct_params))
         struct_callback = self.generate_struct_callback(struct_main, objs)
         call_struct_callback = [petsc_call(struct_callback.name, [Byref(struct_main)])]
         calls_set_app_ctx = [
@@ -572,34 +476,76 @@ class CallbackBuilder:
         )
         return struct_callback
 
+
+class NestedCallbackBuilder(CallbackBuilder):
+    """
+    Build IET routines to generate PETSc callback functions,
+    specifically for MATNEST matrices.
+    """
+    def make(self, linsolve, objs, solver_objs):
+        matvecs, formfuncs, formrhs = [], [], []
+        all_fielddata = linsolve.fielddata.field_data_list
+        for fielddata in all_fielddata:
+            matvec, formfunc, rhs = self.make_all(
+                fielddata, objs, solver_objs
+            )
+            matvecs.append(matvec)
+            formfuncs.append(formfunc)
+            formrhs.append(rhs)
+
+        jac_all = self.form_jacobian_all(linsolve, matvecs, objs, solver_objs)
+        func_all = self.form_function_all(linsolve, formfuncs, objs, solver_objs)
+
+        self._efuncs.update({jac_all.name: jac_all, func_all.name: func_all})
+
+        # CREATE A JACFUNCTIONCALLBACK
+        snes_set_jac = petsc_call(
+            'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
+                                solver_objs['Jac'], FormFunctionCallback(jac_all.name, void, void), Null]
+        )
+
+        snes_set_function = petsc_call(
+            'SNESSetFunction',
+            [solver_objs['snes'], Null, FormFunctionCallback(func_all.name, void, void), Null]
+        )
+
+        runsolve = self.runsolve(
+            solver_objs, objs, formrhs, fielddata)
+
+        calls = (snes_set_jac, snes_set_function)
+        return calls, runsolve
+
     def form_jacobian_all(self, linsolve, matvec_callbacks, objs, solver_objs):
         parent_dm = linsolve.parent_dm._rebuild(destroy=False)
         children_dms = [dm._rebuild(destroy=False) for dm in linsolve.children_dms]
 
         targets = linsolve.fielddata.targets
 
-        # TODO: the callback dm doesn't have to be able to take in a body? re-think this
-        # struct = build_local_struct([])
         struct = objs['struct']._rebuild(liveness='eager')
-        # struct = solver_objs['struct']
 
-        snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(parent_dm)])
-
-        dm_get_app_context = petsc_call('DMGetApplicationContext', [parent_dm, Byref(struct._C_symbol)])
-
-        get_local_vecs = petsc_call('DMCompositeGetLocalVectors', [parent_dm] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets])
-
-        scatter = petsc_call('DMCompositeScatter', [parent_dm, solver_objs['X_global']] +  [solver_objs['X_local_%s' % t.name] for t in targets])
-
-        get_local_is = petsc_call('DMCompositeGetLocalIS', [parent_dm, Byref(solver_objs['indexset']._C_symbol)])
-
+        snes_get_dm = petsc_call(
+            'SNESGetDM', [solver_objs['snes'], Byref(parent_dm)]
+        )
+        dm_get_app_context = petsc_call(
+            'DMGetApplicationContext', [parent_dm, Byref(struct._C_symbol)]
+        )
+        get_local_vecs = petsc_call(
+            'DMCompositeGetLocalVectors',
+            [parent_dm] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets]
+        )
+        scatter = petsc_call(
+            'DMCompositeScatter',
+            [parent_dm, solver_objs['X_global']] +  [solver_objs['X_local_%s' % t.name] for t in targets]
+        )
+        get_local_is = petsc_call(
+            'DMCompositeGetLocalIS', [parent_dm, Byref(solver_objs['indexset']._C_symbol)]
+        )
 
         dim = solver_objs['indexset'].dim
         idxset = solver_objs['indexset']
         # TODO: extend to all submatrices not just block diagonal
         # TODO: maybe group all the submatrix calls together in a loop or separate function
         get_local_submats = [petsc_call('MatGetLocalSubMatrix', [solver_objs['Jac'], idxset.indexify().subs({dim: solver_objs['J%s%s' % (t.name, t.name)].row}), idxset.indexify().subs({dim: solver_objs['J%s%s' % (t.name, t.name)].col}), Byref(solver_objs['J%s%s' % (t.name, t.name)])]) for t in targets]
-        # get_local_submats = []
 
         set_ctx = [petsc_call('MatShellSetContext', [solver_objs['J%s%s' % (t.name, t.name)]] + [struct._C_symbol]) for t in targets]
 
@@ -611,12 +557,23 @@ class CallbackBuilder:
         ]
   
         restore_local_submats = [petsc_call('MatRestoreLocalSubMatrix', [solver_objs['Jac'], idxset.indexify().subs({dim: solver_objs['J%s%s' % (t.name, t.name)].row}), idxset.indexify().subs({dim: solver_objs['J%s%s' % (t.name, t.name)].col}), Byref(solver_objs['J%s%s' % (t.name, t.name)])]) for t in targets]
-        restore_local_vecs = petsc_call('DMCompositeRestoreLocalVectors', [parent_dm] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets])
+        
+        restore_local_vecs = petsc_call(
+            'DMCompositeRestoreLocalVectors',
+            [parent_dm] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets]
+        )
 
         mat_assembly_begin = petsc_call('MatAssemblyBegin', [solver_objs['Jac'], 'MAT_FINAL_ASSEMBLY'])
         mat_assembly_end = petsc_call('MatAssemblyEnd', [solver_objs['Jac'], 'MAT_FINAL_ASSEMBLY'])
 
-        body = [snes_get_dm, dm_get_app_context, get_local_vecs, scatter, get_local_is] + get_local_submats + set_ctx + matshell_set_op + restore_local_submats + [restore_local_vecs, mat_assembly_begin, mat_assembly_end]
+        # TODO: clean this up
+        body = [
+            snes_get_dm,
+            dm_get_app_context,
+            get_local_vecs,
+            scatter,
+            get_local_is
+        ] + get_local_submats + set_ctx + matshell_set_op + restore_local_submats + [restore_local_vecs, mat_assembly_begin, mat_assembly_end]
 
         body = CallableBody(
             List(body=body),
@@ -636,28 +593,37 @@ class CallbackBuilder:
         parent_dm = linsolve.parent_dm._rebuild(destroy=False)
         children_dms = [dm._rebuild(destroy=False) for dm in linsolve.children_dms]
 
-
         targets = linsolve.fielddata.targets
 
         # TODO: the callback dm doesn't have to be able to take in a body? re-think this
         struct = objs['struct']._rebuild(liveness='eager')
-        # struct = solver_objs['struct']
 
-        snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(parent_dm)])
-
-        dm_get_app_context = petsc_call('DMGetApplicationContext', [parent_dm, Byref(struct._C_symbol)])
-
-        get_entries = petsc_call('DMCompositeGetEntries', [parent_dm] + [Byref(dm) for dm in children_dms])
-
+        snes_get_dm = petsc_call(
+            'SNESGetDM', [solver_objs['snes'], Byref(parent_dm)]
+        )
+        dm_get_app_context = petsc_call(
+            'DMGetApplicationContext', [parent_dm, Byref(struct._C_symbol)]
+        )
+        get_entries = petsc_call(
+            'DMCompositeGetEntries', [parent_dm] + [Byref(dm) for dm in children_dms]
+        )
         local_info = [petsc_call('DMDAGetLocalInfo', [dm, Byref(dm.info)]) for dm in children_dms]
 
-        get_local_vecs_x = petsc_call('DMCompositeGetLocalVectors', [parent_dm] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets])
-
-        get_local_vecs_f = petsc_call('DMCompositeGetLocalVectors', [parent_dm] + [Byref(solver_objs['F_local_%s' % t.name]) for t in targets])
-
-        scatter_x = petsc_call('DMCompositeScatter', [parent_dm, solver_objs['X_global']] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets])
-
-        scatter_f = petsc_call('DMCompositeScatter', [parent_dm, solver_objs['F_global']] + [Byref(solver_objs['F_local_%s' % t.name]) for t in targets])
+        get_local_vecs_x = petsc_call(
+            'DMCompositeGetLocalVectors',
+            [parent_dm] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets]
+        )
+        get_local_vecs_f = petsc_call(
+            'DMCompositeGetLocalVectors', [parent_dm] + [Byref(solver_objs['F_local_%s' % t.name]) for t in targets]
+        )
+        scatter_x = petsc_call(
+            'DMCompositeScatter',
+            [parent_dm, solver_objs['X_global']] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets]
+        )
+        scatter_f = petsc_call(
+            'DMCompositeScatter',
+            [parent_dm, solver_objs['F_global']] + [Byref(solver_objs['F_local_%s' % t.name]) for t in targets]
+        )
 
         vec_get_array_x = []
         #NOTE: CHANGE ALL THE Y'S TO F'S IN THE FORMFUNCTION CALLBACKS, I THINK CAN LEAVE Y FOR THE MATVECS
@@ -677,9 +643,7 @@ class CallbackBuilder:
                 'VecGetArray', [solver_objs['F_local_%s'% name], Byref(y_formfunc._C_symbol)]
             ))
 
-        # TOOD: utilise the exisiting formfunc callbacks within matnest instead of creating new ones 
-
-        formfunc_calls = [petsc_call(callback.name, list(callback.parameters)) for callback in formfunc_callbacks]
+        formfunc_calls = [petsc_call(callback.name, [struct]) for callback in formfunc_callbacks]
 
         body = [snes_get_dm, dm_get_app_context, get_entries] + local_info + [get_local_vecs_x, get_local_vecs_f, scatter_x, scatter_f] + vec_get_array_x + vec_get_array_f + formfunc_calls
 
@@ -689,83 +653,41 @@ class CallbackBuilder:
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
-        residual_all_callback = PETScCallable(
+        formfunc_all = PETScCallable(
             self.sregistry.make_name(prefix='FormFunctionAll_'), body, retval=objs['err'],
             parameters=(
                 solver_objs['snes'], solver_objs['X_global'], solver_objs['F_global'], solver_objs['dummy']
             )
         )
-        return residual_all_callback
+        return formfunc_all
 
-    def make_formfunc_nest(self, fielddata, objs, solver_objs):
+    def make_formfunc(self, fielddata, objs, solver_objs):
         # Compile formfunc `eqns` into an IET via recursive compilation
         irs_formfunc, _ = self.rcompile(
             fielddata.formfuncs,
             options={'mpi': False}, sregistry=SymbolRegistry()
         )
-        body_formfunc = self.create_formfunc_body(fielddata,
-                                                  List(body=irs_formfunc.uiet.body),
-                                                  solver_objs, objs)
+
+        body_formfunc = CallableBody(
+            List(body=irs_formfunc.uiet.body),
+            init=(petsc_func_begin_user,),
+            retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
+        )
+        
+        # formfunc_callback = PETScCallable(
+        #     self.sregistry.make_name(prefix='FormFunction_'), body_formfunc,
+        #     retval=objs['err'],
+        #     parameters=(solver_objs['snes'], solver_objs['X_global'],
+        #                 solver_objs['Y_global'], solver_objs['dummy']),
+        #     target = fielddata.target
+        # )
 
         formfunc_callback = PETScCallable(
             self.sregistry.make_name(prefix='FormFunction_'), body_formfunc,
             retval=objs['err'],
-            parameters=(solver_objs['snes'], solver_objs['X_global'],
-                        solver_objs['Y_global'], solver_objs['dummy']),
-            target = fielddata.target
+            parameters=(solver_objs['snes'], solver_objs['X_global'], solver_objs['Y_global'], solver_objs['dummy']),
         )
         return formfunc_callback
-
-
-class NestedCallbackBuilder(CallbackBuilder):
-
-  def make_all_single(self, linsolve, objs, solver_objs):
-        matvec_callbacks = []
-        formfunc_callbacks = []
-        formrhs_callbacks = []
-
-        all_fielddata = linsolve.fielddata.field_data_list
-        for fielddata in all_fielddata:
-            matvec_callback, formfunc_callback, formrhs_callback = self.make_all(
-                fielddata, objs, solver_objs, nested=True
-            )
-            matvec_callbacks.append(matvec_callback)
-            formfunc_callbacks.append(formfunc_callback)
-            formrhs_callbacks.append(formrhs_callback)
-
-        form_jac_all = self.form_jacobian_all(linsolve, matvec_callbacks, objs, solver_objs)
-        self._efuncs[form_jac_all.name] = form_jac_all
-
-        form_func_all = self.form_function_all(linsolve, formfunc_callbacks, objs, solver_objs)
-        self._efuncs[form_func_all.name] = form_func_all
-
-        # TODO: change this to not use FormFunctionCallback but a jac one
-        snes_set_jac = petsc_call(
-            'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
-                                solver_objs['Jac'], FormFunctionCallback(form_jac_all.name, void, void), Null]
-        )
-
-        formfunc_operation1 = petsc_call(
-            'SNESSetFunction',
-            [solver_objs['snes'], Null,
-             FormFunctionCallback(formfunc_callbacks[0].name, void, void), Null]
-        )
-
-        formfunc_operation2 = petsc_call(
-            'SNESSetFunction',
-            [solver_objs['snes'], Null,
-             FormFunctionCallback(formfunc_callbacks[1].name, void, void), Null]
-        )
-
-        # TODO: should this be using the FormFunctionCallback? check
-        snes_set_function = petsc_call('SNESSetFunction', [solver_objs['snes'], Null, FormFunctionCallback(form_func_all.name, void, void), Null])
-
-        # TODO: fielddata nest should obvs be passed in here
-        runsolve = self.runsolve(
-            solver_objs, objs, formrhs_callbacks, fielddata)
-
-        calls = (snes_set_jac, snes_set_function, formfunc_operation1, formfunc_operation2)
-        return calls, runsolve
 
 
 def add_struct_params(iet):
