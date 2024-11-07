@@ -41,24 +41,21 @@ class CallbackBuilder:
         matvec_callback, formfunc_callback, formrhs_callback = self.make_all(
             linsolve.fielddata, objs, solver_objs
         )
-
         snes_set_jac = petsc_call(
             'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
                                 solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
         )
-
         matvec_operation = petsc_call(
             'MatShellSetOperation', [solver_objs['Jac'], 'MATOP_MULT',
                                      MatVecCallback(matvec_callback.name, void, void)]
         )
-
         formfunc_operation = petsc_call(
             'SNESSetFunction',
             [solver_objs['snes'], Null,
              FormFunctionCallback(formfunc_callback.name, void, void), Null]
         )
         runsolve = self.runsolve(
-            solver_objs, objs, formrhs_callback, linsolve.fielddata)
+            solver_objs, objs, [formrhs_callback], linsolve.fielddata)
 
         return (snes_set_jac, matvec_operation, formfunc_operation, BlankLine), runsolve
 
@@ -100,8 +97,8 @@ class CallbackBuilder:
         struct_params = add_struct_params(body)
         struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
 
-        y_matvec = fielddata.arrays['y_matvec']
-        x_matvec = fielddata.arrays['x_matvec']
+        y_matvec = solver_objs['y_matvec_%s' % target.name]
+        x_matvec = solver_objs['x_matvec_%s' % target.name]
 
         mat_get_dm = petsc_call('MatGetDM', [solver_objs['Jac'], Byref(dmda)])
 
@@ -113,14 +110,7 @@ class CallbackBuilder:
             'DMGetLocalVector', [dmda, Byref(solver_objs['X_local_%s'%target.name])]
         )
 
-        global_to_local_begin = petsc_call(
-            'DMGlobalToLocalBegin', [dmda, solver_objs['X_global'],
-                                     'INSERT_VALUES', solver_objs['X_local_%s'%target.name]]
-        )
-
-        global_to_local_end = petsc_call('DMGlobalToLocalEnd', [
-            dmda, solver_objs['X_global'], 'INSERT_VALUES', solver_objs['X_local_%s'%target.name]
-        ])
+        global_to_local = self.dm_global_to_local(dmda, solver_objs, target, prefix='X')
 
         dm_get_local_yvec = petsc_call(
             'DMGetLocalVector', [dmda, Byref(solver_objs['Y_local_%s'%target.name])]
@@ -146,13 +136,7 @@ class CallbackBuilder:
             'VecRestoreArray', [solver_objs['X_local_%s'%target.name], Byref(x_matvec._C_symbol)]
         )
 
-        dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
-            dmda, solver_objs['Y_local_%s'%target.name], 'INSERT_VALUES', solver_objs['Y_global']
-        ])
-
-        dm_local_to_global_end = petsc_call('DMLocalToGlobalEnd', [
-            dmda, solver_objs['Y_local_%s'%target.name], 'INSERT_VALUES', solver_objs['Y_global']
-        ])
+        dm_local_to_global = self.dm_local_to_global(dmda, solver_objs, target, prefix='Y')
 
         # TODO: Some of the calls are placed in the `stacks` argument of the
         # `CallableBody` to ensure that they precede the `cast` statements. The
@@ -165,16 +149,14 @@ class CallbackBuilder:
             body=body.body +
             (vec_restore_array_y,
              vec_restore_array_x,
-             dm_local_to_global_begin,
-             dm_local_to_global_end)
+             dm_local_to_global)
         )
 
         stacks = (
             mat_get_dm,
             dm_get_app_context,
             dm_get_local_xvec,
-            global_to_local_begin,
-            global_to_local_end,
+            global_to_local,
             dm_get_local_yvec,
             vec_get_array_y,
             vec_get_array_x,
@@ -228,8 +210,8 @@ class CallbackBuilder:
         struct_params = add_struct_params(body)
         struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
 
-        y_formfunc = fielddata.arrays['y_formfunc']
-        x_formfunc = fielddata.arrays['x_formfunc']
+        y_formfunc = solver_objs['y_formfunc_%s'% target.name]
+        x_formfunc = solver_objs['x_formfunc_%s'% target.name]
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
@@ -274,20 +256,13 @@ class CallbackBuilder:
             'VecRestoreArray', [solver_objs['X_local_%s'% target.name], Byref(x_formfunc._C_symbol)]
         )
 
-        dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
-            dmda, solver_objs['Y_local_%s'% target.name], 'INSERT_VALUES', solver_objs['Y_global']
-        ])
-
-        dm_local_to_global_end = petsc_call('DMLocalToGlobalEnd', [
-            dmda, solver_objs['Y_local_%s'% target.name], 'INSERT_VALUES', solver_objs['Y_global']
-        ])
+        dm_local_to_global = self.dm_local_to_global(dmda, solver_objs, target, prefix='Y')
 
         body_new = body._rebuild(
             body=body.body +
             (vec_restore_array_y,
              vec_restore_array_x,
-             dm_local_to_global_begin,
-             dm_local_to_global_end)
+             dm_local_to_global)
         )
 
         stacks = (
@@ -345,7 +320,7 @@ class CallbackBuilder:
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
-        b_arr = fielddata.arrays['b_tmp']
+        b_arr = solver_objs['b_tmp_%s'% target.name]
 
         vec_get_array = petsc_call(
             'VecGetArray', [solver_objs['b_local_%s'% target.name], Byref(b_arr._C_symbol)]
@@ -399,21 +374,18 @@ class CallbackBuilder:
         return formrhs_body
 
     def runsolve(self, solver_objs, objs, rhs_callbacks, fielddata):
-        target = fielddata.target
-
         dmda = fielddata.dmda
-
-        # TODO: clean this up i.e don't use [rhs_callbacks]
-        if not isinstance(rhs_callbacks, list):
-            rhs_callbacks = [rhs_callbacks]
+        try:
+            target = fielddata.target
+        except AttributeError:
+            target = fielddata.targets
 
         rhs_calls = tuple(petsc_call(callback.name, list(callback.parameters)) for callback in rhs_callbacks)
 
-        local_x = petsc_call('DMCreateLocalVector',
-                             [dmda, Byref(solver_objs['x_local_%s'% target.name])])
+        local_x = self.create_local_vecs(dmda, solver_objs, target, prefix='x')
 
         if any(i.is_Time for i in target.dimensions):
-            vec_replace_array = time_dep_replace(
+            vec_replace_array = replace_arrays(
                 injectsolve, solver_objs, objs, self.sregistry
             )
         else:
@@ -421,24 +393,15 @@ class CallbackBuilder:
             vec_replace_array = (petsc_call(
                 'VecReplaceArray', [solver_objs['x_local_%s'% target.name], field_from_ptr]
             ),)
-
-        dm_local_to_global_x = petsc_call(
-            'DMLocalToGlobal', [dmda, solver_objs['x_local_%s'% target.name], 'INSERT_VALUES',
-                                solver_objs['x_global']]
-        )
-
-        dm_local_to_global_b = petsc_call(
-            'DMLocalToGlobal', [dmda, solver_objs['b_local_%s'% target.name], 'INSERT_VALUES',
-                                solver_objs['b_global']]
-        )
+        
+        dm_local_to_global_x = self.dm_local_to_global(dmda, solver_objs, target, prefix='x')
+        dm_local_to_global_b = self.dm_local_to_global(dmda, solver_objs, target, prefix='b')
 
         snes_solve = petsc_call('SNESSolve', [
             solver_objs['snes'], solver_objs['b_global'], solver_objs['x_global']]
         )
 
-        dm_global_to_local_x = petsc_call('DMGlobalToLocal', [
-            dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local_%s'% target.name]]
-        )
+        dm_global_to_local_x = self.dm_global_to_local(dmda, solver_objs, target, prefix='x')
 
         return rhs_calls + (
             (local_x,)
@@ -449,32 +412,24 @@ class CallbackBuilder:
             dm_global_to_local_x
         )
 
-    def make_main_struct(self, solver_objs, objs):
-        struct_main = objs['struct']._rebuild(fields=filter_ordered(self.struct_params), liveness='lazy')
-        struct_callback = self.generate_struct_callback(struct_main, objs)
-        call_struct_callback = [petsc_call(struct_callback.name, [Byref(struct_main)])]
-        calls_set_app_ctx = [
-            petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
-            for i in objs['dmdas']
-        ]
-        calls = call_struct_callback + calls_set_app_ctx
-        self._efuncs[struct_callback.name] = struct_callback
-        return tuple(calls)
+    def dm_local_to_global(self, dmda, solver_objs, target, prefix):
+        local_to_global = petsc_call(
+            'DMLocalToGlobal', [dmda, solver_objs['%s_local_%s'% (prefix, target.name)],
+                                'INSERT_VALUES', solver_objs['%s_global'% prefix]]
+        )
+        return local_to_global
 
-    def generate_struct_callback(self, struct, objs):
-        body = [
-            DummyExpr(FieldFromPointer(i._C_symbol, struct), i._C_symbol)
-            for i in struct.fields if i not in struct.time_dim_fields
-        ]
-        struct_callback_body = CallableBody(
-            List(body=body), init=tuple([petsc_func_begin_user]),
-            retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
+    def dm_global_to_local(self, dmda, solver_objs, target, prefix):
+        global_to_local = petsc_call(
+            'DMGlobalToLocal', [dmda, solver_objs['%s_global'% prefix],
+                                'INSERT_VALUES', solver_objs['%s_local_%s'% (prefix, target.name)]]
         )
-        struct_callback = Callable(
-            'PopulateMatContext', struct_callback_body, objs['err'],
-            parameters=[struct]
-        )
-        return struct_callback
+        return global_to_local
+
+    def create_local_vecs(self, dmda, solver_objs, targets, prefix):
+        local_vec = petsc_call('DMCreateLocalVector',
+                             [dmda, Byref(solver_objs['%s_local_%s'% (prefix, targets.name)])])
+        return local_vec
 
 
 class NestedCallbackBuilder(CallbackBuilder):
@@ -498,7 +453,7 @@ class NestedCallbackBuilder(CallbackBuilder):
 
         self._efuncs.update({jac_all.name: jac_all, func_all.name: func_all})
 
-        # CREATE A JACFUNCTIONCALLBACK
+        # CREATE A FORMJACCALLBACK
         snes_set_jac = petsc_call(
             'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
                                 solver_objs['Jac'], FormFunctionCallback(jac_all.name, void, void), Null]
@@ -628,24 +583,39 @@ class NestedCallbackBuilder(CallbackBuilder):
         vec_get_array_x = []
         #NOTE: CHANGE ALL THE Y'S TO F'S IN THE FORMFUNCTION CALLBACKS, I THINK CAN LEAVE Y FOR THE MATVECS
         vec_get_array_f = []
+        vec_restore_array_x = []
+        vec_restore_array_f = []
 
         for fielddata in linsolve.fielddata.field_data_list:
             name = fielddata.target.name
-            x_formfunc = fielddata.arrays['x_formfunc']
+            x_formfunc = solver_objs['x_formfunc_%s'% name]
             # TODO: CHANGE THESE TO F'S
-            y_formfunc = fielddata.arrays['y_formfunc']
-
+            y_formfunc = solver_objs['y_formfunc_%s'% name]
             vec_get_array_x.append(petsc_call(
                 'VecGetArray', [solver_objs['X_local_%s'% name], Byref(x_formfunc._C_symbol)]
             ))
-
             vec_get_array_f.append(petsc_call(
                 'VecGetArray', [solver_objs['F_local_%s'% name], Byref(y_formfunc._C_symbol)]
             ))
+            vec_restore_array_x.append(petsc_call(
+                'VecRestoreArray', [solver_objs['X_local_%s'% name], Byref(x_formfunc._C_symbol)]
+            ))
+            vec_restore_array_f.append(petsc_call(
+                'VecRestoreArray', [solver_objs['F_local_%s'% name], Byref(y_formfunc._C_symbol)]
+            ))
 
-        formfunc_calls = [petsc_call(callback.name, [struct]) for callback in formfunc_callbacks]
+        formfunc_calls = [petsc_call(callback.name, list(callback.parameters)) for callback in formfunc_callbacks]
 
-        body = [snes_get_dm, dm_get_app_context, get_entries] + local_info + [get_local_vecs_x, get_local_vecs_f, scatter_x, scatter_f] + vec_get_array_x + vec_get_array_f + formfunc_calls
+        restore_local_vecs_x = petsc_call(
+            'DMCompositeRestoreLocalVectors',
+            [parent_dm] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets]
+        )
+        restore_local_vecs_f = petsc_call(
+            'DMCompositeRestoreLocalVectors',
+            [parent_dm] + [Byref(solver_objs['F_local_%s' % t.name]) for t in targets]
+        )
+        
+        body = [snes_get_dm, dm_get_app_context, get_entries] + local_info + [get_local_vecs_x, get_local_vecs_f, scatter_x, scatter_f] + vec_get_array_x + vec_get_array_f + formfunc_calls + vec_restore_array_x + vec_restore_array_f + [restore_local_vecs_x, restore_local_vecs_f]
 
         body = CallableBody(
             List(body=body),
@@ -662,6 +632,8 @@ class NestedCallbackBuilder(CallbackBuilder):
         return formfunc_all
 
     def make_formfunc(self, fielddata, objs, solver_objs):
+        target = fielddata.target
+        targets = solver_objs['targets']
         # Compile formfunc `eqns` into an IET via recursive compilation
         irs_formfunc, _ = self.rcompile(
             fielddata.formfuncs,
@@ -673,19 +645,13 @@ class NestedCallbackBuilder(CallbackBuilder):
             init=(petsc_func_begin_user,),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
-        
-        # formfunc_callback = PETScCallable(
-        #     self.sregistry.make_name(prefix='FormFunction_'), body_formfunc,
-        #     retval=objs['err'],
-        #     parameters=(solver_objs['snes'], solver_objs['X_global'],
-        #                 solver_objs['Y_global'], solver_objs['dummy']),
-        #     target = fielddata.target
-        # )
 
         formfunc_callback = PETScCallable(
             self.sregistry.make_name(prefix='FormFunction_'), body_formfunc,
             retval=objs['err'],
-            parameters=(solver_objs['snes'], solver_objs['X_global'], solver_objs['Y_global'], solver_objs['dummy']),
+            parameters=(objs['struct'], solver_objs['da_%s' % target.name].info,
+                        *(solver_objs['x_formfunc_%s' % t.name]._C_symbol for t in targets),
+                        solver_objs['y_formfunc_%s' % target.name]._C_symbol)
         )
         return formfunc_callback
 
@@ -699,8 +665,9 @@ def add_struct_params(iet):
     return fields
 
 
-def time_dep_replace(injectsolve, solver_objs, objs, sregistry):
+def replace_arrays(injectsolve, solver_objs, objs, sregistry):
     target = injectsolve.expr.rhs.fielddata.target
+    # from IPython import embed; embed()
     target_time = [
         i for i, d in zip(target.indices, target.dimensions) if d.is_Time
     ]

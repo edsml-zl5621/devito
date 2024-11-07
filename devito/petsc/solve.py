@@ -4,11 +4,7 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-<<<<<<< HEAD
-from devito.types import Eq, Symbol, SteppingDimension, TimeFunction
-=======
 from devito.types import Eq, Symbol, SteppingDimension, Function
->>>>>>> 8e0f7c5d5 (dsl: Add FieldDataNest for coupled problems)
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
@@ -80,9 +76,8 @@ def generate_field_solve(eqns, target, time_mapper):
     dmda = DM(
         name='da_%s' % target.name, liveness='eager', target=target
     )
-
     arrays = {
-        p: PETScArray(name='%s_%s' % (p, target.name),
+        '%s_%s' % (p, target.name): PETScArray(name='%s_%s' % (p, target.name),
                            dtype=target.dtype,
                            dimensions=target.space_dimensions,
                            shape=target.grid.shape,
@@ -97,29 +92,25 @@ def generate_field_solve(eqns, target, time_mapper):
     formfuncs = []
     formrhs = []
 
-    # eqns = as_tuple(eqns)
-    # funcs = retrieve_functions(eqns)
-    # time_mapper = generate_time_mapper(funcs)
-    # from IPython import embed; embed()
     for eq in eqns:
         b, F_target, targets = separate_eqn(eq, target)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
         matvecs.append(Eq(
-            arrays['y_matvec'],
-            F_target.subs(targets_to_arrays(arrays['x_matvec'], targets)),
+            arrays['y_matvec_%s' % target.name],
+            F_target.subs({target: arrays['x_matvec_%s' % target.name]}),
             subdomain=eq.subdomain
         ))
 
         formfuncs.append(Eq(
-            arrays['y_formfunc'],
-            F_target.subs(targets_to_arrays(arrays['x_formfunc'], targets)),
+            arrays['y_formfunc_%s' % target.name],
+            F_target.subs({target: arrays['x_formfunc_%s' % target.name]}),
             subdomain=eq.subdomain
         ))
 
         formrhs.append(Eq(
-            arrays['b_tmp'],
+            arrays['b_tmp_%s' % target.name],
             b,
             subdomain=eq.subdomain
         ))
