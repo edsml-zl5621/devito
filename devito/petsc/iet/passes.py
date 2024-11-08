@@ -1,13 +1,16 @@
 import cgen as c
 
-from devito.passes.iet.engine import iet_pass
+from devito.passes.iet.engine import iet_pass, timed_pass
 from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
                            DummyExpr, FindNodes, retrieve_iteration_tree,
-                           filter_iterations, CallableBody, Call, Callable)
+                           filter_iterations, CallableBody, Call, Callable,
+                           FindSymbols, Uxreplace)
 from devito.symbolics import Byref, Macro, FieldFromComposite, FieldFromPointer
+from devito.types import Temp, TimeDimension, ModuloDimension, LocalObject, ArrayObject
 from devito.petsc.types import (PetscMPIInt, Mat, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
-                                StartPtr, FieldDataNest, DMComposite, IS, SubMat)
+                                StartPtr, FieldDataNest, DMComposite, IS, SubMat, PETScArray,
+                                PETScObject, DummySymb)
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import NestedCallbackBuilder, CallbackBuilder
@@ -34,7 +37,9 @@ def lower_petsc(iet, **kwargs):
     core = make_core_petsc_calls(objs, **kwargs)
 
     # Shared between each solve
-    setup, efuncs, struct_params = [], [], []
+    # setup, efuncs, struct_params = [], [], []
+    setup = []
+    efuncs = {}
     subs = {}
 
     # Specific to each solve
@@ -67,18 +72,60 @@ def lower_petsc(iet, **kwargs):
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
 
-        efuncs.extend(builder.efuncs.values())
-        struct_params.extend(builder.struct_params)
+        # efuncs.extend(builder.efuncs.values())
+        # efuncs.extend(builder.efuncs.items())
+        efuncs.update(builder.efuncs)
+        # struct_params.extend(builder.struct_params)
 
     # Generate callback to populate main struct object
     # TODO: move all struct stuff into a single function
-    struct_main = objs['struct']._rebuild(fields=filter_ordered(struct_params))
-    struct_callback = generate_struct_callback(struct_main, objs)
-    efuncs.append(struct_callback)
-    struct_calls = make_struct_calls(struct_callback, struct_main, objs)
-    # TODO: clean this up
-    setup.extend(list(struct_calls))
+    ###########
+    ############
+    # struct_main = objs['struct']._rebuild(fields=filter_ordered(struct_params))
+    # struct_callback = generate_struct_callback(struct_main, objs)
+    # efuncs.append(struct_callback)
+    # struct_calls = make_struct_calls(struct_callback, struct_main, objs)
+    # # TODO: clean this up
+    # setup.extend(list(struct_calls))
+    ############
 
+
+    # from IPython import embed; embed()
+    struct_params = []
+    for efunc in efuncs.values():
+        struct_params.extend(add_struct_params(efunc))
+    struct_params.extend(add_struct_params(iet))
+    
+    struct_params = filter_ordered(struct_params)
+    # from IPython import embed; embed()
+
+    struct_main = petsc_struct(name='ctx', fields=struct_params)
+    struct_callback = generate_struct_callback(struct_main, objs)
+    efuncs.update({struct_callback.name: struct_callback})
+    struct_calls = make_struct_calls(struct_callback, struct_main, objs)
+    setup.extend(list(struct_calls))
+    
+    # from IPython import embed; embed()
+    # TODO: obvs clean this up....
+    # TODO: fix error: ValueError: not enough values to unpack (expected 2, got 1)
+    dummy_struct = DummySymb('dummystruct')
+    new_efuncs = {}
+    for key, efunc in efuncs.items():
+        subsss = {i._C_symbol: FieldFromPointer(i._C_symbol, struct_main) for i in struct_main.fields}
+        new = Uxreplace(subsss).visit(efunc)
+        neww = Uxreplace({dummy_struct: struct_main}).visit(new)
+        # efunc = efunc._rebuild(body=List(body=new))
+        # from IPython import embed; embed()
+        new_efuncs[key] = new
+
+    # from IPython import embed; embed()
+
+
+
+
+    # tmp_func(efuncs, struct=struct_main)
+
+    # from IPython import embed; embed()
     iet = Transformer(subs).visit(iet)
 
     # Assign time iterators 
@@ -91,9 +138,20 @@ def lower_petsc(iet, **kwargs):
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
-    metadata.update({'efuncs': tuple(efuncs)})
+    metadata.update({'efuncs': tuple(new_efuncs)})
 
     return iet, metadata
+
+@timed_pass
+def tmp_func(efuncs, struct=None, **kwargs):
+    # struct = kwargs.get('struct', None)
+    new_efuncs = {}
+    for key, efunc in efuncs.items():
+        subsss = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
+        new = Uxreplace(subsss).visit(efunc)
+        # from IPython import embed; embed()
+        new_efuncs[key] = new
+    return new_efuncs
 
 
 def init_petsc(**kwargs):
@@ -125,7 +183,7 @@ def build_core_objects(target, **kwargs):
         'err': PetscErrorCode(name='err'),
         'grid': target.grid,
         'dmdas': [],
-        'struct': petsc_struct(name='ctx')
+        # 'struct': petsc_struct(name='ctx')
     }
 
 
@@ -437,6 +495,15 @@ def make_struct_calls(struct_callback, struct_main, objs):
     ]
     calls = call_struct_callback + calls_set_app_ctx
     return tuple(calls)
+
+
+def add_struct_params(iet):
+    fields = [
+        i.function for i in FindSymbols('basics').visit(iet)
+        if not isinstance(i.function, (PETScArray, Temp, PETScObject))
+        and not (i.is_Dimension and not isinstance(i, (TimeDimension, ModuloDimension)))
+    ]
+    return fields
 
 
 Null = Macro('NULL')

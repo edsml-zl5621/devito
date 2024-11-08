@@ -7,9 +7,9 @@ from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
 from devito.symbolics import Byref, FieldFromPointer, Macro, cast_mapper
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
-from devito.types import ModuloDimension, TimeDimension, Temp, PointerArray
+from devito.types import ModuloDimension, TimeDimension, Temp, PointerArray, Symbol
 from devito.tools import filter_ordered, as_tuple
-from devito.petsc.types import PETScArray, FieldDataNest
+from devito.petsc.types import PETScArray, FieldDataNest, DummySymb
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
 from devito.petsc.iet.utils import petsc_call, petsc_struct
@@ -94,8 +94,9 @@ class CallbackBuilder:
 
         body = uxreplace_time(body, solver_objs, objs)
 
-        struct_params = add_struct_params(body)
-        struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
+        # struct_params = add_struct_params(body)
+        struct = DummySymb('dummystruct')
+        # struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
 
         y_matvec = solver_objs['y_matvec_%s' % target.name]
         x_matvec = solver_objs['x_matvec_%s' % target.name]
@@ -162,21 +163,22 @@ class CallbackBuilder:
         )
 
         # Dereference function data in struct
-        dereference_funcs = [Dereference(i, struct) for i in
-                             struct.fields if isinstance(i.function, AbstractFunction)]
+        # dereference_funcs = [Dereference(i, struct) for i in
+        #                      struct.fields if isinstance(i.function, AbstractFunction)]
 
         matvec_body = CallableBody(
             List(body=body),
             init=(petsc_func_begin_user,),
-            stacks=stacks+tuple(dereference_funcs),
+            # stacks=stacks+tuple(dereference_funcs),
+            stacks=stacks,
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
-        # Replace non-function data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
-        matvec_body = Uxreplace(subs).visit(matvec_body)
+        # # Replace non-function data with pointer to data in struct
+        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
+        # matvec_body = Uxreplace(subs).visit(matvec_body)
 
-        self._struct_params.extend(struct.fields)
+        # self._struct_params.extend(struct.fields)
 
         return matvec_body
 
@@ -205,8 +207,9 @@ class CallbackBuilder:
 
         body = uxreplace_time(body, solver_objs, objs)
 
-        struct_params = add_struct_params(body)
-        struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
+        # struct_params = add_struct_params(body)
+        # struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
+        struct = DummySymb('dummystruct')
 
         y_formfunc = solver_objs['y_formfunc_%s'% target.name]
         x_formfunc = solver_objs['x_formfunc_%s'% target.name]
@@ -275,20 +278,20 @@ class CallbackBuilder:
         )
 
         # Dereference function data in struct
-        dereference_funcs = [Dereference(i, struct) for i in
-                             struct.fields if isinstance(i.function, AbstractFunction)]
+        # dereference_funcs = [Dereference(i, struct) for i in
+        #                      struct.fields if isinstance(i.function, AbstractFunction)]
         formfunc_body = CallableBody(
             List(body=body),
             init=(petsc_func_begin_user,),
-            stacks=stacks+tuple(dereference_funcs),
+            # stacks=stacks+tuple(dereference_funcs),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
         
         # Replace non-function data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
-        formfunc_body = Uxreplace(subs).visit(formfunc_body)
+        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
+        # formfunc_body = Uxreplace(subs).visit(formfunc_body)
 
-        self._struct_params.extend(struct.fields)
+        # self._struct_params.extend(struct.fields)
 
         return formfunc_body
 
@@ -329,8 +332,9 @@ class CallbackBuilder:
 
         body = uxreplace_time(body, solver_objs, objs)
 
-        struct_params = add_struct_params(body)
-        struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
+        # struct_params = add_struct_params(body)
+        # struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
+        struct = DummySymb('dummystruct')
 
         dm_get_app_context = petsc_call(
             'DMGetApplicationContext', [dmda, Byref(struct._C_symbol)]
@@ -350,23 +354,24 @@ class CallbackBuilder:
         )
 
         # Dereference function data in struct
-        dereference_funcs = [Dereference(i, struct) for i in
-                             struct.fields if isinstance(i.function, AbstractFunction)]
+        # dereference_funcs = [Dereference(i, struct) for i in
+        #                      struct.fields if isinstance(i.function, AbstractFunction)]
 
         formrhs_body = CallableBody(
             List(body=[body]),
             init=(petsc_func_begin_user,),
-            stacks=stacks+tuple(dereference_funcs),
+            # stacks=stacks+tuple(dereference_funcs),
+            stacks=stacks,
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
         # Replace non-function data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
-                i in struct.fields if not isinstance(i.function, AbstractFunction)}
+        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
+        #         i in struct.fields if not isinstance(i.function, AbstractFunction)}
 
-        formrhs_body = Uxreplace(subs).visit(formrhs_body)
+        # formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
-        self._struct_params.extend(struct_params)
+        # self._struct_params.extend(struct_params)
 
         return formrhs_body
 
@@ -494,7 +499,9 @@ class NestedCallbackBuilder(CallbackBuilder):
 
         targets = linsolve.fielddata.target
 
-        struct = objs['struct']._rebuild(liveness='eager')
+        # TODO: only create this one and reuse
+        struct = DummySymb('dummystruct')
+        # struct = objs['struct']._rebuild(liveness='eager')
 
         snes_get_dm = petsc_call(
             'SNESGetDM', [solver_objs['snes'], Byref(parent_dm)]
@@ -569,7 +576,8 @@ class NestedCallbackBuilder(CallbackBuilder):
         targets = linsolve.fielddata.target
 
         # TODO: the callback dm doesn't have to be able to take in a body? re-think this
-        struct = objs['struct']._rebuild(liveness='eager')
+        # struct = objs['struct']._rebuild(liveness='eager')
+        struct = DummySymb('dummystruct')
 
         snes_get_dm = petsc_call(
             'SNESGetDM', [solver_objs['snes'], Byref(parent_dm)]
@@ -662,10 +670,11 @@ class NestedCallbackBuilder(CallbackBuilder):
                                                   List(body=irs_formfunc.uiet.body),
                                                   solver_objs, objs)
 
+        dummy = DummySymb('dummystruct')
         formfunc_callback = PETScCallable(
             self.sregistry.make_name(prefix='FormFunction_'), body_formfunc,
             retval=objs['err'],
-            parameters=(objs['struct'], solver_objs['da_%s' % target.name].info,
+            parameters=(dummy, solver_objs['da_%s' % target.name].info,
                         *(solver_objs['x_formfunc_%s' % t.name]._C_symbol for t in targets),
                         solver_objs['y_formfunc_%s' % target.name]._C_symbol)
         )
@@ -674,12 +683,13 @@ class NestedCallbackBuilder(CallbackBuilder):
     def create_formfunc_body(self, fielddata, body, solver_objs, objs):
         body = uxreplace_time(body, solver_objs, objs)
 
-        struct_params = add_struct_params(body)
-        struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
+        # struct_params = add_struct_params(body)
+        # struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
+        struct = DummySymb('dummystruct')
 
         # Dereference function data in struct
-        dereference_funcs = [Dereference(i, struct) for i in
-                             struct.fields if isinstance(i.function, AbstractFunction)]
+        # dereference_funcs = [Dereference(i, struct) for i in
+        #                      struct.fields if isinstance(i.function, AbstractFunction)]
         formfunc_body = CallableBody(
             List(body=body),
             init=(petsc_func_begin_user,),
@@ -687,10 +697,10 @@ class NestedCallbackBuilder(CallbackBuilder):
         )
         
         # Replace non-function data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
-        formfunc_body = Uxreplace(subs).visit(formfunc_body)
+        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
+        # formfunc_body = Uxreplace(subs).visit(formfunc_body)
 
-        self._struct_params.extend(struct.fields)
+        # self._struct_params.extend(struct.fields)
 
         return formfunc_body
 

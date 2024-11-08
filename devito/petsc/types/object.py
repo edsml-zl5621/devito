@@ -2,15 +2,17 @@ from ctypes import POINTER
 
 from devito.tools import CustomDtype, dtype_to_cstr, as_tuple
 from devito.types import (LocalObject, CCompositeObject, ModuloDimension,
-                          TimeDimension, ArrayObject, CustomDimension, Array)
+                          TimeDimension, ArrayObject, CustomDimension, Array, Symbol)
 from devito.types.array import ArrayBasic
 from devito.symbolics import Byref
 
 from devito.petsc.iet.utils import petsc_call
 from devito.petsc.types import PETScArray
 
+class PETScObject:
+    pass
 
-class BasicDM(LocalObject):
+class BasicDM(LocalObject, PETScObject):
     """
     PETSc Data Management object (DM).
     """
@@ -68,7 +70,7 @@ class DMComposite(DM):
         return self._targets
 
 
-class Mat(LocalObject):
+class Mat(LocalObject, PETScObject):
     """
     PETSc Matrix object (Mat).
     """
@@ -83,7 +85,7 @@ class Mat(LocalObject):
         return 1
 
 
-class SubMat(LocalObject):
+class SubMat(LocalObject, PETScObject):
     """
     SubMatrix of a PETSc Matrix of type MATNEST.
     """
@@ -103,14 +105,14 @@ class SubMat(LocalObject):
         return self._col
 
 
-class LocalVec(LocalObject):
+class LocalVec(LocalObject, PETScObject):
     """
     PETSc Vector object (Vec).
     """
     dtype = CustomDtype('Vec')
 
 
-class GlobalVec(LocalObject):
+class GlobalVec(LocalObject, PETScObject):
     """
     PETSc Vector object (Vec).
     """
@@ -125,7 +127,7 @@ class GlobalVec(LocalObject):
         return 0
 
 
-class PetscMPIInt(LocalObject):
+class PetscMPIInt(LocalObject, PETScObject):
     """
     PETSc datatype used to represent `int` parameters
     to MPI functions.
@@ -133,7 +135,7 @@ class PetscMPIInt(LocalObject):
     dtype = CustomDtype('PetscMPIInt')
 
 
-class PetscInt(LocalObject):
+class PetscInt(LocalObject, PETScObject):
     """
     PETSc datatype used to represent `int` parameters
     to PETSc functions.
@@ -141,7 +143,7 @@ class PetscInt(LocalObject):
     dtype = CustomDtype('PetscInt')
 
 
-class KSP(LocalObject):
+class KSP(LocalObject, PETScObject):
     """
     PETSc KSP : Linear Systems Solvers.
     Manages Krylov Methods.
@@ -149,7 +151,7 @@ class KSP(LocalObject):
     dtype = CustomDtype('KSP')
 
 
-class SNES(LocalObject):
+class SNES(LocalObject, PETScObject):
     """
     PETSc SNES : Non-Linear Systems Solvers.
     """
@@ -164,14 +166,14 @@ class SNES(LocalObject):
         return 3
 
 
-class PC(LocalObject):
+class PC(LocalObject, PETScObject):
     """
     PETSc object that manages all preconditioners (PC).
     """
     dtype = CustomDtype('PC')
 
 
-class KSPConvergedReason(LocalObject):
+class KSPConvergedReason(LocalObject, PETScObject):
     """
     PETSc object - reason a Krylov method was determined
     to have converged or diverged.
@@ -179,7 +181,7 @@ class KSPConvergedReason(LocalObject):
     dtype = CustomDtype('KSPConvergedReason')
 
 
-class DMDALocalInfo(LocalObject):
+class DMDALocalInfo(LocalObject, PETScObject):
     """
     PETSc object - C struct containing information
     about the local grid.
@@ -187,7 +189,7 @@ class DMDALocalInfo(LocalObject):
     dtype = CustomDtype('DMDALocalInfo')
 
 
-class PetscErrorCode(LocalObject):
+class PetscErrorCode(LocalObject, PETScObject):
     """
     PETSc datatype used to return PETSc error codes.
     https://petsc.org/release/manualpages/Sys/PetscErrorCode/
@@ -195,11 +197,11 @@ class PetscErrorCode(LocalObject):
     dtype = CustomDtype('PetscErrorCode')
 
 
-class DummyArg(LocalObject):
+class DummyArg(LocalObject, PETScObject):
     dtype = CustomDtype('void', modifier='*')
 
 
-class IS(ArrayObject):
+class IS(ArrayObject, PETScObject):
     """
     Index set object used for efficient indexing into vectors and matrices.
     https://petsc.org/release/manualpages/IS/IS/
@@ -250,7 +252,7 @@ class IS(ArrayObject):
         return destroy_calls
 
 
-class PETScStruct(CCompositeObject):
+class PETScStruct(CCompositeObject, PETScObject):
 
     __rargs__ = ('name', 'pname', 'fields')
 
@@ -276,7 +278,11 @@ class PETScStruct(CCompositeObject):
     _C_modifier = ' *'
 
 
-class StartPtr(LocalObject):
+class DummySymb(Symbol, PETScObject):
+    pass
+
+
+class StartPtr(LocalObject, PETScObject):
     def __init__(self, name, dtype):
         super().__init__(name=name)
         self.dtype = CustomDtype(dtype_to_cstr(dtype), modifier=' *')
