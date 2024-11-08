@@ -80,7 +80,7 @@ def lower_petsc(iet, **kwargs):
     setup.extend(list(struct_calls))
 
     iet = Transformer(subs).visit(iet)
-    
+
     # Assign time iterators 
     iet = assign_time_iters(iet, struct_main)
 
@@ -179,7 +179,6 @@ class ObjectBuilder:
             'pc': PC(sreg.make_name(prefix='pc_')),
             'snes': SNES(sreg.make_name(prefix='snes_')),
             'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
-            'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
             'true_dims': retrieve_time_dims(iters),
             'x_global': GlobalVec(sreg.make_name(prefix='x_global_')),
             'b_global': GlobalVec(sreg.make_name(prefix='b_global_')),
@@ -211,6 +210,7 @@ class ObjectBuilder:
             'Y_local_%s' % name: LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
             'F_local_%s' % name: LocalVec(sreg.make_name(prefix='F_local_'), liveness='eager'),
             'start_ptr_%s' % name: StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
+            'localsize_%s' % name: PetscInt(sreg.make_name(prefix='localsize_')),
         }
         field_objs.update(fielddata.arrays)
         field_objs.update({fielddata.dmda.name: fielddata.dmda})
@@ -221,7 +221,7 @@ class NestedObjectBuilder(ObjectBuilder):
 
     def all_field_objs(self, fielddata):
         objs = {}
-        targets = fielddata.targets 
+        targets = fielddata.target
         sreg = self.sregistry
 
         for field_data in fielddata.field_data_list:

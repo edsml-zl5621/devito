@@ -121,7 +121,7 @@ class FieldDataNest(FieldData):
     pass
 
     @property
-    def targets(self):
+    def target(self):
         return tuple(field_data.target for field_data in self.field_data_list)
 
 
