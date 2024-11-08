@@ -278,7 +278,7 @@ class PETScStruct(CCompositeObject, PETScObject):
     _C_modifier = ' *'
 
 
-class DummySymb(Symbol, PETScObject):
+class DummyStruct(PETScStruct):
     pass
 
 
