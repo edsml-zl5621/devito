@@ -38,7 +38,7 @@ def lower_petsc(iet, **kwargs):
 
     # Shared between each solve
     # setup, efuncs, struct_params = [], [], []
-    setup = []
+    setup, struct_params = [], []
     efuncs = {}
     subs = {}
 
@@ -75,7 +75,8 @@ def lower_petsc(iet, **kwargs):
         # efuncs.extend(builder.efuncs.values())
         # efuncs.extend(builder.efuncs.items())
         efuncs.update(builder.efuncs)
-        # struct_params.extend(builder.struct_params)
+        # from IPython import embed; embed()
+        struct_params.extend(builder.struct_params)
 
     # Generate callback to populate main struct object
     # TODO: move all struct stuff into a single function
@@ -99,9 +100,7 @@ def lower_petsc(iet, **kwargs):
     # struct_params = filter_ordered(struct_params)
     # from IPython import embed; embed()
 
-    struct = petsc_struct(name='ctx', fields=filter_ordered(builder.struct_params))
-    # from IPython import embed; embed()
-    # struct_main = petsc_struct(name='ctx', fields=builder.struct_params)
+    struct = petsc_struct(name='ctx', fields=filter_ordered(struct_params))
     struct_callback = generate_struct_callback(struct, objs)
     # efuncs.update({struct_callback.name: struct_callback})
     struct_calls = make_struct_calls(struct_callback, struct, objs)
@@ -116,7 +115,7 @@ def lower_petsc(iet, **kwargs):
     # struct = petsc_struct_dummy(name='ctx')
     # from IPython import embed; embed()
     dummy_struct = objs['dummystruct']
-    dummy_struct_new = dummy_struct._rebuild(fields=filter_ordered(builder.struct_params))
+    dummy_struct_new = dummy_struct._rebuild(fields=filter_ordered(struct_params))
 
     new_efuncs = {}
     for key, efunc in efuncs.items():
@@ -182,7 +181,8 @@ def build_core_objects(target, **kwargs):
         'err': PetscErrorCode(name='err'),
         'grid': target.grid,
         'dmdas': [],
-        'dummystruct': petsc_struct_dummy('ctx')
+        'struct': petsc_struct('ctx'),
+        'dummystruct': petsc_struct_dummy('ctxd')
     }
 
 
@@ -231,7 +231,8 @@ class ObjectBuilder:
         sreg = self.sregistry
         # TODO: change y to F etc
         solver_objs = {
-            'Jac': Mat(sreg.make_name(prefix='J_')),
+            'J': Mat(sreg.make_name(prefix='J_')),
+            'B': Mat(sreg.make_name(prefix='B_')),
             'ksp': KSP(sreg.make_name(prefix='ksp_')),
             'pc': PC(sreg.make_name(prefix='pc_')),
             'snes': SNES(sreg.make_name(prefix='snes_')),
@@ -286,7 +287,7 @@ class NestedObjectBuilder(ObjectBuilder):
 
         sub_mats = {
             # submatrices
-            'J%s%s' % (t1.name, t2.name): SubMat(name='J%s%s' % (t1.name, t2.name), row=i, col=j)
+            'B%s%s' % (t1.name, t2.name): SubMat(name='B%s%s' % (t1.name, t2.name), row=i, col=j)
             for i, t1 in enumerate(targets)
             for j, t2 in enumerate(targets)
         }
@@ -320,7 +321,7 @@ class SetupDM:
 
         # TODO: change name..children maybe odd?>
         children_dm_calls = self.setup_children(children_dms, objs)
-        parent_dm_calls = self.setup_parent(parent_dm, objs)
+        parent_dm_calls = self.setup_parent(parent_dm, children_dms, objs)
         return children_dm_calls + parent_dm_calls
 
     def setup_children(self, children_dms, objs):
@@ -332,16 +333,16 @@ class SetupDM:
             calls.append(BlankLine)
         return tuple(calls)
 
-    def setup_parent(self, parent_dm, objs):
+    def setup_parent(self, parent_dm, children_dms, objs):
         return ()
 
 
 class NestedSetupDM(SetupDM):
 
-    def setup_parent(self, parent_dm, objs):
+    def setup_parent(self, parent_dm, children_dms, objs):
         calls = []
         calls.append(petsc_call('DMCompositeCreate', [objs['comm'], Byref(parent_dm)]))
-        calls.extend([petsc_call('DMCompositeAddDM', [parent_dm, child]) for child in objs['dmdas']])
+        calls.extend([petsc_call('DMCompositeAddDM', [parent_dm, child]) for child in children_dms])
         calls.append(petsc_call('DMSetMatType', [parent_dm, 'MATNEST']))
         calls.append(BlankLine)
         return tuple(calls)
@@ -357,7 +358,7 @@ class SetupSolver:
 
         snes_set_dm = petsc_call('SNESSetDM', [solver_objs['snes'], dm])
 
-        create_matrix = petsc_call('DMCreateMatrix', [dm, Byref(solver_objs['Jac'])])
+        create_matrix = petsc_call('DMCreateMatrix', [dm, Byref(solver_objs['J'])])
 
         # NOTE: Assumming all solves are linear for now.
         snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
