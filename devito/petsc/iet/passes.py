@@ -45,7 +45,9 @@ def lower_petsc(iet, **kwargs):
     # Specific to each solve
     for iters, (injectsolve,) in injectsolve_mapper.items():
         linsolve = injectsolve.expr.rhs
-        objs['dmdas'].append(linsolve.parent_dm)
+        # from IPython import embed; embed()
+        # objs['dmdas'].append(linsolve.dms)
+        objs['dmdas'].extend(linsolve.dms)
 
         sreg = kwargs['sregistry']
         ObjBuilder, CBBuilder, SolverSetup, DMSetup = get_builder_classes(linsolve)
@@ -125,7 +127,7 @@ def lower_petsc(iet, **kwargs):
     new_efuncs.update({struct_callback.name: struct_callback})
 
     iet = Transformer(subs).visit(iet)
-
+    # from IPython import embed; embed()
     # Assign time iterators 
     iet = assign_time_iters(iet, struct)
 
@@ -140,16 +142,16 @@ def lower_petsc(iet, **kwargs):
 
     return iet, metadata
 
-@timed_pass
-def tmp_func(efuncs, struct=None, **kwargs):
-    # struct = kwargs.get('struct', None)
-    new_efuncs = {}
-    for key, efunc in efuncs.items():
-        subsss = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
-        new = Uxreplace(subsss).visit(efunc)
-        # from IPython import embed; embed()
-        new_efuncs[key] = new
-    return new_efuncs
+# @timed_pass
+# def tmp_func(efuncs, struct=None, **kwargs):
+#     # struct = kwargs.get('struct', None)
+#     new_efuncs = {}
+#     for key, efunc in efuncs.items():
+#         subsss = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
+#         new = Uxreplace(subsss).visit(efunc)
+#         # from IPython import embed; embed()
+#         new_efuncs[key] = new
+#     return new_efuncs
 
 
 def init_petsc(**kwargs):

@@ -115,7 +115,8 @@ class CallbackBuilder:
             'DMGetLocalVector', [dmda, Byref(solver_objs['X_local_%s'%target.name])]
         )
 
-        global_to_local = self.dm_global_to_local(dmda, solver_objs, as_tuple(target), prefix='X')
+        # global_to_local = self.dm_global_to_local(dmda, solver_objs, as_tuple(target), prefix='X')
+        global_to_local = as_tuple(petsc_call('DMGlobalToLocal', [dmda, solver_objs['X_global'], 'INSERT_VALUES', solver_objs['X_local_%s'%target.name]]))
 
         dm_get_local_yvec = petsc_call(
             'DMGetLocalVector', [dmda, Byref(solver_objs['Y_local_%s'%target.name])]
@@ -141,7 +142,8 @@ class CallbackBuilder:
             'VecRestoreArray', [solver_objs['X_local_%s'%target.name], Byref(x_matvec._C_symbol)]
         )
 
-        dm_local_to_global = self.dm_local_to_global(dmda, solver_objs, as_tuple(target), prefix='Y')
+        # dm_local_to_global = self.dm_local_to_global(dmda, solver_objs, as_tuple(target), prefix='Y')
+        dm_local_to_global = as_tuple(petsc_call('DMLocalToGlobal', [dmda, solver_objs['Y_local_%s'%target.name], 'INSERT_VALUES', solver_objs['Y_global']]))
 
         # TODO: Some of the calls are placed in the `stacks` argument of the
         # `CallableBody` to ensure that they precede the `cast` statements. The
@@ -313,7 +315,7 @@ class CallbackBuilder:
         formrhs_callback = PETScCallable(
             self.sregistry.make_name(prefix='FormRHS_'), body_formrhs, retval=objs['err'],
             parameters=(
-                objs['dummystruct'], dmda.info, solver_objs['b_local_%s'% target.name],
+                dmda, solver_objs['b_local_%s'% target.name],
             ),
             target = fielddata.target
         )
@@ -321,10 +323,12 @@ class CallbackBuilder:
         return formrhs_callback
 
     def create_formrhs_body(self, fielddata, body, solver_objs, objs):
-        dmda = fielddata.dmda._rebuild(destroy=False)
+        # dmda = fielddata.dmda._rebuild(destroy=False)
+        dmda = fielddata.dmda
         target = fielddata.target
+        struct = objs['dummystruct']
 
-        snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
+        dm_get_app_ctx = petsc_call('DMGetApplicationContext', [dmda, Byref(struct._C_symbol)])
 
         b_arr = solver_objs['b_tmp_%s'% target.name]
 
@@ -332,9 +336,9 @@ class CallbackBuilder:
             'VecGetArray', [solver_objs['b_local_%s'% target.name], Byref(b_arr._C_symbol)]
         )
 
-        # dm_get_local_info = petsc_call(
-        #     'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
-        # )
+        dm_get_local_info = petsc_call(
+            'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
+        )
 
         body = uxreplace_time(body, solver_objs, objs)
 
@@ -346,7 +350,7 @@ class CallbackBuilder:
         # struct = solver_objs['dummystruct']
         # from IPython import embed; embed()
         # struct = objs['dummystruct']
-        struct = objs['dummystruct']
+        # struct = objs['dummystruct']
 
         # dm_get_app_context = petsc_call(
         #     'DMGetApplicationContext', [dmda, Byref(struct._C_symbol)]
@@ -359,29 +363,28 @@ class CallbackBuilder:
         body = body._rebuild(body=body.body + (vec_restore_array,))
 
         stacks = (
-            # snes_get_dm,
-            # dm_get_app_context,
+            dm_get_app_ctx,
             vec_get_array,
-            # dm_get_local_info
+            dm_get_local_info
         )
 
         # Dereference function data in struct
-        # dereference_funcs = [Dereference(i, struct) for i in
-        #                      struct_params if isinstance(i.function, AbstractFunction)]
+        dereference_funcs = [Dereference(i, struct) for i in
+                             struct_params if isinstance(i.function, AbstractFunction)]
 
         formrhs_body = CallableBody(
             List(body=[body]),
             init=(petsc_func_begin_user,),
-            # stacks=stacks+tuple(dereference_funcs),
-            stacks=stacks,
+            stacks=stacks+tuple(dereference_funcs),
+            # stacks=stacks,
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
         # Replace non-function data with pointer to data in struct
-        # subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
-        #         i in struct_params if not isinstance(i.function, AbstractFunction)}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
+                i in struct_params if not isinstance(i.function, AbstractFunction)}
 
-        # formrhs_body = Uxreplace(subs).visit(formrhs_body)
+        formrhs_body = Uxreplace(subs).visit(formrhs_body)
         # from IPython import embed; embed()
         self._struct_params.extend(struct_params)
 
@@ -393,11 +396,14 @@ class CallbackBuilder:
         targets = as_tuple(fielddata.target)
         callbacks = as_tuple(rhs_callbacks)
 
-        struct = objs['struct']
-        rhs_calls = tuple(
-            petsc_call(c.name, [Byref(p) if isinstance(p, CompositeObject) else p for p in c.parameters])
-            for c in callbacks
-        )
+        # struct = objs['struct']
+        struct = objs['dummystruct']
+        # rhs_calls = tuple(
+        #     petsc_call(c.name, [Byref(p) if isinstance(p, CompositeObject) else p for p in c.parameters])
+        #     for c in callbacks
+        # )
+        rhs_calls = tuple(petsc_call(c.name, c.parameters) for c in callbacks)
+
         # rhs_calls = as_tuple
         # subs = {objs['dummystruct']._C_symbol: struct._C_symbol}
         # rhs_calls = Uxreplace(subs).visit(rhs_calls)
@@ -537,6 +543,7 @@ class NestedCallbackBuilder(CallbackBuilder):
             'DMCompositeGetLocalVectors',
             [parent_dm] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets]
         )
+        # TODO: MAKE USE OF HELPER FUNC
         scatter = petsc_call(
             'DMCompositeScatter',
             [parent_dm, solver_objs['X_global']] +  [solver_objs['X_local_%s' % t.name] for t in targets]
@@ -627,11 +634,11 @@ class NestedCallbackBuilder(CallbackBuilder):
         )
         scatter_x = petsc_call(
             'DMCompositeScatter',
-            [parent_dm, solver_objs['X_global']] + [Byref(solver_objs['X_local_%s' % t.name]) for t in targets]
+            [parent_dm, solver_objs['X_global']] + [solver_objs['X_local_%s' % t.name] for t in targets]
         )
         scatter_f = petsc_call(
             'DMCompositeScatter',
-            [parent_dm, solver_objs['F_global']] + [Byref(solver_objs['F_local_%s' % t.name]) for t in targets]
+            [parent_dm, solver_objs['F_global']] + [solver_objs['F_local_%s' % t.name] for t in targets]
         )
 
         vec_get_array_x = []
@@ -747,7 +754,7 @@ class NestedCallbackBuilder(CallbackBuilder):
 
     def dm_global_to_local(self, dmda, solver_objs, targets, prefix):
         global_to_local = petsc_call('DMCompositeScatter',
-            [dmda, solver_objs['%s_global'% prefix], 'INSERT_VALUES'] + [solver_objs['%s_local_%s'% (prefix, t.name)] for t in targets])
+            [dmda, solver_objs['%s_global'% prefix]] + [solver_objs['%s_local_%s'% (prefix, t.name)] for t in targets])
         return as_tuple(global_to_local)
 
     def create_local_vecs(self, dmda, solver_objs, targets, prefix):
