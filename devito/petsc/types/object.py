@@ -252,6 +252,36 @@ class IS(ArrayObject, PETScObject):
         return destroy_calls
 
 
+# class PETScStruct(CCompositeObject, PETScObject):
+
+#     __rargs__ = ('name', 'pname', 'fields')
+
+#     def __init__(self, name, pname, fields, liveness='lazy'):
+#         pfields = [(i._C_name, i._C_ctype) for i in fields]
+#         super().__init__(name, pname, pfields, liveness)
+#         self._fields = fields
+
+#     @property
+#     def fields(self):
+#         return self._fields
+
+#     @property
+#     def time_dim_fields(self):
+#         return [f for f in self.fields
+#                 if isinstance(f, (ModuloDimension, TimeDimension))]
+
+#     # @property
+#     # def _C_ctype(self):
+#     #     return POINTER(self.dtype) if self.liveness == \
+#     #         'eager' else self.dtype
+
+#     # @property
+#     # def _C_ctype(self):
+#     #     return self.dtype._type_
+
+#     # _C_modifier = ' *'
+
+
 class PETScStruct(CCompositeObject, PETScObject):
 
     __rargs__ = ('name', 'pname', 'fields')
@@ -270,16 +300,17 @@ class PETScStruct(CCompositeObject, PETScObject):
         return [f for f in self.fields
                 if isinstance(f, (ModuloDimension, TimeDimension))]
 
-    @property
-    def _C_ctype(self):
-        return POINTER(self.dtype) if self.liveness == \
-            'eager' else self.dtype
-
     _C_modifier = ' *'
 
 
 class DummyStruct(PETScStruct):
-    pass
+    @property
+    def _C_ctype(self):
+        return POINTER(self.dtype)
+
+    _C_modifier = ''
+
+    
 
 
 class StartPtr(LocalObject, PETScObject):

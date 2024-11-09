@@ -50,6 +50,15 @@ class CtypesFactory:
             dtype = POINTER(type(pname, (Structure,), {'_fields_': pfields}))
             return cls.cache.setdefault(key, dtype)
 
+    @classmethod
+    def generate2(cls, pname, pfields):
+        key = (pname, tuple(pfields))
+        try:
+            return cls.cache[key]
+        except KeyError:
+            dtype = type(pname, (Structure,), {'_fields_': pfields})
+            return cls.cache.setdefault(key, dtype)
+
 
 class HierarchyLayer:
 

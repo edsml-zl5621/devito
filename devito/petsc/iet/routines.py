@@ -181,7 +181,7 @@ class CallbackBuilder:
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct_params}
         matvec_body = Uxreplace(subs).visit(matvec_body)
 
-        # self._struct_params.extend(struct_params)
+        self._struct_params.extend(struct_params)
 
         return matvec_body
 
@@ -211,10 +211,6 @@ class CallbackBuilder:
         body = uxreplace_time(body, solver_objs, objs)
 
         struct_params = add_struct_params(body)
-        # struct = objs['struct']._rebuild(liveness='eager', fields=struct_params)
-        # struct = DummyStruct(name='dummystruct', pname='Matctx')
-        # struct = petsc_struct_dummy('dummystruct')
-        # struct = solver_objs['dummystruct']
         struct = objs['dummystruct']
 
         y_formfunc = solver_objs['y_formfunc_%s'% target.name]
@@ -298,7 +294,7 @@ class CallbackBuilder:
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct_params}
         formfunc_body = Uxreplace(subs).visit(formfunc_body)
-        # from IPython import embed; embed()
+
         self._struct_params.extend(struct_params)
 
         return formfunc_body
@@ -383,7 +379,7 @@ class CallbackBuilder:
 
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
         # from IPython import embed; embed()
-        # self._struct_params.extend(struct_params)
+        self._struct_params.extend(struct_params)
 
         return formrhs_body
 
@@ -728,7 +724,7 @@ class NestedCallbackBuilder(CallbackBuilder):
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct_params}
         formfunc_body = Uxreplace(subs).visit(formfunc_body)
         # from IPython import embed; embed()
-        # self._struct_params.extend(struct_params)
+        self._struct_params.extend(struct_params)
 
         return formfunc_body
 

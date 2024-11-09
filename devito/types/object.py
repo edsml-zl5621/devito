@@ -242,19 +242,65 @@ class LocalObject(AbstractObject, LocalType):
 
 
 
-class CCompositeObject(CompositeObject, LocalType):
+# class CCompositeObject(CompositeObject, LocalType):
 
+#     """
+#     Object with composite type (e.g., a C struct) defined in C.
+#     """
+
+#     __rargs__ = ('name', 'pname', 'pfields')
+
+#     def __init__(self, name, pname, pfields, liveness='lazy'):
+#         super().__init__(name, pname, pfields)
+#         assert liveness in ['eager', 'lazy']
+#         self._liveness = liveness
+
+#     # @property
+#     # def dtype(self):
+#     #     return self._dtype._type_
+
+
+
+# class CCompositeObject(Object, LocalType):
+
+#     """
+#     Object with composite type (e.g., a C struct) defined in C.
+#     """
+
+#     __rargs__ = ('name', 'pname', 'pfields')
+
+#     def __init__(self, name, pname, pfields, liveness='lazy'):
+#         dtype = CtypesFactory.generate2(pname, pfields)
+#         super().__init__(name, dtype)
+#         self._pname = pname
+#         assert liveness in ['eager', 'lazy']
+#         self._liveness = liveness
+
+#     @property
+#     def pfields(self):
+#         return tuple(self.dtype._fields_)
+
+#     @property
+#     def pname(self):
+#         return self._pname
+
+#     @property
+#     def fields(self):
+#         return [i for i, _ in self.pfields]
+
+
+
+class CCompositeObject(CompositeObject, LocalType):
     """
     Object with composite type (e.g., a C struct) defined in C.
     """
 
-    __rargs__ = ('name', 'pname', 'pfields')
-
     def __init__(self, name, pname, pfields, liveness='lazy'):
+        # Use generate2 for C-defined composite objects
+        dtype = CtypesFactory.generate2(pname, pfields)
         super().__init__(name, pname, pfields)
         assert liveness in ['eager', 'lazy']
         self._liveness = liveness
 
-    @property
-    def dtype(self):
-        return self._dtype._type_
+    def __value_setup__(self, dtype, value):
+        return None
