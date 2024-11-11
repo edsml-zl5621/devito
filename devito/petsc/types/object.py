@@ -303,7 +303,7 @@ class PETScStruct(CCompositeObject, PETScObject):
     _C_modifier = ' *'
 
 
-class DummyStruct(PETScStruct):
+class CallbackStruct(PETScStruct):
     @property
     def _C_ctype(self):
         return POINTER(self.dtype)

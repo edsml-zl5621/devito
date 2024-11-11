@@ -41,7 +41,6 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
         return [inject_solve]
     # NEST
     else:
-        # from IPython import embed; embed()
         # TODO : improve this, probs move whole matnest bit into separate function
         combined_eqns = [item for sublist in eqns_targets.values() for item in sublist]
         funcs = retrieve_functions(combined_eqns)
@@ -93,29 +92,30 @@ def generate_field_solve(eqns, target, time_mapper):
     formrhs = []
 
     for eq in eqns:
-        b, F_target, targets = separate_eqn(eq, target)
+        b, F_target = separate_eqn(eq, target)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
-        matvecs.append(Eq(
+        matvec = Eq(
             arrays['y_matvec_%s' % target.name],
             F_target.subs({target: arrays['x_matvec_%s' % target.name]}),
             subdomain=eq.subdomain
-        ))
+        )
+        matvecs.append(matvec.subs(time_mapper))
 
-        formfuncs.append(Eq(
+        formfunc = Eq(
             arrays['y_formfunc_%s' % target.name],
             F_target.subs({target: arrays['x_formfunc_%s' % target.name]}),
             subdomain=eq.subdomain
-        ))
+        )
+        formfuncs.append(formfunc.subs(time_mapper))
 
         formrhs.append(Eq(
             arrays['b_tmp_%s' % target.name],
-            b,
+            b.subs(time_mapper),
             subdomain=eq.subdomain
         ))
 
-    # TODO: Add corresponding submatrix as an argument
     return FieldData(
         target=target,
         matvecs=matvecs,

@@ -10,11 +10,11 @@ from devito.types import Temp, TimeDimension, ModuloDimension, LocalObject, Arra
 from devito.petsc.types import (PetscMPIInt, Mat, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
                                 StartPtr, FieldDataNest, DMComposite, IS, SubMat, PETScArray,
-                                PETScObject)
+                                PETScStruct, CallbackStruct)
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import NestedCallbackBuilder, CallbackBuilder
-from devito.petsc.iet.utils import petsc_call, petsc_call_mpi, petsc_struct, petsc_struct_dummy
+from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
 from devito.tools import filter_ordered, CustomDtype, dtype_to_ctype
 
 
@@ -37,10 +37,8 @@ def lower_petsc(iet, **kwargs):
     core = make_core_petsc_calls(objs, **kwargs)
 
     # Shared between each solve
-    # setup, efuncs, struct_params = [], [], []
     setup, struct_params = [], []
-    efuncs = {}
-    subs = {}
+    efuncs, subs = {}, {}
 
     # Specific to each solve
     for iters, (injectsolve,) in injectsolve_mapper.items():
@@ -72,60 +70,21 @@ def lower_petsc(iet, **kwargs):
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
 
-        # efuncs.extend(builder.efuncs.values())
-        # efuncs.extend(builder.efuncs.items())
         efuncs.update(builder.efuncs)
-        # from IPython import embed; embed()
         struct_params.extend(builder.struct_params)
-
-    # Generate callback to populate main struct object
-    # TODO: move all struct stuff into a single function
-    ###########
-    ############
-    # struct_main = objs['struct']._rebuild(fields=filter_ordered(struct_params))
-    # struct_callback = generate_struct_callback(struct_main, objs)
-    # efuncs.append(struct_callback)
-    # struct_calls = make_struct_calls(struct_callback, struct_main, objs)
-    # # TODO: clean this up
-    # setup.extend(list(struct_calls))
-    ############
-
-
-    # from IPython import embed; embed()
-    # struct_params = []
-    # for efunc in efuncs.values():
-    #     struct_params.extend(add_struct_params(efunc))
-    # struct_params.extend(add_struct_params(iet))
     
-    # struct_params = filter_ordered(struct_params)
     # from IPython import embed; embed()
 
-    struct = petsc_struct(name='ctx', fields=filter_ordered(struct_params))
-    struct_callback = generate_struct_callback(struct, objs)
-    # efuncs.update({struct_callback.name: struct_callback})
-    struct_calls = make_struct_calls(struct_callback, struct, objs)
+    # Build and run struct callback
+    struct_params = filter_ordered(struct_params)
+    struct, struct_calls, struct_callback = struct_setup(struct_params, objs)
+    efuncs.update({struct_callback.name: struct_callback})
     setup.extend(list(struct_calls))
-    
-    # from IPython import embed; embed()
-    # TODO: obvs clean this up....
-    # TODO: fix error: ValueError: not enough values to unpack (expected 2, got 1)
-    # dummy_struct = DummySymb('dummystruct')
-    # dummy_struct = petsc_struct_dummy(name='dummystruct')
-    # struct = petsc_struct(name='ctx', fields=builder.struct_params)
-    # struct = petsc_struct_dummy(name='ctx')
-    # from IPython import embed; embed()
-    dummy_struct = objs['dummystruct']
-    dummy_struct_new = dummy_struct._rebuild(fields=filter_ordered(struct_params))
 
-    new_efuncs = {}
-    for key, efunc in efuncs.items():
-        neww = Uxreplace({dummy_struct: dummy_struct_new}).visit(efunc)
-        new_efuncs[key] = neww
-
-    new_efuncs.update({struct_callback.name: struct_callback})
+    efuncs = uxreplace_efuncs(struct_params, efuncs, objs)
 
     iet = Transformer(subs).visit(iet)
-    # from IPython import embed; embed()
+
     # Assign time iterators 
     iet = assign_time_iters(iet, struct)
 
@@ -136,7 +95,7 @@ def lower_petsc(iet, **kwargs):
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
-    metadata.update({'efuncs': tuple(new_efuncs.values())})
+    metadata.update({'efuncs': tuple(efuncs.values())})
 
     return iet, metadata
 
@@ -170,8 +129,8 @@ def build_core_objects(target, **kwargs):
         'err': PetscErrorCode(name='err'),
         'grid': target.grid,
         'dmdas': [],
-        'struct': petsc_struct('ctx'),
-        'dummystruct': petsc_struct_dummy('ctxd')
+        # 'struct': PETScStruct(name='ctx', pname='MatContext', fields=[]),
+        'cbstruct': CallbackStruct('ctx', pname='MatContext', fields=[])  # callback struct
     }
 
 
@@ -465,7 +424,6 @@ def generate_struct_callback(struct, objs):
         DummyExpr(FieldFromPointer(i._C_symbol, struct), i._C_symbol)
         for i in struct.fields if i not in struct.time_dim_fields
     ]
-    # from IPython import embed; embed()
     struct_callback_body = CallableBody(
         List(body=body), init=tuple([petsc_func_begin_user]),
         retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
@@ -477,14 +435,27 @@ def generate_struct_callback(struct, objs):
     return struct_callback
 
 
-def make_struct_calls(struct_callback, struct_main, objs):
-    call_struct_callback = [petsc_call(struct_callback.name, [Byref(struct_main)])]
-    calls_set_app_ctx = [
-        petsc_call('DMSetApplicationContext', [i, Byref(struct_main)])
+def struct_setup(struct_params, objs):
+    struct = PETScStruct(name='ctx', pname='MatContext', fields=struct_params)
+    struct_callback = generate_struct_callback(struct, objs)
+
+    call_struct_callback = [petsc_call(struct_callback.name, [Byref(struct)])]
+    set_appctx = [
+        petsc_call('DMSetApplicationContext', [i, Byref(struct)])
         for i in objs['dmdas']
     ]
-    calls = call_struct_callback + calls_set_app_ctx
-    return tuple(calls)
+    calls = call_struct_callback + set_appctx
+    return struct, tuple(calls), struct_callback
+
+
+def uxreplace_efuncs(params, efuncs, objs):
+    """
+    Replace the placeholder struct in efuncs with a newly rebuilt struct
+    that includes fields from all specifed parameters.
+    """
+    old = objs['cbstruct']
+    subs = {old: old._rebuild(fields=filter_ordered(params))}
+    return {n: Uxreplace(subs).visit(e) for n, e in efuncs.items()}
 
 
 Null = Macro('NULL')
