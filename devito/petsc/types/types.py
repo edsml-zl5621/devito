@@ -95,12 +95,8 @@ class LinearSolver(sympy.Function, Reconstructable):
     func = Reconstructable._rebuild
 
 
-# make reconstructable?
+# TODO: Reconstructable?
 class FieldData:
-
-    # __rargs__ = ('target',)
-    __kwargs__ = ('target', 'matvecs', 'formfuncs', 'formrhs', 'arrays', 'dmda')
-
     def __init__(self, target=None, matvecs=None,
                 formfuncs=None, formrhs=None, arrays=None,
                 dmda=None, **kwargs):
@@ -111,25 +107,6 @@ class FieldData:
         self.formrhs = formrhs
         self.arrays = arrays
         self.dmda = dmda
-
-        # return obj
-
-    # def __repr__(self):
-    #     return "%s(%s)" % (self.__class__.__name__, self.target)
-
-    # __str__ = __repr__
-
-    # def _sympystr(self, printer):
-    #     return str(self)
-
-    # def __hash__(self):
-    #     return hash(self.target)
-
-    # def __eq__(self, other):
-    #     return (isinstance(other, FieldData) and
-    #             self.expr == other.target)
-
-    # func = Reconstructable._rebuild
 
 
 class FieldDataNest(FieldData):

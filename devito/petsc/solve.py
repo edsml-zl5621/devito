@@ -27,9 +27,8 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
     if len(eqns_targets.keys()) == 1:
         target, eqns = next(iter(eqns_targets.items())) 
         eqns = as_tuple(eqns)
-        funcs = get_all_functions(eqns)
+        funcs = get_funcs(eqns)
         time_mapper = generate_time_mapper(funcs)
-        # from IPython import embed; embed()
         field_data = generate_field_solve(eqns, target, time_mapper)
    
         # Placeholder equation for inserting calls to the solver and generating
@@ -94,10 +93,8 @@ def generate_field_solve(eqns, target, time_mapper):
     formfuncs = []
     formrhs = []
     
-    # allfuncs = []
     for eq in eqns:
         b, F_target = separate_eqn(eq, target)
-        # allfuncs.extend(funcs)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
@@ -280,7 +277,7 @@ def generate_time_mapper(funcs):
     return dict(zip(time_indices, tau_symbs))
 
 
-def get_all_functions(eqns):
+def get_funcs(eqns):
     funcs = [
         func 
         for eq in eqns 

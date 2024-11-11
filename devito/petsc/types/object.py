@@ -255,6 +255,7 @@ class IS(ArrayObject, PETScObject):
 class PETScStruct(CCompositeObject, PETScObject):
 
     __rargs__ = ('name', 'pname', 'fields')
+    __kwargs__ = ('liveness',)
 
     def __init__(self, name, pname, fields, liveness='lazy'):
         pfields = [(i._C_name, i._C_ctype) for i in fields]
