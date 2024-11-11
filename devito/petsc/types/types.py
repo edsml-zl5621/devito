@@ -97,14 +97,39 @@ class LinearSolver(sympy.Function, Reconstructable):
 
 # make reconstructable?
 class FieldData:
-    def __init__(self, target=None, matvecs=None, formfuncs=None, formrhs=None,
-                 arrays=None, dmda=None):
+
+    # __rargs__ = ('target',)
+    __kwargs__ = ('target', 'matvecs', 'formfuncs', 'formrhs', 'arrays', 'dmda')
+
+    def __init__(self, target=None, matvecs=None,
+                formfuncs=None, formrhs=None, arrays=None,
+                dmda=None, **kwargs):
+
         self.target = target
         self.matvecs = matvecs
         self.formfuncs = formfuncs
         self.formrhs = formrhs
         self.arrays = arrays
         self.dmda = dmda
+
+        # return obj
+
+    # def __repr__(self):
+    #     return "%s(%s)" % (self.__class__.__name__, self.target)
+
+    # __str__ = __repr__
+
+    # def _sympystr(self, printer):
+    #     return str(self)
+
+    # def __hash__(self):
+    #     return hash(self.target)
+
+    # def __eq__(self, other):
+    #     return (isinstance(other, FieldData) and
+    #             self.expr == other.target)
+
+    # func = Reconstructable._rebuild
 
 
 class FieldDataNest(FieldData):
@@ -124,80 +149,3 @@ class FieldDataNest(FieldData):
     @property
     def targets(self):
         return tuple(field_data.target for field_data in self.field_data_list)
-
-
-# class FieldData(sympy.Function, Reconstructable):
-
-#     # __rargs__ = ('expr',)
-#     __rkwargs__ = ('target', 'matvecs', 'formfuncs', 'formrhs', 'arrays', 'time_mapper',
-#                    'dmda')
-
-#     def __new__(cls, target=None, matvecs=None, formfuncs=None, formrhs=None,
-#                 arrays=None, time_mapper=None, dmda=None, **kwargs):
-
-#         with sympy_mutex:
-#             obj = sympy.Function.__new__(cls, expr)
-
-#         obj._expr = expr
-#         obj._target = target
-#         obj._matvecs = matvecs
-#         obj._formfuncs = formfuncs
-#         obj._formrhs = formrhs
-#         obj._arrays = arrays
-#         obj._time_mapper = time_mapper
-#         obj._dmda = dmda
-#         return obj
-
-#     def __repr__(self):
-#         return "%s(%s)" % (self.__class__.__name__, self.expr)
-
-#     __str__ = __repr__
-
-#     def _sympystr(self, printer):
-#         return str(self)
-
-#     def __hash__(self):
-#         return hash(self.expr)
-
-#     def __eq__(self, other):
-#         return (isinstance(other, LinearSolver) and
-#                 self.expr == other.expr and
-#                 self.target == other.target)
-
-#     @property
-#     def expr(self):
-#         return self._expr
-
-#     @property
-#     def target(self):
-#         return self._target
-
-#     @property
-#     def matvecs(self):
-#         return self._matvecs
-
-#     @property
-#     def formfuncs(self):
-#         return self._formfuncs
-
-#     @property
-#     def formrhs(self):
-#         return self._formrhs
-
-#     @property
-#     def arrays(self):
-#         return self._arrays
-
-#     @property
-#     def time_mapper(self):
-#         return self._time_mapper
-
-#     @property
-#     def dmda(self):
-#         return self._dmda
-
-#     @classmethod
-#     def eval(cls, *args):
-#         return None
-
-#     func = Reconstructable._rebuild

@@ -8,7 +8,7 @@ from devito.types import Eq, Symbol, SteppingDimension, Function
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.tools import as_tuple
+from devito.tools import as_tuple, filter_ordered
 from devito.petsc.types import (LinearSolver, PETScArray, DM,
                                 FieldData, FieldDataNest, DMComposite)
 
@@ -27,14 +27,16 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
     if len(eqns_targets.keys()) == 1:
         target, eqns = next(iter(eqns_targets.items())) 
         eqns = as_tuple(eqns)
-        funcs = retrieve_functions(eqns)
+        funcs = get_all_functions(eqns)
         time_mapper = generate_time_mapper(funcs)
+        # from IPython import embed; embed()
         field_data = generate_field_solve(eqns, target, time_mapper)
+   
         # Placeholder equation for inserting calls to the solver and generating
         # correct time loop etc.
         inject_solve = InjectSolveEq(
             target,
-            LinearSolver(set(funcs), solver_parameters,
+            LinearSolver(tuple(funcs), solver_parameters,
             fielddata=field_data, parent_dm=field_data.dmda,
             time_mapper=time_mapper)
         )
@@ -43,14 +45,15 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
     else:
         # TODO : improve this, probs move whole matnest bit into separate function
         combined_eqns = [item for sublist in eqns_targets.values() for item in sublist]
-        funcs = retrieve_functions(combined_eqns)
+        funcs = get_all_functions(combined_eqns)
         time_mapper = generate_time_mapper(funcs)
+
         nest = FieldDataNest()
         children_dms = []
 
         for target, eqns in eqns_targets.items():
             eqns = as_tuple(eqns)
-            field_data = generate_field_solve(eqns, target, time_mapper)
+            field_data, funcs = generate_field_solve(eqns, target, time_mapper)
             nest.add_field_data(field_data)
             children_dms.append(field_data.dmda)
 
@@ -60,7 +63,7 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
         # Can place any target within targets on the lhs here
         inject_solve = InjectSolveEq(
             target,
-            LinearSolver(set(funcs),
+            LinearSolver(tuple(funcs),
             solver_parameters, fielddata=nest, parent_dm=parent_dm,
             children_dms=children_dms, time_mapper=time_mapper)
         )
@@ -90,9 +93,11 @@ def generate_field_solve(eqns, target, time_mapper):
     matvecs = []
     formfuncs = []
     formrhs = []
-
+    
+    # allfuncs = []
     for eq in eqns:
         b, F_target = separate_eqn(eq, target)
+        # allfuncs.extend(funcs)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
@@ -124,6 +129,7 @@ def generate_field_solve(eqns, target, time_mapper):
         arrays=arrays,
         dmda=dmda
     )
+
 
 def separate_eqn(eqn, target):
     """
@@ -272,3 +278,12 @@ def generate_time_mapper(funcs):
     })
     tau_symbs = [Symbol('tau%d' % i) for i in range(len(time_indices))]
     return dict(zip(time_indices, tau_symbs))
+
+
+def get_all_functions(eqns):
+    funcs = [
+        func 
+        for eq in eqns 
+        for func in retrieve_functions(eval_time_derivatives(eq.lhs - eq.rhs))
+    ]
+    return filter_ordered(funcs)

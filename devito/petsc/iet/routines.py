@@ -342,7 +342,7 @@ class CallbackBuilder:
         # Replace non-function data with pointer to data in struct
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
                 i in params if not isinstance(i.function, AbstractFunction)}
-
+ 
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
         self._struct_params.extend(params)
@@ -403,12 +403,8 @@ class CallbackBuilder:
             )
             return as_tuple(replace_arr)
 
-        target_time = [
-            i for i, d in zip(target.indices, target.dimensions) if d.is_Time
-        ]
-        assert len(target_time) == 1
-        target_time = target_time.pop()
-        target_time = solverobjs['time_mapper'][target_time]
+        target_time = target.indexify().indices[target.time_dim]
+        target_time = target_time.subs(solverobjs['true_dims'])
 
         vec_get_size = petsc_call(
             'VecGetSize', [lobj, Byref(localsize)]
@@ -722,12 +718,10 @@ def uxreplace_time(body, solver_objs, objs):
     # "manually" via free functions
     time_spacing = objs['grid'].stepping_dim.spacing
     true_dims = solver_objs['true_dims']
-
     time_mapper = {
         v: k.xreplace({time_spacing: 1, -time_spacing: -1})
         for k, v in solver_objs['time_mapper'].items()
     }
-    # from IPython import embed; embed()
     subs = {symb: true_dims[time_mapper[symb]] for symb in time_mapper}
     return Uxreplace(subs).visit(body)
 

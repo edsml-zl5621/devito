@@ -130,12 +130,12 @@ def test_petsc_solve():
     rhs_expr = FindNodes(Expression).visit(formrhs_callback[0])
 
     assert str(action_expr[-1].expr.rhs) == \
-        'matvec->h_x**(-2)*x_matvec_f[x + 1, y + 2]' + \
-        ' - 2.0*matvec->h_x**(-2)*x_matvec_f[x + 2, y + 2]' + \
-        ' + matvec->h_x**(-2)*x_matvec_f[x + 3, y + 2]' + \
-        ' + matvec->h_y**(-2)*x_matvec_f[x + 2, y + 1]' + \
-        ' - 2.0*matvec->h_y**(-2)*x_matvec_f[x + 2, y + 2]' + \
-        ' + matvec->h_y**(-2)*x_matvec_f[x + 2, y + 3]'
+        'ctx->h_x**(-2)*x_matvec_f[x + 1, y + 2]' + \
+        ' - 2.0*ctx->h_x**(-2)*x_matvec_f[x + 2, y + 2]' + \
+        ' + ctx->h_x**(-2)*x_matvec_f[x + 3, y + 2]' + \
+        ' + ctx->h_y**(-2)*x_matvec_f[x + 2, y + 1]' + \
+        ' - 2.0*ctx->h_y**(-2)*x_matvec_f[x + 2, y + 2]' + \
+        ' + ctx->h_y**(-2)*x_matvec_f[x + 2, y + 3]'
 
     assert str(rhs_expr[-1].expr.rhs) == 'g[x + 2, y + 2]'
 
@@ -742,8 +742,8 @@ def test_time_loop():
 
     assert 'ctx.t0 = t0' in body1
     assert 'ctx.t1 = t1' not in body1
-    assert 'formrhs->t0' in rhs1
-    assert 'formrhs->t1' not in rhs1
+    assert 'ctx->t0' in rhs1
+    assert 'ctx->t1' not in rhs1
 
     # Non-modulo time stepping
     u2 = TimeFunction(name='u2', grid=grid, space_order=2, save=5)
@@ -756,7 +756,7 @@ def test_time_loop():
     rhs2 = str(op2._func_table['FormRHS_0'].root.ccode)
 
     assert 'ctx.time = time' in body2
-    assert 'formrhs->time' in rhs2
+    assert 'ctx->time' in rhs2
 
     # Modulo time stepping with more than one time step
     # used in one of the callback functions
@@ -769,8 +769,8 @@ def test_time_loop():
 
     assert 'ctx.t0 = t0' in body3
     assert 'ctx.t1 = t1' in body3
-    assert 'formrhs->t0' in rhs3
-    assert 'formrhs->t1' in rhs3
+    assert 'ctx->t0' in rhs3
+    assert 'ctx->t1' in rhs3
 
     # Multiple petsc solves within the same time loop
     v2 = Function(name='v2', grid=grid, space_order=2)

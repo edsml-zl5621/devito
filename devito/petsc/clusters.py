@@ -21,7 +21,6 @@ def petsc_lift(clusters):
     for c in clusters:
         if isinstance(c.exprs[0].rhs, LinearSolver):
             ispace = c.ispace.lift(c.exprs[0].lhs.function.space_dimensions)
-            # ispace = ispace.project(lambda d: d not in c.exprs[0].rhs.fielddata.target.space_dimensions)
             processed.append(c.rebuild(ispace=ispace))
         else:
             processed.append(c)

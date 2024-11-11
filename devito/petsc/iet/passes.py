@@ -1,21 +1,20 @@
 import cgen as c
 
-from devito.passes.iet.engine import iet_pass, timed_pass
+from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
                            DummyExpr, FindNodes, retrieve_iteration_tree,
                            filter_iterations, CallableBody, Call, Callable,
-                           FindSymbols, Uxreplace)
+                           Uxreplace)
 from devito.symbolics import Byref, Macro, FieldFromComposite, FieldFromPointer
-from devito.types import Temp, TimeDimension, ModuloDimension, LocalObject, ArrayObject
 from devito.petsc.types import (PetscMPIInt, Mat, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
-                                StartPtr, FieldDataNest, DMComposite, IS, SubMat, PETScArray,
+                                StartPtr, FieldDataNest, IS, SubMat,
                                 PETScStruct, CallbackStruct)
 from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
 from devito.petsc.utils import solver_mapper, core_metadata
 from devito.petsc.iet.routines import NestedCallbackBuilder, CallbackBuilder
 from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
-from devito.tools import filter_ordered, CustomDtype, dtype_to_ctype
+from devito.tools import filter_ordered
 
 
 @iet_pass
@@ -52,8 +51,10 @@ def lower_petsc(iet, **kwargs):
         builder = CBBuilder(**kwargs)
 
         # TODO: INSTEAD OF GRABBING THE LHS OF INJECTSOLVEDUMMY FOR THE VECCREPLACEARRAY,
-        # YOU WILL HAVE TO SEARCH THE RHS .exp§r FOR THE INDEXIFIED target and use that instead 
-        # potentially when you build the solver_objs you can create one called target and search the exprs for the one
+        # YOU WILL HAVE TO SEARCH THE RHS .exp§r FOR THE INDEXIFIED target and 
+        # use that instead 
+        # potentially when you build the solver_objs you can create one called 
+        # target and search the exprs for the one
         # that matches the target attached to the field data ......
 
         dm_setup = DMSetup().setup(objs, linsolve)
@@ -72,8 +73,6 @@ def lower_petsc(iet, **kwargs):
 
         efuncs.update(builder.efuncs)
         struct_params.extend(builder.struct_params)
-    
-    # from IPython import embed; embed()
 
     # Build and run struct callback
     struct_params = filter_ordered(struct_params)
