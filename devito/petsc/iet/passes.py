@@ -45,8 +45,6 @@ def lower_petsc(iet, **kwargs):
     # Specific to each solve
     for iters, (injectsolve,) in injectsolve_mapper.items():
         linsolve = injectsolve.expr.rhs
-        # from IPython import embed; embed()
-        # objs['dmdas'].append(linsolve.dms)
         objs['dmdas'].extend(linsolve.dms)
 
         sreg = kwargs['sregistry']
@@ -142,17 +140,6 @@ def lower_petsc(iet, **kwargs):
 
     return iet, metadata
 
-# @timed_pass
-# def tmp_func(efuncs, struct=None, **kwargs):
-#     # struct = kwargs.get('struct', None)
-#     new_efuncs = {}
-#     for key, efunc in efuncs.items():
-#         subsss = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
-#         new = Uxreplace(subsss).visit(efunc)
-#         # from IPython import embed; embed()
-#         new_efuncs[key] = new
-#     return new_efuncs
-
 
 def init_petsc(**kwargs):
     # Initialize PETSc -> for now, assuming all solver options have to be
@@ -232,7 +219,7 @@ class ObjectBuilder:
     def build(self, linsolve, iters):
         sreg = self.sregistry
         # TODO: change y to F etc
-        solver_objs = {
+        solverobjs = {
             'J': Mat(sreg.make_name(prefix='J_')),
             'B': Mat(sreg.make_name(prefix='B_')),
             'ksp': KSP(sreg.make_name(prefix='ksp_')),
@@ -247,8 +234,8 @@ class ObjectBuilder:
             'F_global': GlobalVec(sreg.make_name(prefix='F_global_')),
             'time_mapper': linsolve.time_mapper
         }
-        solver_objs.update(self.all_field_objs(linsolve.fielddata))
-        return solver_objs
+        solverobjs.update(self.all_field_objs(linsolve.fielddata))
+        return solverobjs
 
     def all_field_objs(self, fielddata):
         return self.field_objs(fielddata)
@@ -281,7 +268,7 @@ class NestedObjectBuilder(ObjectBuilder):
 
     def all_field_objs(self, fielddata):
         objs = {}
-        targets = fielddata.target
+        targets = fielddata.targets
         sreg = self.sregistry
 
         for field_data in fielddata.field_data_list:
@@ -498,15 +485,6 @@ def make_struct_calls(struct_callback, struct_main, objs):
     ]
     calls = call_struct_callback + calls_set_app_ctx
     return tuple(calls)
-
-
-# def add_struct_params(iet):
-#     fields = [
-#         i.function for i in FindSymbols('basics').visit(iet)
-#         if not isinstance(i.function, (PETScArray, Temp, PETScObject))
-#         and not (i.is_Dimension and not isinstance(i, (TimeDimension, ModuloDimension)))
-#     ]
-#     return fields
 
 
 Null = Macro('NULL')

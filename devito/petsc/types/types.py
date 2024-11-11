@@ -76,13 +76,6 @@ class LinearSolver(sympy.Function, Reconstructable):
         """DMs associated with each field in the solve"""
         return self._children_dms if self._children_dms is not None else as_tuple(self.parent_dm)
 
-    # @property
-    # def dms(self):
-    #     return {
-    #         'parent': self.parent_dm,
-    #         'children': self.children_dms
-    #     }
-
     @property
     def dms(self):
         dmdas = [self.parent_dm]
@@ -129,7 +122,7 @@ class FieldDataNest(FieldData):
     pass
 
     @property
-    def target(self):
+    def targets(self):
         return tuple(field_data.target for field_data in self.field_data_list)
 
 

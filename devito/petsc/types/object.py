@@ -300,10 +300,6 @@ class PETScStruct(CCompositeObject, PETScObject):
         return [f for f in self.fields
                 if isinstance(f, (ModuloDimension, TimeDimension))]
 
-    # @property
-    # def _C_ctype(self):
-    #     return self.dtype
-
     _C_modifier = ' *'
 
 
