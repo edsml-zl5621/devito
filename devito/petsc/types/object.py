@@ -2,15 +2,14 @@ from ctypes import POINTER
 
 from devito.tools import CustomDtype, dtype_to_cstr, as_tuple
 from devito.types import (LocalObject, CCompositeObject, ModuloDimension,
-                          TimeDimension, ArrayObject, CustomDimension, Array, Symbol)
-from devito.types.array import ArrayBasic
+                          TimeDimension, ArrayObject, CustomDimension)
 from devito.symbolics import Byref
-
 from devito.petsc.iet.utils import petsc_call
-from devito.petsc.types import PETScArray
+
 
 class PETScObject:
     pass
+
 
 class BasicDM(LocalObject, PETScObject):
     """
@@ -26,7 +25,7 @@ class BasicDM(LocalObject, PETScObject):
     @property
     def target(self):
         return self._target
-    
+
     @property
     def destroy(self):
         return self._destroy
@@ -64,7 +63,7 @@ class DMComposite(DM):
     def __init__(self, *args, targets=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._targets = targets
-    
+
     @property
     def targets(self):
         return self._targets
@@ -99,7 +98,7 @@ class SubMat(LocalObject, PETScObject):
     @property
     def row(self):
         return self._row
-    
+
     @property
     def col(self):
         return self._col

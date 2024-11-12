@@ -304,20 +304,21 @@ class SetupSolver:
 
         blocal = self.local_rhs_vecs(dm, solver_objs, linsolve)
 
-        snes_get_ksp = petsc_call('SNESGetKSP',
-                                [solver_objs['snes'], Byref(solver_objs['ksp'])])
-
-        ksp_set_tols = petsc_call(
-            'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
-                                solver_params['ksp_atol'], solver_params['ksp_divtol'],
-                                solver_params['ksp_max_it']]
+        snes_get_ksp = petsc_call(
+            'SNESGetKSP', [solver_objs['snes'], Byref(solver_objs['ksp'])]
         )
-
+        ksp_set_tols = petsc_call(
+            'KSPSetTolerances', [
+                solver_objs['ksp'], solver_params['ksp_rtol'], solver_params['ksp_atol'],
+                solver_params['ksp_divtol'], solver_params['ksp_max_it']
+            ]
+        )
         ksp_set_type = petsc_call(
             'KSPSetType', [solver_objs['ksp'], solver_mapper[solver_params['ksp_type']]]
         )
-
-        ksp_get_pc = petsc_call('KSPGetPC', [solver_objs['ksp'], Byref(solver_objs['pc'])])
+        ksp_get_pc = petsc_call(
+            'KSPGetPC', [solver_objs['ksp'], Byref(solver_objs['pc'])]
+        )
 
         # Even though the default will be jacobi, set to PCNONE for now
         pc_set_type = petsc_call('PCSetType', [solver_objs['pc'], 'PCNONE'])
@@ -342,17 +343,18 @@ class SetupSolver:
         )
 
     def local_rhs_vecs(self, dm, solver_objs, linsolve):
-        local_b = petsc_call('DMCreateLocalVector',
-                                [dm, Byref(solver_objs['b_local_%s'%linsolve.fielddata.target.name])])
+        local_b = petsc_call('DMCreateLocalVector', [
+            dm, Byref(solver_objs['b_local_%s' % linsolve.fielddata.target.name])
+        ])
         return local_b
 
 
 class NestedSetupSolver(SetupSolver):
     def local_rhs_vecs(self, dm, solver_objs, linsolve):
         targets = dm.targets
-        local_b_refs = [Byref(solver_objs['b_local_%s'%target.name]) for target in targets]
-        local_b = petsc_call('DMCompositeGetLocalVectors', [dm] + local_b_refs)
-        return local_b
+        blocal = [Byref(solver_objs['b_local_%s' % target.name]) for target in targets]
+        blocal = petsc_call('DMCompositeGetLocalVectors', [dm] + blocal)
+        return blocal
 
 
 def assign_time_iters(iet, struct):

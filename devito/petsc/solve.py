@@ -4,7 +4,7 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-from devito.types import Eq, Symbol, SteppingDimension, Function
+from devito.types import Eq, Symbol, SteppingDimension
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
@@ -25,26 +25,28 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
 
     # TODO: If target is a vector, also default to MATNEST (same as FD)
     if len(eqns_targets.keys()) == 1:
-        target, eqns = next(iter(eqns_targets.items())) 
+        target, eqns = next(iter(eqns_targets.items()))
         eqns = as_tuple(eqns)
         funcs = get_funcs(eqns)
         time_mapper = generate_time_mapper(funcs)
         field_data = generate_field_solve(eqns, target, time_mapper)
-   
+
         # Placeholder equation for inserting calls to the solver and generating
         # correct time loop etc.
         inject_solve = InjectSolveEq(
             target,
-            LinearSolver(tuple(funcs), solver_parameters,
-            fielddata=field_data, parent_dm=field_data.dmda,
-            time_mapper=time_mapper)
+            LinearSolver(
+                tuple(funcs), solver_parameters, fielddata=field_data,
+                parent_dm=field_data.dmda, time_mapper=time_mapper
+            )
         )
         return [inject_solve]
-    # NEST
+
+    # NEST
     else:
         # TODO : improve this, probs move whole matnest bit into separate function
         combined_eqns = [item for sublist in eqns_targets.values() for item in sublist]
-        funcs = get_all_functions(combined_eqns)
+        funcs = get_funcs(combined_eqns)
         time_mapper = generate_time_mapper(funcs)
 
         nest = FieldDataNest()
@@ -52,25 +54,28 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
 
         for target, eqns in eqns_targets.items():
             eqns = as_tuple(eqns)
-            field_data, funcs = generate_field_solve(eqns, target, time_mapper)
+            field_data = generate_field_solve(eqns, target, time_mapper)
             nest.add_field_data(field_data)
             children_dms.append(field_data.dmda)
 
         targets = list(eqns_targets.keys())
-        parent_dm = DMComposite(name='da_%s' % '_'.join(t.name for t in targets), targets=targets)
+        parent_dm = DMComposite(
+            name='da_%s' % '_'.join(t.name for t in targets), targets=targets
+        )
 
         # Can place any target within targets on the lhs here
         inject_solve = InjectSolveEq(
             target,
-            LinearSolver(tuple(funcs),
-            solver_parameters, fielddata=nest, parent_dm=parent_dm,
-            children_dms=children_dms, time_mapper=time_mapper)
+            LinearSolver(
+                tuple(funcs), solver_parameters, fielddata=nest, parent_dm=parent_dm,
+                children_dms=children_dms, time_mapper=time_mapper
+            )
         )
         return [inject_solve]
 
 
 def generate_field_solve(eqns, target, time_mapper):
-    #TODO: change these names
+    # TODO: change these names
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
     # field DMDA
@@ -78,21 +83,23 @@ def generate_field_solve(eqns, target, time_mapper):
         name='da_%s' % target.name, liveness='eager', target=target
     )
     arrays = {
-        '%s_%s' % (p, target.name): PETScArray(name='%s_%s' % (p, target.name),
-                           dtype=target.dtype,
-                           dimensions=target.space_dimensions,
-                           shape=target.grid.shape,
-                           liveness='eager',
-                           halo=[target.halo[d] for d in target.space_dimensions],
-                           space_order=target.space_order,
-                           dmda=dmda)
+        '%s_%s' % (p, target.name): PETScArray(
+            name='%s_%s' % (p, target.name),
+            dtype=target.dtype,
+            dimensions=target.space_dimensions,
+            shape=target.grid.shape,
+            liveness='eager',
+            halo=[target.halo[d] for d in target.space_dimensions],
+            space_order=target.space_order,
+            dmda=dmda
+        )
         for p in prefixes
     }
 
     matvecs = []
     formfuncs = []
     formrhs = []
-    
+
     for eq in eqns:
         b, F_target = separate_eqn(eq, target)
 
@@ -279,8 +286,8 @@ def generate_time_mapper(funcs):
 
 def get_funcs(eqns):
     funcs = [
-        func 
-        for eq in eqns 
+        func
+        for eq in eqns
         for func in retrieve_functions(eval_time_derivatives(eq.lhs - eq.rhs))
     ]
     return filter_ordered(funcs)

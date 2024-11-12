@@ -74,7 +74,8 @@ class LinearSolver(sympy.Function, Reconstructable):
     @property
     def children_dms(self):
         """DMs associated with each field in the solve"""
-        return self._children_dms if self._children_dms is not None else as_tuple(self.parent_dm)
+        children_dms = self._children_dms
+        return children_dms if children_dms is not None else as_tuple(self.parent_dm)
 
     @property
     def dms(self):
@@ -87,7 +88,7 @@ class LinearSolver(sympy.Function, Reconstructable):
     @property
     def time_mapper(self):
         return self._time_mapper
-    
+
     @classmethod
     def eval(cls, *args):
         return None
@@ -97,9 +98,8 @@ class LinearSolver(sympy.Function, Reconstructable):
 
 # TODO: Reconstructable?
 class FieldData:
-    def __init__(self, target=None, matvecs=None,
-                formfuncs=None, formrhs=None, arrays=None,
-                dmda=None, **kwargs):
+    def __init__(self, target=None, matvecs=None, formfuncs=None, formrhs=None,
+                 arrays=None, dmda=None, **kwargs):
 
         self.target = target
         self.matvecs = matvecs
@@ -120,7 +120,7 @@ class FieldDataNest(FieldData):
         for field_data in self.field_data_list:
             if field_data.target == target:
                 return field_data
-        raise ValueError(f"FieldData with target %s not found." % target)
+        raise ValueError("FieldData with target %s not found." % target)
     pass
 
     @property
