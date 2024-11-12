@@ -4,7 +4,7 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-from devito.types import Eq, Symbol, SteppingDimension
+from devito.types import Eq, Symbol, SteppingDimension, TimeFunction
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
@@ -34,24 +34,21 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     formrhs = []
 
     eqns = as_tuple(eqns)
-    funcs = retrieve_functions(eqns)
-    time_mapper = generate_time_mapper(funcs)
 
     for eq in eqns:
-        b, F_target = separate_eqn(eq, target)
-        b, F_target = b.subs(time_mapper), F_target.subs(time_mapper)
+        b, F_target, targets = separate_eqn(eq, target)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
         matvecs.append(Eq(
             arrays['y_matvec'],
-            F_target.subs({target: arrays['x_matvec']}),
+            F_target.subs(targets_to_arrays(arrays['x_matvec'], targets)),
             subdomain=eq.subdomain
         ))
 
         formfuncs.append(Eq(
             arrays['y_formfunc'],
-            F_target.subs({target: arrays['x_formfunc']}),
+            F_target.subs(targets_to_arrays(arrays['x_formfunc'], targets)),
             subdomain=eq.subdomain
         ))
 
@@ -61,6 +58,11 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
             subdomain=eq.subdomain
         ))
 
+    funcs = retrieve_functions(eqns)
+    time_mapper = generate_time_mapper(funcs)
+    matvecs, formfuncs, formrhs = (
+        [eq.subs(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
+    )
     # Placeholder equation for inserting calls to the solver and generating
     # correct time loop etc
     inject_solve = InjectSolveEq(target, LinearSolveExpr(
@@ -83,38 +85,83 @@ def separate_eqn(eqn, target):
     where F(target) = b.
     """
     zeroed_eqn = Eq(eqn.lhs - eqn.rhs, 0)
-    tmp = eval_time_derivatives(zeroed_eqn.lhs)
-    b, F_target = remove_target(tmp, target)
-    return -b, F_target
+    zeroed_eqn = eval_time_derivatives(zeroed_eqn.lhs)
+    target_funcs = set(generate_targets(zeroed_eqn, target))
+    b, F_target = remove_targets(zeroed_eqn, target_funcs)
+    return -b, F_target, target_funcs
+
+
+def generate_targets(eq, target):
+    """
+    Extract all the functions that share the same time index as the target
+    but may have different spatial indices.
+    """
+    funcs = retrieve_functions(eq)
+    if isinstance(target, TimeFunction):
+        time_idx = target.indices[target.time_dim]
+        targets = [
+            f for f in funcs if f.function is target.function and time_idx
+            in f.indices
+        ]
+    else:
+        targets = [f for f in funcs if f.function is target.function]
+    return targets
+
+
+def targets_to_arrays(array, targets):
+    """
+    Map each target in `targets` to a corresponding array generated from `array`,
+    matching the spatial indices of the target.
+
+    Example:
+    --------
+    >>> array
+    vec_u(x, y)
+
+    >>> targets
+    {u(t + dt, x + h_x, y), u(t + dt, x - h_x, y), u(t + dt, x, y)}
+
+    >>> targets_to_arrays(array, targets)
+    {u(t + dt, x - h_x, y): vec_u(x - h_x, y),
+     u(t + dt, x + h_x, y): vec_u(x + h_x, y),
+     u(t + dt, x, y): vec_u(x, y)}
+    """
+    space_indices = [
+        tuple(f.indices[d] for d in f.space_dimensions) for f in targets
+    ]
+    array_targets = [
+        array.subs(dict(zip(array.indices, i))) for i in space_indices
+    ]
+    return dict(zip(targets, array_targets))
 
 
 @singledispatch
-def remove_target(expr, target):
-    return (0, expr) if expr == target else (expr, 0)
+def remove_targets(expr, targets):
+    return (0, expr) if expr in targets else (expr, 0)
 
 
-@remove_target.register(sympy.Add)
-def _(expr, target):
-    if not expr.has(target):
+@remove_targets.register(sympy.Add)
+def _(expr, targets):
+    if not any(expr.has(t) for t in targets):
         return (expr, 0)
 
-    args_b, args_F = zip(*(remove_target(a, target) for a in expr.args))
+    args_b, args_F = zip(*(remove_targets(a, targets) for a in expr.args))
     return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
-@remove_target.register(Mul)
-def _(expr, target):
-    if not expr.has(target):
+@remove_targets.register(Mul)
+def _(expr, targets):
+    if not any(expr.has(t) for t in targets):
         return (expr, 0)
 
-    args_b, args_F = zip(*[remove_target(a, target) if a.has(target)
+    args_b, args_F = zip(*[remove_targets(a, targets) if any(a.has(t) for t in targets)
                            else (a, a) for a in expr.args])
     return (expr.func(*args_b, evaluate=False), expr.func(*args_F, evaluate=False))
 
 
-@remove_target.register(Derivative)
-def _(expr, target):
-    return (0, expr) if expr.has(target) else (expr, 0)
+@remove_targets.register(Derivative)
+def _(expr, targets):
+    return (0, expr) if any(expr.has(t) for t in targets) else (expr, 0)
 
 
 @singledispatch
@@ -178,4 +225,4 @@ def generate_time_mapper(funcs):
         if d.is_Time
     })
     tau_symbs = [Symbol('tau%d' % i) for i in range(len(time_indices))]
-    return {time: tau for time, tau in zip(time_indices, tau_symbs)}
+    return dict(zip(time_indices, tau_symbs))
