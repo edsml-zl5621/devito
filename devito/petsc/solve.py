@@ -4,7 +4,7 @@ import sympy
 
 from devito.finite_differences.differentiable import Mul
 from devito.finite_differences.derivative import Derivative
-from devito.types import Eq, Symbol, SteppingDimension
+from devito.types import Eq, Symbol, SteppingDimension, TimeFunction
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
@@ -101,20 +101,20 @@ def generate_field_solve(eqns, target, time_mapper):
     formrhs = []
 
     for eq in eqns:
-        b, F_target = separate_eqn(eq, target)
+        b, F_target, target_funcs = separate_eqn(eq, target)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
         matvec = Eq(
             arrays['y_matvec_%s' % target.name],
-            F_target.subs({target: arrays['x_matvec_%s' % target.name]}),
+            F_target.subs(targets_to_arrays(arrays['x_matvec_%s' % target.name], target_funcs)),
             subdomain=eq.subdomain
         )
         matvecs.append(matvec.subs(time_mapper))
 
         formfunc = Eq(
             arrays['y_formfunc_%s' % target.name],
-            F_target.subs({target: arrays['x_formfunc_%s' % target.name]}),
+            F_target.subs(targets_to_arrays(arrays['x_formfunc_%s' % target.name], target_funcs)),
             subdomain=eq.subdomain
         )
         formfuncs.append(formfunc.subs(time_mapper))
