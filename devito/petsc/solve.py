@@ -21,10 +21,18 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
     Linear PETSc solver
     """
     if target is not None:
-        eqns_targets = {target: eqns_targets}
+        injectsolve = InjectSolve().build({target: eqns_targets}, solver_parameters)
+        return injectsolve
 
     # TODO: If target is a vector, also default to MATNEST (same as FD)
-    if len(eqns_targets.keys()) == 1:
+    else:
+        injectsolve = InjectSolveNested().build(eqns_targets, solver_parameters)
+        return injectsolve
+
+
+class InjectSolve:
+    @classmethod
+    def build(cls, eqns_targets, solver_parameters):
         target, eqns = next(iter(eqns_targets.items()))
         eqns = as_tuple(eqns)
         funcs = get_funcs(eqns)
@@ -40,11 +48,12 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
                 parent_dm=field_data.dmda, time_mapper=time_mapper
             )
         )
-        return [inject_solve]
+        return inject_solve
 
-    # NEST
-    else:
-        # TODO : improve this, probs move whole matnest bit into separate function
+
+class InjectSolveNested(InjectSolve):
+    @classmethod
+    def build(cls, eqns_targets, solver_parameters):
         combined_eqns = [item for sublist in eqns_targets.values() for item in sublist]
         funcs = get_funcs(combined_eqns)
         time_mapper = generate_time_mapper(funcs)
@@ -62,7 +71,6 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
         parent_dm = DMComposite(
             name='da_%s' % '_'.join(t.name for t in targets), targets=targets
         )
-
         # Can place any target within targets on the lhs here
         inject_solve = InjectSolveEq(
             target,
@@ -71,7 +79,7 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
                 children_dms=children_dms, time_mapper=time_mapper
             )
         )
-        return [inject_solve]
+        return inject_solve
 
 
 def generate_field_solve(eqns, target, time_mapper):
