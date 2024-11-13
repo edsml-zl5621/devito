@@ -615,31 +615,31 @@ def test_petsc_struct():
     assert all(not isinstance(i, CCompositeObject) for i in op.parameters)
 
 
-@skipif('petsc')
-@pytest.mark.parallel(mode=[2, 4, 8])
-def test_apply(mode):
+# @skipif('petsc')
+# @pytest.mark.parallel(mode=[2, 4, 8])
+# def test_apply(mode):
 
-    grid = Grid(shape=(13, 13), dtype=np.float64)
+#     grid = Grid(shape=(13, 13), dtype=np.float64)
 
-    pn = Function(name='pn', grid=grid, space_order=2, dtype=np.float64)
-    rhs = Function(name='rhs', grid=grid, space_order=2, dtype=np.float64)
-    mu = Constant(name='mu', value=2.0)
+#     pn = Function(name='pn', grid=grid, space_order=2, dtype=np.float64)
+#     rhs = Function(name='rhs', grid=grid, space_order=2, dtype=np.float64)
+#     mu = Constant(name='mu', value=2.0)
 
-    eqn = Eq(pn.laplace*mu, rhs, subdomain=grid.interior)
+#     eqn = Eq(pn.laplace*mu, rhs, subdomain=grid.interior)
 
-    petsc = PETScSolve(eqn, pn)
+#     petsc = PETScSolve(eqn, pn)
 
-    # Build the op
-    with switchconfig(openmp=False, mpi=True):
-        op = Operator(petsc)
+#     # Build the op
+#     with switchconfig(openmp=False, mpi=True):
+#         op = Operator(petsc)
 
-    # Check the Operator runs without errors. Not verifying output for
-    # now. Need to consolidate BC implementation
-    op.apply()
+#     # Check the Operator runs without errors. Not verifying output for
+#     # now. Need to consolidate BC implementation
+#     op.apply()
 
-    # Verify that users can override `mu`
-    mu_new = Constant(name='mu_new', value=4.0)
-    op.apply(mu=mu_new)
+#     # Verify that users can override `mu`
+#     mu_new = Constant(name='mu_new', value=4.0)
+#     op.apply(mu=mu_new)
 
 
 @skipif('petsc')

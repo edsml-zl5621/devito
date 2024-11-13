@@ -33,27 +33,29 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
 class InjectSolve:
     @classmethod
     def build(cls, eqns_targets, solver_parameters):
+        target, funcs, fielddata, parent, children, time_mapper = cls.build_eq(
+            eqns_targets, solver_parameters
+        )
+        # Placeholder equation for inserting calls to the solver and generating
+        # correct time loop etc.
+        return [InjectSolveEq(target, LinearSolver(
+                funcs, solver_parameters, fielddata=fielddata, parent_dm=parent,
+                children_dms=children, time_mapper=time_mapper
+            ))]
+    
+    @classmethod
+    def build_eq(cls, eqns_targets, solver_parameters):
         target, eqns = next(iter(eqns_targets.items()))
         eqns = as_tuple(eqns)
         funcs = get_funcs(eqns)
         time_mapper = generate_time_mapper(funcs)
-        field_data = generate_field_solve(eqns, target, time_mapper)
-
-        # Placeholder equation for inserting calls to the solver and generating
-        # correct time loop etc.
-        inject_solve = InjectSolveEq(
-            target,
-            LinearSolver(
-                tuple(funcs), solver_parameters, fielddata=field_data,
-                parent_dm=field_data.dmda, time_mapper=time_mapper
-            )
-        )
-        return inject_solve
+        fielddata = generate_field_data(eqns, target, time_mapper)
+        return target, tuple(funcs), fielddata, fielddata.dmda, None, time_mapper
 
 
 class InjectSolveNested(InjectSolve):
     @classmethod
-    def build(cls, eqns_targets, solver_parameters):
+    def build_eq(cls, eqns_targets, solver_parameters):
         combined_eqns = [item for sublist in eqns_targets.values() for item in sublist]
         funcs = get_funcs(combined_eqns)
         time_mapper = generate_time_mapper(funcs)
@@ -63,26 +65,18 @@ class InjectSolveNested(InjectSolve):
 
         for target, eqns in eqns_targets.items():
             eqns = as_tuple(eqns)
-            field_data = generate_field_solve(eqns, target, time_mapper)
-            nest.add_field_data(field_data)
-            children_dms.append(field_data.dmda)
+            fielddata = generate_field_data(eqns, target, time_mapper)
+            nest.add_field_data(fielddata)
+            children_dms.append(fielddata.dmda)
 
         targets = list(eqns_targets.keys())
         parent_dm = DMComposite(
             name='da_%s' % '_'.join(t.name for t in targets), targets=targets
         )
-        # Can place any target within targets on the lhs here
-        inject_solve = InjectSolveEq(
-            target,
-            LinearSolver(
-                tuple(funcs), solver_parameters, fielddata=nest, parent_dm=parent_dm,
-                children_dms=children_dms, time_mapper=time_mapper
-            )
-        )
-        return inject_solve
+        return target, tuple(funcs), nest, parent_dm, children_dms, time_mapper
 
 
-def generate_field_solve(eqns, target, time_mapper):
+def generate_field_data(eqns, target, time_mapper):
     # TODO: change these names
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
