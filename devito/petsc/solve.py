@@ -41,8 +41,8 @@ class InjectSolve:
         return [InjectSolveEq(target, LinearSolver(
                 funcs, solver_parameters, fielddata=fielddata, parent_dm=parent,
                 children_dms=children, time_mapper=time_mapper
-            ))]
-    
+                ))]
+
     @classmethod
     def build_eq(cls, eqns_targets, solver_parameters):
         target, eqns = next(iter(eqns_targets.items()))
@@ -102,29 +102,28 @@ def generate_field_data(eqns, target, time_mapper):
     formfuncs = []
     formrhs = []
 
+    name = target.name
     for eq in eqns:
-        b, F_target, target_funcs = separate_eqn(eq, target)
+        b, F_target, targets = separate_eqn(eq, target)
 
         # TODO: Current assumption is that problem is linear and user has not provided
         # a jacobian. Hence, we can use F_target to form the jac-vec product
         matvec = Eq(
-            arrays['y_matvec_%s' % target.name],
-            F_target.subs(targets_to_arrays(arrays['x_matvec_%s' % target.name], target_funcs)),
+            arrays['y_matvec_%s' % name],
+            F_target.subs(targets_to_arrays(arrays['x_matvec_%s' % name], targets)),
             subdomain=eq.subdomain
         )
         matvecs.append(matvec.subs(time_mapper))
 
         formfunc = Eq(
-            arrays['y_formfunc_%s' % target.name],
-            F_target.subs(targets_to_arrays(arrays['x_formfunc_%s' % target.name], target_funcs)),
+            arrays['y_formfunc_%s' % name],
+            F_target.subs(targets_to_arrays(arrays['x_formfunc_%s' % name], targets)),
             subdomain=eq.subdomain
         )
         formfuncs.append(formfunc.subs(time_mapper))
 
         formrhs.append(Eq(
-            arrays['b_tmp_%s' % target.name],
-            b.subs(time_mapper),
-            subdomain=eq.subdomain
+            arrays['b_tmp_%s' % name], b.subs(time_mapper), subdomain=eq.subdomain
         ))
 
     return FieldData(
