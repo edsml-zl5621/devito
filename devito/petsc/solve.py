@@ -31,9 +31,8 @@ def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
 
 
 class InjectSolve:
-    @classmethod
-    def build(cls, eqns_targets, solver_parameters):
-        target, funcs, fielddata, parent, children, time_mapper = cls.build_eq(
+    def build(self, eqns_targets, solver_parameters):
+        target, funcs, fielddata, parent, children, time_mapper = self.build_eq(
             eqns_targets, solver_parameters
         )
         # Placeholder equation for inserting calls to the solver and generating
@@ -43,19 +42,72 @@ class InjectSolve:
                 children_dms=children, time_mapper=time_mapper
                 ))]
 
-    @classmethod
-    def build_eq(cls, eqns_targets, solver_parameters):
+    def build_eq(self, eqns_targets, solver_parameters):
         target, eqns = next(iter(eqns_targets.items()))
         eqns = as_tuple(eqns)
         funcs = get_funcs(eqns)
         time_mapper = generate_time_mapper(funcs)
-        fielddata = generate_field_data(eqns, target, time_mapper)
+        fielddata = self.generate_field_data(eqns, target, time_mapper)
         return target, tuple(funcs), fielddata, fielddata.dmda, None, time_mapper
+
+    def generate_field_data(self, eqns, target, time_mapper):
+        # TODO: change these names
+        prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
+
+        # field DMDA
+        dmda = DM(
+            name='da_%s' % target.name, liveness='eager', target=target
+        )
+        arrays = {
+            '%s_%s' % (p, target.name): PETScArray(
+                name='%s_%s' % (p, target.name),
+                dtype=target.dtype,
+                dimensions=target.space_dimensions,
+                shape=target.grid.shape,
+                liveness='eager',
+                halo=[target.halo[d] for d in target.space_dimensions],
+                space_order=target.space_order,
+                dmda=dmda
+            )
+            for p in prefixes
+        }
+
+        matvecs, formfuncs, formrhs = zip(
+            *[self.build_callback_eqns(eq, target, arrays, time_mapper) for eq in eqns]
+        )
+
+        return FieldData(
+            target=target,
+            matvecs=matvecs,
+            formfuncs=formfuncs,
+            formrhs=formrhs,
+            arrays=arrays,
+            dmda=dmda
+        )
+
+    def build_callback_eqns(self, eq, target, arrays, time_mapper):
+        b, F_target, targets = separate_eqn(eq, target)
+        name = target.name
+        matvec = Eq(
+            arrays['y_matvec_%s' % name],
+            F_target.subs(targets_to_arrays(arrays['x_matvec_%s' % name], targets)),
+            subdomain=eq.subdomain
+        )
+        matvec = matvec.subs(time_mapper)
+        formfunc = Eq(
+            arrays['y_formfunc_%s' % name],
+            F_target.subs(targets_to_arrays(arrays['x_formfunc_%s' % name], targets)),
+            subdomain=eq.subdomain
+        )
+        formfunc = formfunc.subs(time_mapper)
+        formrhs = Eq(
+            arrays['b_tmp_%s' % target.name], b.subs(time_mapper), subdomain=eq.subdomain
+        )
+        return matvec, formfunc, formrhs
 
 
 class InjectSolveNested(InjectSolve):
-    @classmethod
-    def build_eq(cls, eqns_targets, solver_parameters):
+    def build_eq(self, eqns_targets, solver_parameters):
         combined_eqns = [item for sublist in eqns_targets.values() for item in sublist]
         funcs = get_funcs(combined_eqns)
         time_mapper = generate_time_mapper(funcs)
@@ -65,7 +117,7 @@ class InjectSolveNested(InjectSolve):
 
         for target, eqns in eqns_targets.items():
             eqns = as_tuple(eqns)
-            fielddata = generate_field_data(eqns, target, time_mapper)
+            fielddata = self.generate_field_data(eqns, target, time_mapper)
             nest.add_field_data(fielddata)
             children_dms.append(fielddata.dmda)
 
@@ -74,66 +126,6 @@ class InjectSolveNested(InjectSolve):
             name='da_%s' % '_'.join(t.name for t in targets), targets=targets
         )
         return target, tuple(funcs), nest, parent_dm, children_dms, time_mapper
-
-
-def generate_field_data(eqns, target, time_mapper):
-    # TODO: change these names
-    prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
-
-    # field DMDA
-    dmda = DM(
-        name='da_%s' % target.name, liveness='eager', target=target
-    )
-    arrays = {
-        '%s_%s' % (p, target.name): PETScArray(
-            name='%s_%s' % (p, target.name),
-            dtype=target.dtype,
-            dimensions=target.space_dimensions,
-            shape=target.grid.shape,
-            liveness='eager',
-            halo=[target.halo[d] for d in target.space_dimensions],
-            space_order=target.space_order,
-            dmda=dmda
-        )
-        for p in prefixes
-    }
-
-    matvecs = []
-    formfuncs = []
-    formrhs = []
-
-    name = target.name
-    for eq in eqns:
-        b, F_target, targets = separate_eqn(eq, target)
-
-        # TODO: Current assumption is that problem is linear and user has not provided
-        # a jacobian. Hence, we can use F_target to form the jac-vec product
-        matvec = Eq(
-            arrays['y_matvec_%s' % name],
-            F_target.subs(targets_to_arrays(arrays['x_matvec_%s' % name], targets)),
-            subdomain=eq.subdomain
-        )
-        matvecs.append(matvec.subs(time_mapper))
-
-        formfunc = Eq(
-            arrays['y_formfunc_%s' % name],
-            F_target.subs(targets_to_arrays(arrays['x_formfunc_%s' % name], targets)),
-            subdomain=eq.subdomain
-        )
-        formfuncs.append(formfunc.subs(time_mapper))
-
-        formrhs.append(Eq(
-            arrays['b_tmp_%s' % name], b.subs(time_mapper), subdomain=eq.subdomain
-        ))
-
-    return FieldData(
-        target=target,
-        matvecs=matvecs,
-        formfuncs=formfuncs,
-        formrhs=formrhs,
-        arrays=arrays,
-        dmda=dmda
-    )
 
 
 def separate_eqn(eqn, target):
