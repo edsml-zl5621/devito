@@ -19,7 +19,10 @@ class InjectSolveDummy(LinearSolverExpression):
 
 
 class PETScCallable(FixedArgsCallable):
-    pass
+    def __init__(self, name, body, retval, parameters=None, prefix=None,
+                 templates=None, target=None):
+        super().__init__(name, body, retval, parameters, prefix, templates)
+        self.target = target
 
 
 class MatVecCallback(Callback):

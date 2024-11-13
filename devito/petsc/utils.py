@@ -44,8 +44,9 @@ def core_metadata():
     # Lib directories
     lib_dir = os.path.join(petsc_dir, f'{petsc_arch}', 'lib')
 
+    # TODO: Edit this to only add the required .h files depending on the type of solve etc
     return {
-        'includes': ('petscksp.h', 'petscsnes.h', 'petscdmda.h'),
+        'includes': ('petscksp.h', 'petscsnes.h', 'petscdmda.h', 'petscdmcomposite.h'),
         'include_dirs': include_dirs,
         'libs': ('petsc'),
         'lib_dirs': lib_dir,

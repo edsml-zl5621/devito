@@ -1,13 +1,13 @@
 import sympy
 
-from devito.tools import Reconstructable, sympy_mutex
+from devito.tools import Reconstructable, sympy_mutex, as_tuple
 
 
-class LinearSolveExpr(sympy.Function, Reconstructable):
+class LinearSolver(sympy.Function, Reconstructable):
 
     __rargs__ = ('expr',)
-    __rkwargs__ = ('target', 'solver_parameters', 'matvecs',
-                   'formfuncs', 'formrhs', 'arrays', 'time_mapper')
+    __rkwargs__ = ('solver_parameters', 'fielddata', 'parent_dm', 'children_dms',
+                   'time_mapper')
 
     defaults = {
         'ksp_type': 'gmres',
@@ -18,9 +18,9 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         'ksp_max_it': 10000  # Maximum iterations
     }
 
-    def __new__(cls, expr, target=None, solver_parameters=None,
-                matvecs=None, formfuncs=None, formrhs=None,
-                arrays=None, time_mapper=None, **kwargs):
+    def __new__(cls, expr, solver_parameters=None,
+                fielddata=None, parent_dm=None, children_dms=None,
+                time_mapper=None, **kwargs):
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -32,12 +32,10 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
             obj = sympy.Function.__new__(cls, expr)
 
         obj._expr = expr
-        obj._target = target
         obj._solver_parameters = solver_parameters
-        obj._matvecs = matvecs
-        obj._formfuncs = formfuncs
-        obj._formrhs = formrhs
-        obj._arrays = arrays
+        obj._fielddata = fielddata if fielddata else FieldData()
+        obj._parent_dm = parent_dm
+        obj._children_dms = children_dms
         obj._time_mapper = time_mapper
         return obj
 
@@ -53,37 +51,39 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         return hash(self.expr)
 
     def __eq__(self, other):
-        return (isinstance(other, LinearSolveExpr) and
-                self.expr == other.expr and
-                self.target == other.target)
+        return (isinstance(other, LinearSolver) and
+                self.expr == other.expr)
 
     @property
     def expr(self):
         return self._expr
 
     @property
-    def target(self):
-        return self._target
-
-    @property
     def solver_parameters(self):
         return self._solver_parameters
 
     @property
-    def matvecs(self):
-        return self._matvecs
+    def fielddata(self):
+        return self._fielddata
 
     @property
-    def formfuncs(self):
-        return self._formfuncs
+    def parent_dm(self):
+        """DM attached to the SNES object and responsible for the solve"""
+        return self._parent_dm
 
     @property
-    def formrhs(self):
-        return self._formrhs
+    def children_dms(self):
+        """DMs associated with each field in the solve"""
+        children_dms = self._children_dms
+        return children_dms if children_dms is not None else as_tuple(self.parent_dm)
 
     @property
-    def arrays(self):
-        return self._arrays
+    def dms(self):
+        dmdas = [self.parent_dm]
+        # Add children_dms if the parent_dm is not in them
+        if self.parent_dm not in self.children_dms:
+            dmdas.extend(self.children_dms)
+        return list(set(dmdas))
 
     @property
     def time_mapper(self):
@@ -94,3 +94,35 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         return None
 
     func = Reconstructable._rebuild
+
+
+# TODO: Reconstructable?
+class FieldData:
+    def __init__(self, target=None, matvecs=None, formfuncs=None, formrhs=None,
+                 arrays=None, dmda=None, **kwargs):
+
+        self.target = target
+        self.matvecs = matvecs
+        self.formfuncs = formfuncs
+        self.formrhs = formrhs
+        self.arrays = arrays
+        self.dmda = dmda
+
+
+class FieldDataNest(FieldData):
+    def __init__(self):
+        self.field_data_list = []
+
+    def add_field_data(self, field_data):
+        self.field_data_list.append(field_data)
+
+    def get_field_data(self, target):
+        for field_data in self.field_data_list:
+            if field_data.target == target:
+                return field_data
+        raise ValueError("FieldData with target %s not found." % target)
+    pass
+
+    @property
+    def targets(self):
+        return tuple(field_data.target for field_data in self.field_data_list)
