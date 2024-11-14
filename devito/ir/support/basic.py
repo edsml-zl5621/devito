@@ -716,6 +716,8 @@ class Dependence(Relation):
         """
         Return True if definitely a dimension-independent dependence, False otherwise.
         """
+        if dim:
+            dim = dim.root
         try:
             if self.source.is_irregular or self.sink.is_irregular:
                 # Note: we cannot just return `self.distance == 0` as an irregular
