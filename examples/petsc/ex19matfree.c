@@ -80,21 +80,16 @@ typedef struct {
 typedef struct {
     Mat *submats;
     PetscInt n_submats;
-    IS *rows;
-    IS *cols;
     DM *sub_dms;
     IS *fields;
     SNES snes;
 } JacobianContext;
 
 typedef struct {
-    Vec sol;
-    PetscInt index;
     IS rows;
     IS cols;
     DM dm;
     Vec omega, uvec, vvec, temp;
-    SNES snes;
 } SubmatrixContext;
 
 PetscErrorCode FormFunctionLocal(DMDALocalInfo *, Field **, Field **, void *);
@@ -105,172 +100,160 @@ typedef struct {
 } AppCtx;
 
 extern PetscErrorCode FormInitialGuess(AppCtx *, DM, Vec);
-extern PetscErrorCode NonlinearGS(SNES, Vec, Vec, void *);
 
 
 PetscErrorCode MyMatShellMult(Mat J, Vec X, Vec Y) {
   JacobianContext *jac_ctx;
-  DM da, da_u, da_v, da_omega, da_temp;
-  Vec u, v, omega, temp;
-  Vec uprev, vprev, omegaprev, tempprev;
-  Vec yu0, yu2;
-  Vec yv1, yv2;
-  Vec yomega0, yomega1, yomega2, yomega3;
-  Vec yT0, yT1, yT3;
-  SNES snes;
   Vec sol;
-
+  Vec uprev, vprev, omegaprev, tempprev;
   PetscFunctionBegin;
 
   PetscCall(MatShellGetContext(J, &jac_ctx));
-  snes = jac_ctx->snes;
-  PetscCall(SNESGetSolution(snes, &sol));
 
-  // get the sub_dms
-  da_u = jac_ctx->sub_dms[0];
-  da_v = jac_ctx->sub_dms[1];
-  da_omega = jac_ctx->sub_dms[2];
-  da_temp = jac_ctx->sub_dms[3];
+  PetscCall(SNESGetSolution(jac_ctx->snes, &sol));
+  PetscCall(VecGetSubVector(sol, jac_ctx->fields[0], &uprev));
+  PetscCall(VecGetSubVector(sol, jac_ctx->fields[1], &vprev));
+  PetscCall(VecGetSubVector(sol, jac_ctx->fields[2], &omegaprev));
+  PetscCall(VecGetSubVector(sol, jac_ctx->fields[3], &tempprev));
 
-  PetscCall(SNESGetDM(snes, &da));
+  // dfu/du
+  SubmatrixContext *j00_ctx;
+  Vec j00X, j00Y;
+  PetscCall(MatShellGetContext(jac_ctx->submats[0], &j00_ctx));
+  PetscCall(VecGetSubVector(X, j00_ctx->cols, &j00X));
+  PetscCall(VecGetSubVector(Y, j00_ctx->rows, &j00Y));
+  PetscCall(MatMult(jac_ctx->submats[0], j00X, j00Y));
+  PetscCall(VecRestoreSubVector(X, j00_ctx->cols, &j00X));
+  PetscCall(VecRestoreSubVector(Y, j00_ctx->rows, &j00Y));
 
-  PetscCall(DMCreateGlobalVector(da_u, &u));
-  PetscCall(DMCreateGlobalVector(da_v, &v));
-  PetscCall(DMCreateGlobalVector(da_omega, &omega));
-  PetscCall(DMCreateGlobalVector(da_temp, &temp));
-
-  PetscCall(DMCreateGlobalVector(da_u, &uprev));
-  PetscCall(DMCreateGlobalVector(da_v, &vprev));
-  PetscCall(DMCreateGlobalVector(da_omega, &omegaprev));
-  PetscCall(DMCreateGlobalVector(da_temp, &tempprev));
-
-  PetscCall(DMCreateGlobalVector(da_u, &yu0));
-  PetscCall(DMCreateGlobalVector(da_omega, &yu2));
-
-  PetscCall(DMCreateGlobalVector(da_v, &yv1));
-  PetscCall(DMCreateGlobalVector(da_omega, &yv2));
-
-  PetscCall(DMCreateGlobalVector(da_u, &yomega0));
-  PetscCall(DMCreateGlobalVector(da_v, &yomega1));
-  PetscCall(DMCreateGlobalVector(da_omega, &yomega2));
-  PetscCall(DMCreateGlobalVector(da_temp, &yomega3));
-
-  PetscCall(DMCreateGlobalVector(da_u, &yT0));
-  PetscCall(DMCreateGlobalVector(da_v, &yT1));
-  PetscCall(DMCreateGlobalVector(da_temp, &yT3));
-
-  VecScatter scatter_u, scatter_v, scatter_omega, scatter_temp;
-
-  PetscCall(VecScatterCreate(X, jac_ctx->fields[0], u, NULL, &scatter_u));
-  PetscCall(VecScatterCreate(X, jac_ctx->fields[1], v, NULL, &scatter_v));
-  PetscCall(VecScatterCreate(X, jac_ctx->fields[2], omega, NULL, &scatter_omega));
-  PetscCall(VecScatterCreate(X, jac_ctx->fields[3], temp, NULL, &scatter_temp));
-
-  PetscCall(VecScatterBegin(scatter_u, X, u, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(scatter_u, X, u, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterBegin(scatter_omega, X, omega, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(scatter_omega, X, omega, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterBegin(scatter_v, X, v, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(scatter_v, X, v, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterBegin(scatter_temp, X, temp, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(scatter_temp, X, temp, INSERT_VALUES, SCATTER_FORWARD));
-
-  // previous newton iteration solution
-  PetscCall(VecScatterBegin(scatter_u, sol, uprev, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(scatter_u, sol, uprev, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterBegin(scatter_omega, sol, omegaprev, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(scatter_omega, sol, omegaprev, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterBegin(scatter_v, sol, vprev, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(scatter_v, sol, vprev, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterBegin(scatter_temp, sol, tempprev, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(scatter_temp, sol, tempprev, INSERT_VALUES, SCATTER_FORWARD));
-
-  //dfu/du
-  PetscCall(MatMult(jac_ctx->submats[0], u, yu0));
   //dfu/domega
-  PetscCall(MatMult(jac_ctx->submats[2], omega, yu2));
-  // Yu
-  PetscCall(VecAXPY(yu0, 1.0, yu2));
+  SubmatrixContext *j02_ctx;
+  Vec j02X, j02Y;
+  PetscCall(MatShellGetContext(jac_ctx->submats[2], &j02_ctx));
+  PetscCall(VecGetSubVector(X, j02_ctx->cols, &j02X));
+  PetscCall(VecGetSubVector(Y, j02_ctx->rows, &j02Y));
+  PetscCall(MatMult(jac_ctx->submats[2], j02X, j02Y));
+  PetscCall(VecRestoreSubVector(X, j02_ctx->cols, &j02X));
+  PetscCall(VecRestoreSubVector(Y, j02_ctx->rows, &j02Y));
 
   //dfv/dv
-  PetscCall(MatMult(jac_ctx->submats[5], v, yv1));
+  SubmatrixContext *j11_ctx;
+  Vec j11X, j11Y;
+  PetscCall(MatShellGetContext(jac_ctx->submats[5], &j11_ctx));
+  PetscCall(VecGetSubVector(X, j11_ctx->cols, &j11X));
+  PetscCall(VecGetSubVector(Y, j11_ctx->rows, &j11Y));
+  PetscCall(MatMult(jac_ctx->submats[5], j11X, j11Y));
+  PetscCall(VecRestoreSubVector(X, j11_ctx->cols, &j11X));
+  PetscCall(VecRestoreSubVector(Y, j11_ctx->rows, &j11Y));
+
   //dfv/domega
-  PetscCall(MatMult(jac_ctx->submats[6], omega, yv2));
-  // Yv
-  PetscCall(VecAXPY(yv1, 1.0, yv2));
+  SubmatrixContext *j12_ctx;
+  Vec j12X, j12Y;
+  PetscCall(MatShellGetContext(jac_ctx->submats[6], &j12_ctx));
+  PetscCall(VecGetSubVector(X, j12_ctx->cols, &j12X));
+  PetscCall(VecGetSubVector(Y, j12_ctx->rows, &j12Y));
+  PetscCall(MatMult(jac_ctx->submats[6], j12X, j12Y));
+  PetscCall(VecRestoreSubVector(X, j12_ctx->cols, &j12X));
+  PetscCall(VecRestoreSubVector(Y, j12_ctx->rows, &j12Y));
 
   //dfomega/du
   SubmatrixContext *j20_ctx;
+  Vec j20X, j20Y;
   PetscCall(MatShellGetContext(jac_ctx->submats[8], &j20_ctx));
   j20_ctx->omega = omegaprev;
   j20_ctx->uvec = uprev;
   PetscCall(MatShellSetContext(jac_ctx->submats[8], j20_ctx));
-  PetscCall(MatMult(jac_ctx->submats[8], u, yomega0));
+  PetscCall(VecGetSubVector(X, j20_ctx->cols, &j20X));
+  PetscCall(VecGetSubVector(Y, j20_ctx->rows, &j20Y));
+  PetscCall(MatMult(jac_ctx->submats[8], j20X, j20Y));
+  PetscCall(VecRestoreSubVector(X, j20_ctx->cols, &j20X));
+  PetscCall(VecRestoreSubVector(Y, j20_ctx->rows, &j20Y));
 
   //dfomega/dv
   SubmatrixContext *j21_ctx;
+  Vec j21X, j21Y;
   PetscCall(MatShellGetContext(jac_ctx->submats[9], &j21_ctx));
   j21_ctx->omega = omegaprev;
   j21_ctx->vvec = vprev;
   PetscCall(MatShellSetContext(jac_ctx->submats[9], j21_ctx));
-  PetscCall(MatMult(jac_ctx->submats[9], v, yomega1));
+  PetscCall(VecGetSubVector(X, j21_ctx->cols, &j21X));
+  PetscCall(VecGetSubVector(Y, j21_ctx->rows, &j21Y));
+  PetscCall(MatMult(jac_ctx->submats[9], j21X, j21Y));
+  PetscCall(VecRestoreSubVector(X, j21_ctx->cols, &j21X));
+  PetscCall(VecRestoreSubVector(Y, j21_ctx->rows, &j21Y));
 
   //dfomega/domega
   SubmatrixContext *j22_ctx;
+  Vec j22X, j22Y;
   PetscCall(MatShellGetContext(jac_ctx->submats[10], &j22_ctx));
   j22_ctx->uvec = uprev;
   j22_ctx->vvec = vprev;
   PetscCall(MatShellSetContext(jac_ctx->submats[10], j22_ctx));
-  PetscCall(MatMult(jac_ctx->submats[10], omega, yomega2));
+  PetscCall(VecGetSubVector(X, j22_ctx->cols, &j22X));
+  PetscCall(VecGetSubVector(Y, j22_ctx->rows, &j22Y));
+  PetscCall(MatMult(jac_ctx->submats[10], j22X, j22Y));
+  PetscCall(VecRestoreSubVector(X, j22_ctx->cols, &j22X));
+  PetscCall(VecRestoreSubVector(Y, j22_ctx->rows, &j22Y));
 
   //dfomega/dT
-  PetscCall(MatMult(jac_ctx->submats[11], temp, yomega3));
-
-  //Yomega
-  PetscCall(VecAXPY(yomega0, 1.0, yomega1));
-  PetscCall(VecAXPY(yomega0, 1.0, yomega2));
-  PetscCall(VecAXPY(yomega0, 1.0, yomega3));
+  SubmatrixContext *j23_ctx;
+  Vec j23X, j23Y;
+  PetscCall(MatShellGetContext(jac_ctx->submats[11], &j23_ctx));
+  PetscCall(VecGetSubVector(X, j23_ctx->cols, &j23X));
+  PetscCall(VecGetSubVector(Y, j23_ctx->rows, &j23Y));
+  PetscCall(MatMult(jac_ctx->submats[11], j23X, j23Y));
+  PetscCall(VecRestoreSubVector(X, j23_ctx->cols, &j23X));
+  PetscCall(VecRestoreSubVector(Y, j23_ctx->rows, &j23Y));
 
   //dfT/du
   SubmatrixContext *j30_ctx;
+  Vec j30X, j30Y;
   PetscCall(MatShellGetContext(jac_ctx->submats[12], &j30_ctx));
   j30_ctx->temp = tempprev;
   PetscCall(MatShellSetContext(jac_ctx->submats[12], j30_ctx));
-  PetscCall(MatMult(jac_ctx->submats[12], u, yT0));
+  PetscCall(VecGetSubVector(X, j30_ctx->cols, &j30X));
+  PetscCall(VecGetSubVector(Y, j30_ctx->rows, &j30Y));
+  PetscCall(MatMult(jac_ctx->submats[12], j30X, j30Y));
+  PetscCall(VecRestoreSubVector(X, j30_ctx->cols, &j30X));
+  PetscCall(VecRestoreSubVector(Y, j30_ctx->rows, &j30Y));
 
   //dfT/dv
   SubmatrixContext *j31_ctx;
-  PetscCall(MatShellGetContext(jac_ctx->submats[13], &j31_ctx));
+  Vec j31X, j31Y;
+  PetscCall(MatShellGetContext(jac_ctx->submats[13], &j31_ctx));  
   j31_ctx->temp = tempprev;
-  j31_ctx->vvec = vprev;
+  j31_ctx->vvec = vprev;  
   PetscCall(MatShellSetContext(jac_ctx->submats[13], j31_ctx));
-  PetscCall(MatMult(jac_ctx->submats[13], v, yT1));
+  PetscCall(VecGetSubVector(X, j31_ctx->cols, &j31X));
+  PetscCall(VecGetSubVector(Y, j31_ctx->rows, &j31Y));
+  PetscCall(MatMult(jac_ctx->submats[13], j31X, j31Y));
+  PetscCall(VecRestoreSubVector(X, j31_ctx->cols, &j31X));
+  PetscCall(VecRestoreSubVector(Y, j31_ctx->rows, &j31Y));
 
   //dfT/dT
   SubmatrixContext *j33_ctx;
+  Vec j33X, j33Y;
   PetscCall(MatShellGetContext(jac_ctx->submats[15], &j33_ctx));
   j33_ctx->uvec = uprev;
   j33_ctx->vvec = vprev;
-  PetscCall(MatMult(jac_ctx->submats[15], temp, yT3));
+  PetscCall(MatShellSetContext(jac_ctx->submats[15], j33_ctx));
+  PetscCall(VecGetSubVector(X, j33_ctx->cols, &j33X));
+  PetscCall(VecGetSubVector(Y, j33_ctx->rows, &j33Y));
+  PetscCall(MatMult(jac_ctx->submats[15], j33X, j33Y));
+  PetscCall(VecRestoreSubVector(X, j33_ctx->cols, &j33X));
+  PetscCall(VecRestoreSubVector(Y, j33_ctx->rows, &j33Y));
 
-  //YT
-  PetscCall(VecAXPY(yT0, 1.0, yT1));
-  PetscCall(VecAXPY(yT0, 1.0, yT3));
-
-  PetscCall(VecScatterBegin(scatter_u, yu0, Y, INSERT_VALUES, SCATTER_REVERSE));
-  PetscCall(VecScatterEnd(scatter_u, yu0, Y, INSERT_VALUES, SCATTER_REVERSE));
-  PetscCall(VecScatterBegin(scatter_v, yv1, Y, INSERT_VALUES, SCATTER_REVERSE));
-  PetscCall(VecScatterEnd(scatter_v, yv1, Y, INSERT_VALUES, SCATTER_REVERSE));
-  PetscCall(VecScatterBegin(scatter_omega, yomega0, Y, INSERT_VALUES, SCATTER_REVERSE));
-  PetscCall(VecScatterEnd(scatter_omega, yomega0, Y, INSERT_VALUES, SCATTER_REVERSE));
-  PetscCall(VecScatterBegin(scatter_temp, yT0, Y, INSERT_VALUES, SCATTER_REVERSE));
-  PetscCall(VecScatterEnd(scatter_temp, yT0, Y, INSERT_VALUES, SCATTER_REVERSE));
+  PetscCall(VecRestoreSubVector(sol, jac_ctx->fields[0], &uprev));
+  PetscCall(VecRestoreSubVector(sol, jac_ctx->fields[1], &vprev));
+  PetscCall(VecRestoreSubVector(sol, jac_ctx->fields[2], &omegaprev));
+  PetscCall(VecRestoreSubVector(sol, jac_ctx->fields[3], &tempprev));
 
   PetscFunctionReturn(0);
 }
 
 
-//dfu/du
+
+// dfu/du
 static PetscErrorCode MySubMatMult_J00(Mat J00, Vec X, Vec Y)
 {
   const PetscScalar **x_array;
@@ -279,16 +262,16 @@ static PetscErrorCode MySubMatMult_J00(Mat J00, Vec X, Vec Y)
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
-
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hx, hy, dhx, dhy, hxdhy, hydhx;
-  PetscScalar u, uxx, uyy;
+  PetscScalar uxx, uyy;
 
   PetscFunctionBegin;
 
   PetscCall(MatShellGetContext(J00, &sub_ctx));
 
   da = sub_ctx->dm;
+
   PetscCall(DMDAGetLocalInfo(da, &info));
 
   dhx   = (PetscReal)(info.mx - 1);
@@ -343,9 +326,8 @@ static PetscErrorCode MySubMatMult_J00(Mat J00, Vec X, Vec Y)
   }
   for (j = yints; j < yinte; j++) {
     for (i = xints; i < xinte; i++) {
-      u         = x_array[j][i];
-      uxx       = (2.0 * u - x_array[j][i-1] - x_array[j][i+1]) * hydhx;
-      uyy       = (2.0 * u - x_array[j-1][i] - x_array[j+1][i]) * hxdhy;
+      uxx       = (2.0 * x_array[j][i] - x_array[j][i-1] - x_array[j][i+1]) * hydhx;
+      uyy       = (2.0 * x_array[j][i] - x_array[j-1][i] - x_array[j+1][i]) * hxdhy;
       y_array[j][i] = uxx + uyy;
     }
   }
@@ -364,6 +346,7 @@ static PetscErrorCode MySubMatMult_J02(Mat J00, Vec X, Vec Y)
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
+  Vec localy;
 
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hx, dhx;
@@ -384,8 +367,9 @@ static PetscErrorCode MySubMatMult_J02(Mat J00, Vec X, Vec Y)
   yinte = info.ys + info.ym;
 
   PetscCall(MatGetLocalSize(J00, &n, NULL));
+  PetscCall(DMGetLocalVector(da,&(localy)));
   PetscCall(DMDAVecGetArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecGetArray(da, Y, &y_array));
+  PetscCall(DMDAVecGetArray(da, localy, &y_array));
 
   if (yints == 0) {
     j     = 0;
@@ -426,11 +410,13 @@ static PetscErrorCode MySubMatMult_J02(Mat J00, Vec X, Vec Y)
     }
   }
   PetscCall(DMDAVecRestoreArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecRestoreArray(da, Y, &y_array));
+  PetscCall(DMDAVecRestoreArray(da, localy, &y_array));
+  PetscCall(DMLocalToGlobal(da, localy, ADD_VALUES, Y));
   PetscFunctionReturn(0);
 }
 
-//dfv/domega
+
+// dfv/domega
 static PetscErrorCode MySubMatMult_J12(Mat J00, Vec X, Vec Y)
 {
   const PetscScalar **x_array;
@@ -439,6 +425,7 @@ static PetscErrorCode MySubMatMult_J12(Mat J00, Vec X, Vec Y)
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
+  Vec localy;
 
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hy, dhy;
@@ -460,8 +447,9 @@ static PetscErrorCode MySubMatMult_J12(Mat J00, Vec X, Vec Y)
   yinte = info.ys + info.ym;
 
   PetscCall(MatGetLocalSize(J00, &n, NULL));
+  PetscCall(DMGetLocalVector(da,&(localy)));
   PetscCall(DMDAVecGetArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecGetArray(da, Y, &y_array));
+  PetscCall(DMDAVecGetArray(da, localy, &y_array));
 
   if (yints == 0) {
     j     = 0;
@@ -502,20 +490,22 @@ static PetscErrorCode MySubMatMult_J12(Mat J00, Vec X, Vec Y)
     }
   }
   PetscCall(DMDAVecRestoreArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecRestoreArray(da, Y, &y_array));
+  PetscCall(DMDAVecRestoreArray(da, localy, &y_array));
+  PetscCall(DMLocalToGlobal(da, localy, ADD_VALUES, Y));
   PetscFunctionReturn(0);
 }
 
 
 static PetscErrorCode MySubMatMult_J20(Mat J00, Vec X, Vec Y)
 {
-  const PetscScalar **x_array, **omega_array, **u_array;
+  const PetscScalar **x_array;
+  PetscScalar *omega_array_vec, *u_array_vec;
   SubmatrixContext *sub_ctx;
   PetscScalar **y_array;
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
-  Vec omega, uprev;
+  Vec localy;
 
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hy, dhy;
@@ -526,8 +516,6 @@ static PetscErrorCode MySubMatMult_J20(Mat J00, Vec X, Vec Y)
   PetscCall(MatShellGetContext(J00, &sub_ctx));
 
   da = sub_ctx->dm;
-  omega = sub_ctx->omega;
-  uprev = sub_ctx->uvec;
   PetscCall(DMDAGetLocalInfo(da, &info));
 
   dhy   = (PetscReal)(info.my - 1);
@@ -540,10 +528,14 @@ static PetscErrorCode MySubMatMult_J20(Mat J00, Vec X, Vec Y)
 
   PetscCall(MatGetLocalSize(J00, &n, NULL));
 
+  PetscCall(DMGetLocalVector(da,&(localy)));
   PetscCall(DMDAVecGetArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecGetArrayRead(da, omega, &omega_array));
-  PetscCall(DMDAVecGetArrayRead(da, uprev, &u_array));
-  PetscCall(DMDAVecGetArray(da, Y, &y_array));
+  PetscCall(VecGetArray(sub_ctx->omega, &omega_array_vec));
+  PetscCall(VecGetArray(sub_ctx->uvec, &u_array_vec));
+  PetscCall(DMDAVecGetArray(da, localy, &y_array));
+
+  PetscScalar (* u_array)[4] = (PetscScalar (*)[4]) u_array_vec;
+  PetscScalar (* omega_array)[4] = (PetscScalar (*)[4]) omega_array_vec;
 
   if (yints == 0) {
     j     = 0;
@@ -587,22 +579,24 @@ static PetscErrorCode MySubMatMult_J20(Mat J00, Vec X, Vec Y)
     }
   }
   PetscCall(DMDAVecRestoreArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, omega, &omega_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, uprev, &u_array));
-  PetscCall(DMDAVecRestoreArray(da, Y, &y_array));
+  PetscCall(VecRestoreArray(sub_ctx->omega, omega_array_vec));
+  PetscCall(VecRestoreArray(sub_ctx->uvec, u_array_vec));
+  PetscCall(DMDAVecRestoreArray(da, localy, &y_array));
+  PetscCall(DMLocalToGlobal(da, localy, INSERT_VALUES, Y));
   PetscFunctionReturn(0);
 }
 
 
 static PetscErrorCode MySubMatMult_J21(Mat J00, Vec X, Vec Y)
 {
-  const PetscScalar **x_array, **omega_array, **v_array;
+  const PetscScalar **x_array;
+  PetscScalar *v_array_vec, *omega_array_vec;
   SubmatrixContext *sub_ctx;
   PetscScalar **y_array;
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
-  Vec omega, vprev;
+  Vec localy;
 
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hx, dhx;
@@ -613,8 +607,6 @@ static PetscErrorCode MySubMatMult_J21(Mat J00, Vec X, Vec Y)
   PetscCall(MatShellGetContext(J00, &sub_ctx));
 
   da = sub_ctx->dm;
-  omega = sub_ctx->omega;
-  vprev = sub_ctx->vvec;
   PetscCall(DMDAGetLocalInfo(da, &info));
 
   dhx   = (PetscReal)(info.mx - 1);
@@ -627,10 +619,14 @@ static PetscErrorCode MySubMatMult_J21(Mat J00, Vec X, Vec Y)
 
   PetscCall(MatGetLocalSize(J00, &n, NULL));
   
+  PetscCall(DMGetLocalVector(da,&(localy)));
   PetscCall(DMDAVecGetArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecGetArrayRead(da, omega, &omega_array));
-  PetscCall(DMDAVecGetArrayRead(da, vprev, &v_array));
-  PetscCall(DMDAVecGetArray(da, Y, &y_array));
+  PetscCall(VecGetArray(sub_ctx->omega, &omega_array_vec));
+  PetscCall(VecGetArray(sub_ctx->vvec, &v_array_vec));
+  PetscCall(DMDAVecGetArray(da, localy, &y_array));
+
+  PetscScalar (* v_array)[4] = (PetscScalar (*)[4]) v_array_vec;
+  PetscScalar (* omega_array)[4] = (PetscScalar (*)[4]) omega_array_vec;
 
   if (yints == 0) {
     j     = 0;
@@ -676,22 +672,23 @@ static PetscErrorCode MySubMatMult_J21(Mat J00, Vec X, Vec Y)
     }
   }
   PetscCall(DMDAVecRestoreArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, omega, &omega_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, vprev, v_array));
-  PetscCall(DMDAVecRestoreArray(da, Y, &y_array));
+  PetscCall(VecRestoreArray(sub_ctx->omega, omega_array_vec));
+  PetscCall(VecRestoreArray(sub_ctx->vvec, v_array_vec));
+  PetscCall(DMDAVecRestoreArray(da, localy, &y_array));
+  PetscCall(DMLocalToGlobal(da, localy, ADD_VALUES, Y));
   PetscFunctionReturn(0);
 }
 
 
 static PetscErrorCode MySubMatMult_J22(Mat J00, Vec X, Vec Y)
 {
-  const PetscScalar **x_array, **u_array, **v_array;
+  const PetscScalar **x_array;
   SubmatrixContext *sub_ctx;
-  PetscScalar **y_array;
+  PetscScalar **y_array, *u_array_vec, *v_array_vec;
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
-  Vec uvec, vvec;
+  Vec localy;
 
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hx, hy, dhx, dhy, hxdhy, hydhx;
@@ -702,8 +699,6 @@ static PetscErrorCode MySubMatMult_J22(Mat J00, Vec X, Vec Y)
   PetscCall(MatShellGetContext(J00, &sub_ctx));
 
   da = sub_ctx->dm;
-  uvec = sub_ctx->uvec;
-  vvec = sub_ctx->vvec;
 
   PetscCall(DMDAGetLocalInfo(da, &info));
 
@@ -720,10 +715,14 @@ static PetscErrorCode MySubMatMult_J22(Mat J00, Vec X, Vec Y)
   yinte = info.ys + info.ym;
 
   PetscCall(MatGetLocalSize(J00, &n, NULL));
+  PetscCall(DMGetLocalVector(da,&(localy)));
+  PetscCall(VecGetArray(sub_ctx->uvec, &u_array_vec));
+  PetscCall(VecGetArray(sub_ctx->vvec, &v_array_vec));
   PetscCall(DMDAVecGetArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecGetArrayRead(da, uvec, &u_array));
-  PetscCall(DMDAVecGetArrayRead(da, vvec, &v_array));
-  PetscCall(DMDAVecGetArray(da, Y, &y_array));
+  PetscCall(DMDAVecGetArray(da, localy, &y_array));
+
+  PetscScalar (* u_array)[4] = (PetscScalar (*)[4]) u_array_vec;
+  PetscScalar (* v_array)[4] = (PetscScalar (*)[4]) v_array_vec;
 
   if (yints == 0) {
     j     = 0;
@@ -777,9 +776,10 @@ static PetscErrorCode MySubMatMult_J22(Mat J00, Vec X, Vec Y)
   }
 
   PetscCall(DMDAVecRestoreArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, uvec, &u_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, vvec, &v_array));
-  PetscCall(DMDAVecRestoreArray(da, Y, &y_array));
+  PetscCall(VecRestoreArray(sub_ctx->uvec, u_array_vec));
+  PetscCall(VecRestoreArray(sub_ctx->vvec, v_array_vec));
+  PetscCall(DMDAVecRestoreArray(da, localy, &y_array));
+  PetscCall(DMLocalToGlobal(da, localy, ADD_VALUES, Y));
   PetscFunctionReturn(0);
 }
 
@@ -793,6 +793,7 @@ static PetscErrorCode MySubMatMult_J23(Mat J00, Vec X, Vec Y)
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
+  Vec localy;
 
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hy, dhy;
@@ -817,8 +818,9 @@ static PetscErrorCode MySubMatMult_J23(Mat J00, Vec X, Vec Y)
 
   PetscCall(MatGetLocalSize(J00, &n, NULL));
 
+  PetscCall(DMGetLocalVector(da,&(localy)));
   PetscCall(DMDAVecGetArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecGetArray(da, Y, &y_array));
+  PetscCall(DMDAVecGetArray(da, localy, &y_array));
   if (yints == 0) {
     j     = 0;
     yints = yints + 1;
@@ -858,7 +860,8 @@ static PetscErrorCode MySubMatMult_J23(Mat J00, Vec X, Vec Y)
     }
   }
   PetscCall(DMDAVecRestoreArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecRestoreArray(da, Y, &y_array));
+  PetscCall(DMDAVecRestoreArray(da, localy, &y_array));
+  PetscCall(DMLocalToGlobal(da, localy, ADD_VALUES, Y));
   PetscFunctionReturn(0);
 }
 
@@ -866,24 +869,24 @@ static PetscErrorCode MySubMatMult_J23(Mat J00, Vec X, Vec Y)
 // df(T)/du
 static PetscErrorCode MySubMatMult_J30(Mat J00, Vec X, Vec Y)
 {
-  const PetscScalar **x_array, **temp_array;
+  const PetscScalar **x_array;
+  PetscScalar *temp_array_vec;
   SubmatrixContext *sub_ctx;
   PetscScalar **y_array;
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
-  Vec temp;
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hy, dhy;
   PetscReal   prandtl;
   PetscScalar vx, avx, vxp, vxm;
+  Vec localy;
 
   PetscFunctionBegin;
 
   PetscCall(MatShellGetContext(J00, &sub_ctx));
 
   da = sub_ctx->dm;
-  temp = sub_ctx->temp;
   PetscCall(DMDAGetLocalInfo(da, &info));
 
   prandtl = 1.0;
@@ -896,9 +899,12 @@ static PetscErrorCode MySubMatMult_J30(Mat J00, Vec X, Vec Y)
   yinte = info.ys + info.ym;
 
   PetscCall(MatGetLocalSize(J00, &n, NULL));
+  PetscCall(DMGetLocalVector(da,&(localy)));
   PetscCall(DMDAVecGetArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecGetArrayRead(da, temp, &temp_array));
-  PetscCall(DMDAVecGetArray(da, Y, &y_array));
+  PetscCall(VecGetArray(sub_ctx->temp, &temp_array_vec));
+  PetscCall(DMDAVecGetArray(da, localy, &y_array));
+
+  PetscScalar (* temp_array)[4] = (PetscScalar (*)[4]) temp_array_vec;
 
   if (yints == 0) {
     j     = 0;
@@ -945,21 +951,23 @@ static PetscErrorCode MySubMatMult_J30(Mat J00, Vec X, Vec Y)
   }
 
   PetscCall(DMDAVecRestoreArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, temp, &temp_array));
-  PetscCall(DMDAVecRestoreArray(da, Y, &y_array));
+  PetscCall(VecRestoreArray(sub_ctx->temp, &temp_array_vec));
+  PetscCall(DMDAVecRestoreArray(da, localy, &y_array));
+  PetscCall(DMLocalToGlobal(da, localy, INSERT_VALUES, Y));
   PetscFunctionReturn(0);
 }
 
 
 static PetscErrorCode MySubMatMult_J31(Mat J00, Vec X, Vec Y)
 {
-  const PetscScalar **x_array, **temp_array, **v_array;
+  const PetscScalar **x_array;
+  PetscScalar *temp_array_vec, *v_array_vec;
   SubmatrixContext *sub_ctx;
   PetscScalar **y_array;
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
-  Vec temp, vprev;
+  Vec localy;
 
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hx, dhx;
@@ -971,8 +979,6 @@ static PetscErrorCode MySubMatMult_J31(Mat J00, Vec X, Vec Y)
   PetscCall(MatShellGetContext(J00, &sub_ctx));
 
   da = sub_ctx->dm;
-  temp = sub_ctx->temp;
-  vprev = sub_ctx->vvec;
   PetscCall(DMDAGetLocalInfo(da, &info));
 
   prandtl = 1.0;
@@ -986,10 +992,14 @@ static PetscErrorCode MySubMatMult_J31(Mat J00, Vec X, Vec Y)
   yinte = info.ys + info.ym;
 
   PetscCall(MatGetLocalSize(J00, &n, NULL));
+  PetscCall(DMGetLocalVector(da,&(localy)));
   PetscCall(DMDAVecGetArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecGetArrayRead(da, vprev, &v_array));
-  PetscCall(DMDAVecGetArrayRead(da, temp, &temp_array));
-  PetscCall(DMDAVecGetArray(da, Y, &y_array));
+  PetscCall(VecGetArray(sub_ctx->temp, &temp_array_vec));
+  PetscCall(VecGetArray(sub_ctx->vvec, &v_array_vec));
+  PetscCall(DMDAVecGetArray(da, localy, &y_array));
+
+  PetscScalar (* temp_array)[4] = (PetscScalar (*)[4]) temp_array_vec;
+  PetscScalar (* v_array)[4] = (PetscScalar (*)[4]) v_array_vec;
 
   if (yints == 0) {
     j     = 0;
@@ -1035,22 +1045,24 @@ static PetscErrorCode MySubMatMult_J31(Mat J00, Vec X, Vec Y)
   }
 
   PetscCall(DMDAVecRestoreArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, temp, &temp_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, vprev, &v_array));
-  PetscCall(DMDAVecRestoreArray(da, Y, &y_array));
+  PetscCall(VecRestoreArray(sub_ctx->temp, &temp_array_vec));
+  PetscCall(VecRestoreArray(sub_ctx->vvec, &v_array_vec));
+  PetscCall(DMDAVecRestoreArray(da, localy, &y_array));
+  PetscCall(DMLocalToGlobal(da, localy, ADD_VALUES, Y));
   PetscFunctionReturn(0);
 }
 
 
 static PetscErrorCode MySubMatMult_J33(Mat J00, Vec X, Vec Y)
 {
-  const PetscScalar **x_array, **u_array, **v_array;
+  const PetscScalar **x_array;
+  PetscScalar *v_array_vec, *u_array_vec;
   SubmatrixContext *sub_ctx;
   PetscScalar **y_array;
   PetscInt    n;
   DM da;
   DMDALocalInfo info;
-  Vec uvec, vvec;
+  Vec localy;
 
   PetscInt    xints, xinte, yints, yinte, i, j;
   PetscReal   hx, hy, dhx, dhy, hxdhy, hydhx;
@@ -1062,8 +1074,6 @@ static PetscErrorCode MySubMatMult_J33(Mat J00, Vec X, Vec Y)
   PetscCall(MatShellGetContext(J00, &sub_ctx));
 
   da = sub_ctx->dm;
-  uvec = sub_ctx->uvec;
-  vvec = sub_ctx->vvec;
   PetscCall(DMDAGetLocalInfo(da, &info));
 
   prandtl = 1.0;
@@ -1081,11 +1091,14 @@ static PetscErrorCode MySubMatMult_J33(Mat J00, Vec X, Vec Y)
   yinte = info.ys + info.ym;
 
   PetscCall(MatGetLocalSize(J00, &n, NULL));
-
+  PetscCall(DMGetLocalVector(da,&(localy)));
   PetscCall(DMDAVecGetArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecGetArrayRead(da, uvec, &u_array));
-  PetscCall(DMDAVecGetArrayRead(da, vvec, &v_array));
-  PetscCall(DMDAVecGetArray(da, Y, &y_array));
+  PetscCall(VecGetArray(sub_ctx->uvec, &u_array_vec));
+  PetscCall(VecGetArray(sub_ctx->vvec, &v_array_vec));
+  PetscCall(DMDAVecGetArray(da, localy, &y_array));
+
+  PetscScalar (* u_array)[4] = (PetscScalar (*)[4]) u_array_vec;
+  PetscScalar (* v_array)[4] = (PetscScalar (*)[4]) v_array_vec;
 
   if (yints == 0) {
     j     = 0;
@@ -1138,9 +1151,10 @@ static PetscErrorCode MySubMatMult_J33(Mat J00, Vec X, Vec Y)
     }
   }
   PetscCall(DMDAVecRestoreArrayRead(da, X, &x_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, uvec, &u_array));
-  PetscCall(DMDAVecRestoreArrayRead(da, vvec, &v_array));
-  PetscCall(DMDAVecRestoreArray(da, Y, &y_array));
+  PetscCall(VecRestoreArray(sub_ctx->uvec, &u_array_vec));
+  PetscCall(VecRestoreArray(sub_ctx->vvec, &v_array_vec));
+  PetscCall(DMDAVecRestoreArray(da, localy, &y_array));
+  PetscCall(DMLocalToGlobal(da, localy, ADD_VALUES, Y));
   PetscFunctionReturn(0);
 }
 
@@ -1165,6 +1179,13 @@ static PetscErrorCode MatCreateSubMatrices_Shell(Mat mat, PetscInt n, IS irow[],
         SubmatrixContext *sub_ctx;
         PetscCall(PetscMalloc1(1, &sub_ctx));
         sub_ctx->dm = jac_ctx->sub_dms[i/4];
+
+        PetscInt row_idx = i / 4;
+        PetscInt col_idx = i % 4;
+
+        sub_ctx->rows = irow[row_idx];
+        sub_ctx->cols = icol[col_idx];
+
         PetscCall(MatShellSetContext(block, sub_ctx));
         PetscCall(MatSetUp(block));
         (*submat)[i] = block;
@@ -1206,6 +1227,7 @@ static PetscErrorCode MatCreateSubMatrices_Shell(Mat mat, PetscInt n, IS irow[],
 
     PetscFunctionReturn(0);
 }
+
 
 int main(int argc, char **argv)
 {
@@ -1286,7 +1308,6 @@ int main(int argc, char **argv)
   PetscCall(FormInitialGuess(&user, da, x));
 
   PetscCall(SNESSolve(snes, NULL, x));
-  PetscCall(VecView(x, PETSC_VIEWER_STDOUT_WORLD));
 
   PetscCall(VecDestroy(&x));
   PetscCall(DMDestroy(&da));
