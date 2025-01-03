@@ -129,12 +129,12 @@ def test_petsc_solve():
     rhs_expr = FindNodes(Expression).visit(formrhs_callback[0])
 
     assert str(action_expr[-1].expr.rhs) == \
-        'matvec->h_x**(-2)*x_matvec_f[x + 1, y + 2]' + \
-        ' - 2.0*matvec->h_x**(-2)*x_matvec_f[x + 2, y + 2]' + \
-        ' + matvec->h_x**(-2)*x_matvec_f[x + 3, y + 2]' + \
-        ' + matvec->h_y**(-2)*x_matvec_f[x + 2, y + 1]' + \
-        ' - 2.0*matvec->h_y**(-2)*x_matvec_f[x + 2, y + 2]' + \
-        ' + matvec->h_y**(-2)*x_matvec_f[x + 2, y + 3]'
+        'x_matvec_f[x + 1, y + 2]/matvec->h_x**2' + \
+        ' - 2.0*x_matvec_f[x + 2, y + 2]/matvec->h_x**2' + \
+        ' + x_matvec_f[x + 3, y + 2]/matvec->h_x**2' + \
+        ' + x_matvec_f[x + 2, y + 1]/matvec->h_y**2' + \
+        ' - 2.0*x_matvec_f[x + 2, y + 2]/matvec->h_y**2' + \
+        ' + x_matvec_f[x + 2, y + 3]/matvec->h_y**2'
 
     assert str(rhs_expr[-1].expr.rhs) == 'g[x + 2, y + 2]'
 
