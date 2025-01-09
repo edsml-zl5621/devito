@@ -9,8 +9,9 @@ from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import dtype_to_ctype
 from devito.symbolics import FieldFromComposite
+from devito.types import Symbol
 
-from .object import DM
+from .object import DM, DMDALocalInfo
 
 
 class PETScArray(ArrayBasic, Differentiable):
@@ -30,7 +31,7 @@ class PETScArray(ArrayBasic, Differentiable):
 
     __rkwargs__ = (AbstractFunction.__rkwargs__ +
                    ('dimensions', 'shape', 'liveness', 'coefficients',
-                    'space_order'))
+                    'space_order', 'symbolic_shape'))
 
     def __init_finalize__(self, *args, **kwargs):
 
@@ -43,6 +44,7 @@ class PETScArray(ArrayBasic, Differentiable):
                              " not %s" % (str(fd_weights_registry), self._coefficients))
         self._shape = kwargs.get('shape')
         self._space_order = kwargs.get('space_order', 1)
+        self._symbolic_shape = kwargs.get('symbolic_shape')
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
@@ -104,14 +106,40 @@ class PETScArray(ArrayBasic, Differentiable):
         # the user's PETSc configuration.
         return POINTER(dtype_to_ctype(self.dtype))
 
+    # @property
+    # def symbolic_shape(self):
+    #     # from IPython import embed; embed()
+    #     if self.dmda:
+    #         field_from_composites = [
+    #             FieldFromComposite('g%sm' % d.name, self.dmda.info) for d in self.dimensions]
+    #         # Reverse it since DMDA is setup backwards to Devito dimensions.
+    #         return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
+    #     else:
+    #         return DimensionTuple(*self.dimensions)
+
+    # @property
+    # def symbolic_shape(self):
+    #     # info = DMDALocalInfo(name='info', liveness='eager')
+
+    #     field_from_composites = [
+    #             FieldFromComposite('g%sm' % d.name, self.dmda_info) for d in self.dimensions]
+        
+    #         # Reverse it since DMDA is setup backwards to Devito dimensions.
+    #     return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
+
+    # @cached_property
+    # def dmda(self):
+    #     name = 'da_so_%s' % self.space_order
+    #     return DM(name=name, liveness='eager', stencil_width=self.space_order)
+
+    # @cached_property
+    # def dmda(self):
+    #     return self._dmda
+
     @property
     def symbolic_shape(self):
-        field_from_composites = [
-            FieldFromComposite('g%sm' % d.name, self.dmda.info) for d in self.dimensions]
-        # Reverse it since DMDA is setup backwards to Devito dimensions.
-        return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
+        return self._symbolic_shape
 
-    @cached_property
-    def dmda(self):
-        name = 'da_so_%s' % self.space_order
-        return DM(name=name, liveness='eager', stencil_width=self.space_order)
+    # @property
+    # def dmda_info(self):
+    #     return DMDALocalInfo(name='info', liveness='eager')
