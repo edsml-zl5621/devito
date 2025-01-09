@@ -88,15 +88,17 @@ class CallbackBuilder:
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        # dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
         dmda = solver_objs['dmda']
 
         body = uxreplace_time(body, solver_objs)
 
-        struct = build_local_struct(body, 'matvec', liveness='eager')
+        # struct = build_local_struct(body, 'matvec', liveness='eager')
 
-        y_matvec = linsolveexpr.arrays['y_matvec']._rebuild(function=None, dmda=dmda)
-        x_matvec = linsolveexpr.arrays['x_matvec']._rebuild(function=None, dmda=dmda)
+        struct = solver_objs['dummy_ctx']
+        fields = dummy_fields(body)
+
+        y_matvec = linsolveexpr.arrays['y_matvec']
+        x_matvec = linsolveexpr.arrays['x_matvec']
 
         mat_get_dm = petsc_call('MatGetDM', [solver_objs['Jac'], Byref(dmda)])
 
@@ -178,22 +180,22 @@ class CallbackBuilder:
 
         # Dereference function data in struct
         dereference_funcs = [Dereference(i, struct) for i in
-                             struct.fields if isinstance(i.function, AbstractFunction)]
+                             fields if isinstance(i.function, AbstractFunction)]
+
+        dereference_targets = [Dereference(linsolveexpr.target, struct)]
 
         matvec_body = CallableBody(
             List(body=body),
             init=(petsc_func_begin_user,),
-            stacks=stacks+tuple(dereference_funcs),
+            stacks=stacks+tuple(dereference_funcs)+tuple(dereference_targets),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
         # Replace non-function data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in fields}
         matvec_body = Uxreplace(subs).visit(matvec_body)
 
-        matvec_body = Uxreplace({linsolveexpr.arrays['y_matvec']: y_matvec, linsolveexpr.arrays['x_matvec']: x_matvec}).visit(matvec_body)
-
-        self._struct_params.extend(struct.fields)
+        self._struct_params.extend(fields)
 
         return matvec_body
 
@@ -219,15 +221,17 @@ class CallbackBuilder:
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        # dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
         dmda = solver_objs['dmda']
 
         body = uxreplace_time(body, solver_objs)
 
-        struct = build_local_struct(body, 'formfunc', liveness='eager')
+        # struct = build_local_struct(body, 'formfunc', liveness='eager')
+        struct = solver_objs['dummy_ctx']
 
-        y_formfunc = linsolveexpr.arrays['y_formfunc']._rebuild(function=None, dmda=dmda)
-        x_formfunc = linsolveexpr.arrays['x_formfunc']._rebuild(function=None, dmda=dmda)
+        fields = dummy_fields(body)
+
+        y_formfunc = linsolveexpr.arrays['y_formfunc']
+        x_formfunc = linsolveexpr.arrays['x_formfunc']
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
@@ -302,21 +306,22 @@ class CallbackBuilder:
 
         # Dereference function data in struct
         dereference_funcs = [Dereference(i, struct) for i in
-                             struct.fields if isinstance(i.function, AbstractFunction)]
+                             fields if isinstance(i.function, AbstractFunction)]
+
+        # from IPython import embed; embed()
+        dereference_targets = [Dereference(linsolveexpr.target, struct)]
 
         formfunc_body = CallableBody(
             List(body=body),
             init=(petsc_func_begin_user,),
-            stacks=stacks+tuple(dereference_funcs),
+            stacks=stacks+tuple(dereference_funcs)+tuple(dereference_targets),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),))
 
         # Replace non-function data with pointer to data in struct
-        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in fields}
         formfunc_body = Uxreplace(subs).visit(formfunc_body)
 
-        formfunc_body = Uxreplace({linsolveexpr.arrays['y_formfunc'].function: y_formfunc.function, linsolveexpr.arrays['x_formfunc']: x_formfunc}).visit(formfunc_body)
-
-        self._struct_params.extend(struct.fields)
+        self._struct_params.extend(fields)
 
         return formfunc_body
 
@@ -341,12 +346,11 @@ class CallbackBuilder:
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        # dmda = objs['da_so_%s' % linsolveexpr.target.space_order]
         dmda = solver_objs['dmda']
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
-        b_arr = linsolveexpr.arrays['b_tmp']._rebuild(function=None, dmda=dmda, name='new')
+        b_arr = linsolveexpr.arrays['b_tmp']
 
         vec_get_array = petsc_call(
             'VecGetArray', [solver_objs['b_local'], Byref(b_arr._C_symbol)]
@@ -358,7 +362,10 @@ class CallbackBuilder:
 
         body = uxreplace_time(body, solver_objs)
 
-        struct = build_local_struct(body, 'formrhs', liveness='eager')
+        # struct = build_local_struct(body, 'formrhs', liveness='eager')
+
+        struct = solver_objs['dummy_ctx']
+        fields = dummy_fields(body)
 
         dm_get_app_context = petsc_call(
             'DMGetApplicationContext', [dmda, Byref(struct._C_symbol)]
@@ -379,26 +386,29 @@ class CallbackBuilder:
 
         # Dereference function data in struct
         dereference_funcs = [Dereference(i, struct) for i in
-                             struct.fields if isinstance(i.function, AbstractFunction)]
+                             fields if isinstance(i.function, AbstractFunction)]
+
+        dereference_targets = [Dereference(linsolveexpr.target, struct)]
+        # from IPython import embed; embed()
 
         formrhs_body = CallableBody(
             List(body=[body]),
             init=(petsc_func_begin_user,),
-            stacks=stacks+tuple(dereference_funcs),
+            stacks=stacks+tuple(dereference_funcs)+tuple(dereference_targets),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
+        # from IPython import embed; embed()
+
         # Replace non-function data with pointer to data in struct
+
+        # todo: this can be done on all efuncs i think, not here
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
-                i in struct.fields if not isinstance(i.function, AbstractFunction)}
+                i in fields if not isinstance(i.function, AbstractFunction)}
 
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
-        formrhs_body =formrhs_body.uxreplace({linsolveexpr.arrays['b_tmp']: b_arr})
-
-        from IPython import embed; embed()
-
-        self._struct_params.extend(struct.fields)
+        self._struct_params.extend(fields)
 
         return formrhs_body
 
@@ -456,7 +466,16 @@ class CallbackBuilder:
 
         dmda = solver_objs['dmda']
 
-        struct_main = petsc_struct('ctx', filter_ordered(self.struct_params))
+        # from IPython import embed; embed()
+        # params = self.struct_params.append(solver_objs['targets'])
+        params = filter_ordered(self.struct_params)
+        params += [solver_objs['targets']]
+        # params = params.append(solver_objs['targets'])
+        # from IPython import embed; embed()
+
+        struct_local = petsc_struct('ctx_local', filter_ordered(params), liveness='eager')
+        struct_main = petsc_struct('ctx', filter_ordered(params))
+
         struct_callback = self.generate_struct_callback(struct_main, objs)
         call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
         calls_set_app_ctx = [
@@ -465,12 +484,12 @@ class CallbackBuilder:
         calls = [call_struct_callback] + calls_set_app_ctx
 
         self._efuncs[struct_callback.name] = struct_callback
-        return struct_main, calls
+        return struct_local, calls
 
-    def generate_struct_callback(self, struct, objs):
+    def generate_struct_callback(self, struct_main, objs):
         body = [
-            DummyExpr(FieldFromPointer(i._C_symbol, struct), i._C_symbol)
-            for i in struct.fields if i not in struct.time_dim_fields
+            DummyExpr(FieldFromPointer(i._C_symbol, struct_main), i._C_symbol)
+            for i in struct_main.fields if i not in struct_main.time_dim_fields
         ]
         struct_callback_body = CallableBody(
             List(body=body), init=tuple([petsc_func_begin_user]),
@@ -478,9 +497,19 @@ class CallbackBuilder:
         )
         struct_callback = Callable(
             'PopulateMatContext', struct_callback_body, objs['err'],
-            parameters=[struct]
+            parameters=[struct_main]
         )
         return struct_callback
+
+    def uxreplace_efuncs(self, struct, solver_objs):
+        efuncs_new = {}
+        # from IPython import embed; embed()
+        for key, efunc in self.efuncs.items():
+            updated = Uxreplace({solver_objs['dummy_ctx']: struct}).visit(
+                efunc
+            )
+            efuncs_new[key] = updated
+        return efuncs_new
 
 
 def build_local_struct(iet, name, liveness):
@@ -491,6 +520,16 @@ def build_local_struct(iet, name, liveness):
         and not (i.is_Dimension and not isinstance(i, (TimeDimension, ModuloDimension)))
     ]
     return petsc_struct(name, fields, liveness)
+
+
+def dummy_fields(iet):
+    # Place all context data required by the shell routines into a struct
+    fields = [
+        i.function for i in FindSymbols('basics').visit(iet)
+        if not isinstance(i.function, (PETScArray, Temp))
+        and not (i.is_Dimension and not isinstance(i, (TimeDimension, ModuloDimension)))
+    ]
+    return fields
 
 
 def time_dep_replace(injectsolve, solver_objs, objs, sregistry):

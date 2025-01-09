@@ -5,6 +5,7 @@ from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
                            DummyExpr, FindNodes, retrieve_iteration_tree,
                            filter_iterations)
 from devito.symbolics import Byref, Macro, FieldFromComposite
+from devito.types import Symbol
 from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
                                 StartPtr)
@@ -48,6 +49,7 @@ def lower_petsc(iet, **kwargs):
         ObjBuilder, CCBuilder, SolverSetup = get_builder_classes(injectsolve)
 
         solver_objs = ObjBuilder(**kwargs).build(injectsolve, iters)
+        # setup.extend(create_dmda_calls(solver_objs['dmda'], objs))
 
         builder = CCBuilder(**kwargs)
 
@@ -59,7 +61,7 @@ def lower_petsc(iet, **kwargs):
         matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
                                                         objs, solver_objs)
 
-        struct, struct_calls = builder.make_main_struct(solver_objs, objs)
+        struct_local, struct_calls = builder.make_main_struct(solver_objs, objs)
 
         # Generate the solver setup for each InjectSolveDummy
         solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve)
@@ -71,12 +73,21 @@ def lower_petsc(iet, **kwargs):
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
 
-        efuncs.update(builder.efuncs)
+        new_efuncs = builder.uxreplace_efuncs(struct_local, solver_objs)
+        # from IPython import embed; embed()
+        efuncs.update(new_efuncs)
 
     # from IPython import embed; embed()
+    # efuncs_new = {}
+    # for efunc in efuncs.values():
+    #     efunc_new = efunc._rebuild(body=List(body=efunc.body.body+setup))
+    #     efuncs_new.update({efunc.name: efunc_new})
+
     iet = Transformer(subs).visit(iet)
 
-    iet = assign_time_iters(iet, struct)
+    # from IPython import embed; embed()
+
+    # iet = assign_time_iters(iet, struct)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
@@ -135,7 +146,7 @@ def create_dmda_calls(dmda, objs):
     dm_setup = petsc_call('DMSetUp', [dmda])
     dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
     dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
-    return dmda_create, dm_setup, dm_mat_type, dm_get_local_info, BlankLine
+    return dmda_create, dm_setup, dm_mat_type, dm_get_local_info
 
 
 def create_dmda(dmda, objs):
@@ -206,7 +217,10 @@ class ObjectBuilder:
             'target': target,
             'time_mapper': injectsolve.expr.rhs.time_mapper,
             'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
-                       stencil_width=target.space_order)
+                       stencil_width=target.space_order),
+            'dummy_ctx': Symbol('dummy_ctx'),
+            # TODO: extend to targets
+            'targets': injectsolve.expr.rhs.target,
         }
 
 
@@ -214,7 +228,6 @@ class SetupSolver:
     def setup(self, solver_objs, objs, injectsolve):
         target = solver_objs['target']
 
-        # dmda = objs['da_so_%s' % target.space_order]
         dmda = solver_objs['dmda']
 
         solver_params = injectsolve.expr.rhs.solver_parameters
@@ -264,7 +277,10 @@ class SetupSolver:
 
         ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
-        return (
+        dmda_calls = create_dmda_calls(dmda, objs)
+        # from IPython import embed; embed()
+
+        return dmda_calls + (
             snes_create,
             snes_set_dm,
             create_matrix,
