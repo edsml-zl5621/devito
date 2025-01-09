@@ -92,9 +92,7 @@ class CallbackBuilder:
 
         body = uxreplace_time(body, solver_objs)
 
-        # struct = build_local_struct(body, 'matvec', liveness='eager')
-
-        struct = solver_objs['dummy_ctx']
+        struct = solver_objs['localctx']
         fields = dummy_fields(body)
 
         y_matvec = linsolveexpr.arrays['y_matvec']
@@ -225,8 +223,7 @@ class CallbackBuilder:
 
         body = uxreplace_time(body, solver_objs)
 
-        # struct = build_local_struct(body, 'formfunc', liveness='eager')
-        struct = solver_objs['dummy_ctx']
+        struct = solver_objs['localctx']
 
         fields = dummy_fields(body)
 
@@ -362,9 +359,7 @@ class CallbackBuilder:
 
         body = uxreplace_time(body, solver_objs)
 
-        # struct = build_local_struct(body, 'formrhs', liveness='eager')
-
-        struct = solver_objs['dummy_ctx']
+        struct = solver_objs['localctx']
         fields = dummy_fields(body)
 
         dm_get_app_context = petsc_call(
@@ -473,8 +468,8 @@ class CallbackBuilder:
         # params = params.append(solver_objs['targets'])
         # from IPython import embed; embed()
 
-        struct_local = petsc_struct('ctx_local', filter_ordered(params), liveness='eager')
-        struct_main = petsc_struct('ctx', filter_ordered(params))
+        struct_local = petsc_struct(solver_objs['localctx'].name, filter_ordered(params), solver_objs['Jac'].name, liveness='eager')
+        struct_main = petsc_struct(self.sregistry.make_name(prefix='ctx'), filter_ordered(params), solver_objs['Jac'].name)
 
         struct_callback = self.generate_struct_callback(struct_main, objs)
         call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
@@ -496,16 +491,15 @@ class CallbackBuilder:
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
         )
         struct_callback = Callable(
-            'PopulateMatContext', struct_callback_body, objs['err'],
+            self.sregistry.make_name(prefix='PopulateMatContext_'), struct_callback_body, objs['err'],
             parameters=[struct_main]
         )
         return struct_callback
 
     def uxreplace_efuncs(self, struct, solver_objs):
         efuncs_new = {}
-        # from IPython import embed; embed()
         for key, efunc in self.efuncs.items():
-            updated = Uxreplace({solver_objs['dummy_ctx']: struct}).visit(
+            updated = Uxreplace({solver_objs['localctx']: struct}).visit(
                 efunc
             )
             efuncs_new[key] = updated

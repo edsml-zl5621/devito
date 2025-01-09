@@ -218,7 +218,7 @@ class ObjectBuilder:
             'time_mapper': injectsolve.expr.rhs.time_mapper,
             'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
                        stencil_width=target.space_order),
-            'dummy_ctx': Symbol('dummy_ctx'),
+            'localctx': Symbol('lctx'),
             # TODO: extend to targets
             'targets': injectsolve.expr.rhs.target,
         }
