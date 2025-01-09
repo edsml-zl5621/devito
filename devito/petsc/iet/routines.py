@@ -5,7 +5,8 @@ import cgen as c
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference, DummyExpr, BlankLine, Callable, FindNodes,
                            Iteration)
-from devito.symbolics import Byref, FieldFromPointer, Macro, cast_mapper, FieldFromComposite
+from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
+                              FieldFromComposite)
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import ModuloDimension, TimeDimension, Temp, Symbol
@@ -13,13 +14,12 @@ from devito.tools import filter_ordered
 from devito.ir.support import SymbolRegistry
 
 from devito.petsc.types import PETScArray
-from devito.petsc.iet.nodes import (PETScCallable, InjectSolveDummy, PETScCall, FormFunctionCallback,
+from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
 from devito.petsc.iet.utils import petsc_call, petsc_struct
 from devito.petsc.utils import solver_mapper
-from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
-                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
-                                StartPtr)
+from devito.petsc.types import (DM, Mat, LocalVec, GlobalVec, KSP, PC,
+                                SNES, DummyArg, PetscInt, StartPtr)
 
 
 class CallbackBuilder:
@@ -65,7 +65,6 @@ class CallbackBuilder:
     @property
     def struct_callback(self):
         return self._struct_callback
-
 
     def make_core(self, injectsolve, objs, solver_objs):
         matvec_callback = self.make_matvec(injectsolve, objs, solver_objs)
@@ -458,7 +457,8 @@ class CallbackBuilder:
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
         )
         struct_callback = Callable(
-            self.sregistry.make_name(prefix='PopulateMatContext_'), struct_callback_body, objs['err'],
+            self.sregistry.make_name(prefix='PopulateMatContext_'),
+            struct_callback_body, objs['err'],
             parameters=[struct_main]
         )
         self._efuncs[struct_callback.name] = struct_callback
@@ -509,8 +509,6 @@ class ObjectBuilder:
 
 class SetupSolver:
     def setup(self, solver_objs, objs, injectsolve, builder):
-        target = solver_objs['target']
-
         dmda = solver_objs['dmda']
 
         solver_params = injectsolve.expr.rhs.solver_parameters
@@ -561,8 +559,9 @@ class SetupSolver:
         ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
         matvec_operation = petsc_call(
-            'MatShellSetOperation', [solver_objs['Jac'], 'MATOP_MULT',
-                                     MatVecCallback(builder.matvec_callback.name, void, void)]
+            'MatShellSetOperation',
+            [solver_objs['Jac'], 'MATOP_MULT',
+             MatVecCallback(builder.matvec_callback.name, void, void)]
         )
 
         formfunc_operation = petsc_call(
@@ -608,10 +607,11 @@ class RunSolver:
         to run the SNES solver.
         """
         time_iters = self.assign_time_iters(iters, solver_objs['mainctx'])
-        runsolve = self.runsolve(solver_objs, objs, cbbuilder.formrhs_callback, injectsolve)
+        runsolve = self.runsolve(
+            solver_objs, objs, cbbuilder.formrhs_callback, injectsolve
+        )
         calls = List(body=tuple(time_iters)+runsolve)
         return calls
-
 
     def assign_time_iters(self, iters, struct):
         """
@@ -685,14 +685,6 @@ class RunSolver:
             dm_global_to_local_x,
             BlankLine,
         )
-
-
-
-
-
-
-
-
 
 
 def dummy_fields(iet):
@@ -773,7 +765,6 @@ def create_dmda(dmda, objs):
     dmda = petsc_call('DMDACreate%sd' % no_of_space_dims, args)
 
     return dmda
-
 
 
 def time_dep_replace(injectsolve, solver_objs, objs):

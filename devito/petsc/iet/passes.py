@@ -1,19 +1,15 @@
 import cgen as c
 
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
-                           DummyExpr, FindNodes, retrieve_iteration_tree,
+from devito.ir.iet import (Transformer, MapNodes, Iteration, BlankLine,
+                           FindNodes, retrieve_iteration_tree,
                            filter_iterations, Uxreplace)
-from devito.symbolics import Byref, Macro, FieldFromComposite, FieldFromPointer, cast_mapper
-from devito.symbolics.unevaluation import Mul
-from devito.types import Symbol
-from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
-                                KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
-                                StartPtr)
-from devito.petsc.iet.nodes import (InjectSolveDummy, PETScCall, FormFunctionCallback,
-                                    MatVecCallback)
-from devito.petsc.utils import solver_mapper, core_metadata
-from devito.petsc.iet.routines import CallbackBuilder, ObjectBuilder, SetupSolver, RunSolver
+from devito.symbolics import Byref, Macro
+from devito.petsc.types import (PetscMPIInt, PetscErrorCode)
+from devito.petsc.iet.nodes import InjectSolveDummy
+from devito.petsc.utils import core_metadata
+from devito.petsc.iet.routines import (CallbackBuilder, ObjectBuilder,
+                                       SetupSolver, RunSolver)
 from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
 
 
@@ -48,14 +44,12 @@ def lower_petsc(iet, **kwargs):
         cbbuilder = CCBuilder(**kwargs)
 
         # Generate all PETSc callback functions for the target via recursive compilation
-        matvec_callback, formfunc_callback, formrhs_callback = cbbuilder.make_core(
-            injectsolve, objs, solver_objs
-        )
+        cbbuilder.make_core(injectsolve, objs, solver_objs)
 
         solver_objs['localctx'] = cbbuilder.local_struct(solver_objs)
         solver_objs['mainctx'] = cbbuilder.main_struct(solver_objs)
 
-        struct_callback = cbbuilder.make_struct_callback(solver_objs, objs)
+        cbbuilder.make_struct_callback(solver_objs, objs)
 
         # Generate the solver setup for each InjectSolveDummy
         solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve, cbbuilder)
@@ -116,15 +110,6 @@ def build_core_objects(target, **kwargs):
         'err': PetscErrorCode(name='err'),
         'grid': target.grid
     }
-
-
-# def create_dmda_objs(unique_targets):
-#     unique_dmdas = {}
-#     for target in unique_targets:
-#         name = 'da_so_%s' % target.space_order
-#         unique_dmdas[name] = DM(name=name, liveness='eager',
-#                                 stencil_width=target.space_order)
-#     return unique_dmdas
 
 
 def spatial_loop_nest(iter, injectsolve):
