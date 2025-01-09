@@ -37,57 +37,48 @@ def lower_petsc(iet, **kwargs):
     subs = {}
     efuncs = {}
 
-    # Create a different DMDA for each target with a unique space order
-    # unique_dmdas = create_dmda_objs(targets)
-    # objs.update(unique_dmdas)
-    # for dmda in unique_dmdas.values():
-    #     setup.extend(create_dmda_calls(dmda, objs))
-
     for iters, (injectsolve,) in injectsolve_mapper.items():
         # Provides flexibility to use various solvers with different combinations
         # of callbacks and configurations
-        ObjBuilder, CCBuilder, SolverSetup = get_builder_classes(injectsolve)
+        ObjBuilder, CCBuilder, SolverSetup, SolverRun = get_builder_classes(injectsolve)
 
         solver_objs = ObjBuilder(**kwargs).build(injectsolve, iters)
-        # setup.extend(create_dmda_calls(solver_objs['dmda'], objs))
-
-        builder = CCBuilder(**kwargs)
-
-        # # Generate the solver setup for each InjectSolveDummy
-        # solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve)
-        # setup.extend(solver_setup)
+        cbbuilder = CCBuilder(**kwargs)
 
         # Generate all PETSc callback functions for the target via recursive compilation
-        matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
-                                                        objs, solver_objs)
+        matvec_callback, formfunc_callback, formrhs_callback = cbbuilder.make_core(
+            injectsolve, objs, solver_objs
+        )
 
-        struct_local, struct_calls = builder.make_main_struct(solver_objs, objs)
+        solver_objs['localctx'] = cbbuilder.make_local_struct(solver_objs)
+        solver_objs['mainctx'] = cbbuilder.make_main_struct(solver_objs)
+
+        struct_callback = cbbuilder.make_struct_callback(solver_objs, objs)
+
+        # from IPython import embed; embed()
+
+
+        # struct_local, struct_main, struct_calls = cbbuilder.make_main_struct(solver_objs, objs)
 
         # Generate the solver setup for each InjectSolveDummy
-        solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve)
+        solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve, struct_callback)
         setup.extend(solver_setup)
-        setup.extend(struct_calls)
+        # setup.extend(struct_calls)
 
         setup.extend([matvec_op, formfunc_op, BlankLine])
         # Only Transform the spatial iteration loop
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
-        subs.update({space_iter: List(body=runsolve)})
 
-        new_efuncs = builder.uxreplace_efuncs(struct_local, solver_objs)
-        # from IPython import embed; embed()
+        time_iters = cbbuilder.assign_time_iters(iters, struct_main)
+
+        subs.update({space_iter: List(body=tuple(time_iters)+runsolve)})
+
+        new_efuncs = cbbuilder.uxreplace_efuncs(struct_local, solver_objs)
+
         efuncs.update(new_efuncs)
 
-    # from IPython import embed; embed()
-    # efuncs_new = {}
-    # for efunc in efuncs.values():
-    #     efunc_new = efunc._rebuild(body=List(body=efunc.body.body+setup))
-    #     efuncs_new.update({efunc.name: efunc_new})
 
     iet = Transformer(subs).visit(iet)
-
-    # from IPython import embed; embed()
-
-    # iet = assign_time_iters(iet, struct)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
@@ -218,14 +209,14 @@ class ObjectBuilder:
             'time_mapper': injectsolve.expr.rhs.time_mapper,
             'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
                        stencil_width=target.space_order),
-            'localctx': Symbol('lctx'),
+            'dummyctx': Symbol('lctx'),
             # TODO: extend to targets
             'targets': injectsolve.expr.rhs.target,
         }
 
 
 class SetupSolver:
-    def setup(self, solver_objs, objs, injectsolve):
+    def setup(self, solver_objs, objs, injectsolve, struct_callback):
         target = solver_objs['target']
 
         dmda = solver_objs['dmda']
@@ -278,7 +269,14 @@ class SetupSolver:
         ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
         dmda_calls = create_dmda_calls(dmda, objs)
-        # from IPython import embed; embed()
+
+        mainctx = solver_objs['mainctx']
+
+        call_struct_callback = petsc_call(struct_callback.name, [Byref(mainctx)])
+        calls_set_app_ctx = [
+            petsc_call('DMSetApplicationContext', [dmda, Byref(mainctx)])
+        ]
+        calls = [call_struct_callback] + calls_set_app_ctx
 
         return dmda_calls + (
             snes_create,
@@ -295,34 +293,12 @@ class SetupSolver:
             ksp_get_pc,
             pc_set_type,
             ksp_set_from_ops
-        )
+        ) + tuple(calls)
 
 
-def assign_time_iters(iet, struct):
-    """
-    Assign time iterators to the struct within loops containing PETScCalls.
-    Ensure that assignment occurs only once per time loop, if necessary.
-    Assign only the iterators that are common between the struct fields
-    and the actual Iteration.
-    """
-    time_iters = [
-        i for i in FindNodes(Iteration).visit(iet)
-        if i.dim.is_Time and FindNodes(PETScCall).visit(i)
-    ]
+class RunSolver:
+    def run(self, solver_objs, objs, injectsolve):
 
-    if not time_iters:
-        return iet
-
-    mapper = {}
-    for iter in time_iters:
-        common_dims = [d for d in iter.dimensions if d in struct.fields]
-        common_dims = [
-            DummyExpr(FieldFromComposite(d, struct), d) for d in common_dims
-        ]
-        iter_new = iter._rebuild(nodes=List(body=tuple(common_dims)+iter.nodes))
-        mapper.update({iter: iter_new})
-
-    return Transformer(mapper).visit(iet)
 
 
 def retrieve_time_dims(iters):
@@ -357,7 +333,7 @@ def get_builder_classes(injectsolve):
     # NOTE: This function will extend to support different solver types
     # returning subclasses of the classes listed below,
     # based on properties of `injectsolve`
-    return ObjectBuilder, CallbackBuilder, SetupSolver
+    return ObjectBuilder, CallbackBuilder, SetupSolver, RunSolver
 
 
 Null = Macro('NULL')

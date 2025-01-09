@@ -20,15 +20,9 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
 
     arrays = {
         p: PETScArray(name='%s_%s' % (p, target.name),
-                           dtype=target.dtype,
-                           dimensions=target.space_dimensions,
-                           shape=target.grid.shape,
-                           liveness='eager',
-                           halo=[target.halo[d] for d in target.space_dimensions],
-                           space_order=target.space_order,
-                           symbolic_shape=target.symbolic_shape[::-1])
+                      target=target, liveness='eager')
         for p in prefixes
-    }
+    } 
 
     matvecs = []
     formfuncs = []

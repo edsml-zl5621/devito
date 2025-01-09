@@ -7,11 +7,13 @@ from devito.types.array import ArrayBasic
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
-from devito.tools import dtype_to_ctype
+from devito.tools import dtype_to_ctype, as_tuple
 from devito.symbolics import FieldFromComposite
 from devito.types import Symbol
+from devito.data import FULL
 
 from .object import DM, DMDALocalInfo
+
 
 
 class PETScArray(ArrayBasic, Differentiable):
@@ -20,6 +22,11 @@ class PETScArray(ArrayBasic, Differentiable):
     a customised variant of ArrayBasic.
     Differentiable enables compatability with standard Function objects,
     allowing for the use of the `subs` method.
+
+    PETScArray objects represent vector objects within PETSc.
+    They correspond to the spatial domain of a Function-like object passed
+    into PETScSolve from a user.
+
     TODO: Potentially re-evaluate and separate into PETScFunction(Differentiable)
     and then PETScArray(ArrayBasic).
     """
@@ -30,10 +37,13 @@ class PETScArray(ArrayBasic, Differentiable):
     _default_fd = 'taylor'
 
     __rkwargs__ = (AbstractFunction.__rkwargs__ +
-                   ('dimensions', 'shape', 'liveness', 'coefficients',
-                    'space_order', 'symbolic_shape'))
+                   ('target', 'liveness', 'coefficients'))
 
     def __init_finalize__(self, *args, **kwargs):
+
+        self._target = kwargs.get('target')
+        self._ndim = kwargs['ndim'] = len(self._target.space_dimensions)
+        self._dimensions = kwargs['dimensions'] = self._target.space_dimensions
 
         super().__init_finalize__(*args, **kwargs)
 
@@ -42,13 +52,31 @@ class PETScArray(ArrayBasic, Differentiable):
         if self._coefficients not in fd_weights_registry:
             raise ValueError("coefficients must be one of %s"
                              " not %s" % (str(fd_weights_registry), self._coefficients))
-        self._shape = kwargs.get('shape')
-        self._space_order = kwargs.get('space_order', 1)
-        self._symbolic_shape = kwargs.get('symbolic_shape')
+
+    @property
+    def ndim(self):
+        return self._ndim
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
-        return kwargs.get('dtype', np.float32)
+        return kwargs['target'].dtype
+
+    @classmethod
+    def __indices_setup__(cls, *args, **kwargs):
+        dimensions = kwargs['target'].space_dimensions
+        if args:
+            indices = args
+        else:
+            indices = dimensions
+        return as_tuple(dimensions), as_tuple(indices)
+
+    @property
+    def dimensions(self):
+        return self._dimensions
+
+    @property
+    def target(self):
+        return self._target
 
     @property
     def coefficients(self):
@@ -57,41 +85,19 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @property
     def shape(self):
-        return self._shape
+        return self.target.grid.shape
 
     @property
     def space_order(self):
-        return self._space_order
+        return self.target.space_order
 
     @cached_property
     def _shape_with_inhalo(self):
-        """
-        Shape of the domain+inhalo region. The inhalo region comprises the
-        outhalo as well as any additional "ghost" layers for MPI halo
-        exchanges. Data in the inhalo region are exchanged when running
-        Operators to maintain consistent values as in sequential runs.
-
-        Notes
-        -----
-        Typically, this property won't be used in user code, but it may come
-        in handy for testing or debugging
-        """
-        return tuple(j + i + k for i, (j, k) in zip(self.shape, self._halo))
+        return self.target.shape_with_inhalo
 
     @cached_property
     def shape_allocated(self):
-        """
-        Shape of the allocated data of the Function type object from which
-        this PETScArray was derived. It includes the domain and inhalo regions,
-        as well as any additional padding surrounding the halo.
-
-        Notes
-        -----
-        In an MPI context, this is the *local* with_halo region shape.
-        """
-        return DimensionTuple(*[j + i + k for i, (j, k) in zip(self._shape_with_inhalo,
-                                                               self._padding)],
-                              getters=self.dimensions)
+        return self.target.shape_allocated
 
     @cached_property
     def _C_ctype(self):
@@ -105,6 +111,16 @@ class PETScArray(ArrayBasic, Differentiable):
         # | grep -E "PETSC_(SCALAR|PRECISION)" to determine the precision of
         # the user's PETSc configuration.
         return POINTER(dtype_to_ctype(self.dtype))
+
+    @property
+    def halo(self):
+        return [self.target.halo[d] for d in self.target.space_dimensions]
+
+    def __halo_setup__(self, **kwargs):
+        target = kwargs['target']
+        halo = [target.halo[d] for d in target.space_dimensions]
+        # halo = tuple(kwargs.get('halo', ((0, 0),)*self.ndim))
+        return DimensionTuple(*halo, getters=target.space_dimensions)
 
     # @property
     # def symbolic_shape(self):
@@ -138,7 +154,8 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @property
     def symbolic_shape(self):
-        return self._symbolic_shape
+        # TODO: double check if this should be reversed for dmda
+        return tuple(self.target._C_get_field(FULL, d).size for d in self.dimensions)
 
     # @property
     # def dmda_info(self):
