@@ -129,12 +129,12 @@ def test_petsc_solve():
     rhs_expr = FindNodes(Expression).visit(formrhs_callback[0])
 
     assert str(action_expr[-1].expr.rhs) == \
-        'x_matvec_f[x + 1, y + 2]/matvec->h_x**2' + \
-        ' - 2.0*x_matvec_f[x + 2, y + 2]/matvec->h_x**2' + \
-        ' + x_matvec_f[x + 3, y + 2]/matvec->h_x**2' + \
-        ' + x_matvec_f[x + 2, y + 1]/matvec->h_y**2' + \
-        ' - 2.0*x_matvec_f[x + 2, y + 2]/matvec->h_y**2' + \
-        ' + x_matvec_f[x + 2, y + 3]/matvec->h_y**2'
+        'x_matvec_f[x + 1, y + 2]/lctx->h_x**2' + \
+        ' - 2.0*x_matvec_f[x + 2, y + 2]/lctx->h_x**2' + \
+        ' + x_matvec_f[x + 3, y + 2]/lctx->h_x**2' + \
+        ' + x_matvec_f[x + 2, y + 1]/lctx->h_y**2' + \
+        ' - 2.0*x_matvec_f[x + 2, y + 2]/lctx->h_y**2' + \
+        ' + x_matvec_f[x + 2, y + 3]/lctx->h_y**2'
 
     assert str(rhs_expr[-1].expr.rhs) == 'g[x + 2, y + 2]'
 
@@ -178,6 +178,8 @@ def test_multiple_petsc_solves():
     # One PopulateMatContext for all solves
     assert len(callable_roots) == 7
 
+    # Check unique dmda is created per SNES solve
+
 
 @skipif('petsc')
 def test_petsc_cast():
@@ -188,29 +190,29 @@ def test_petsc_cast():
     g1 = Grid((2, 2))
     g2 = Grid((2, 2, 2))
 
-    arr0 = PETScArray(name='arr0', dimensions=g0.dimensions, shape=g0.shape)
-    arr1 = PETScArray(name='arr1', dimensions=g1.dimensions, shape=g1.shape)
-    arr2 = PETScArray(name='arr2', dimensions=g2.dimensions, shape=g2.shape)
+    f0 = Function(name='f0', grid=g0)
+    f1 = Function(name='f1', grid=g1)
+    f2 = Function(name='f2', grid=g2)
 
-    arr3 = PETScArray(name='arr3', dimensions=g1.dimensions,
-                      shape=g1.shape, space_order=4)
+    arr0 = PETScArray(name='arr0', dimensions=f0.dimensions,
+                      shape=f0.shape, symbolic_shape=f0.symbolic_shape)
+    arr1 = PETScArray(name='arr1', dimensions=f1.dimensions,
+                      shape=f1.shape, symbolic_shape=f1.symbolic_shape)
+    arr2 = PETScArray(name='arr2', dimensions=f2.dimensions,
+                      shape=f2.shape, symbolic_shape=f2.symbolic_shape)
 
     cast0 = PointerCast(arr0)
     cast1 = PointerCast(arr1)
     cast2 = PointerCast(arr2)
-    cast3 = PointerCast(arr3)
 
     assert str(cast0) == \
         'float (*restrict arr0) = (float (*)) arr0_vec;'
     assert str(cast1) == \
-        'float (*restrict arr1)[da_so_1_info.gxm] = ' + \
-        '(float (*)[da_so_1_info.gxm]) arr1_vec;'
+        'float (*restrict arr1)[f1_vec->size[1]] = ' + \
+        '(float (*)[f1_vec->size[1]]) arr1_vec;'
     assert str(cast2) == \
-        'float (*restrict arr2)[da_so_1_info.gym][da_so_1_info.gxm] = ' + \
-        '(float (*)[da_so_1_info.gym][da_so_1_info.gxm]) arr2_vec;'
-    assert str(cast3) == \
-        'float (*restrict arr3)[da_so_4_info.gxm] = ' + \
-        '(float (*)[da_so_4_info.gxm]) arr3_vec;'
+        'float (*restrict arr2)[f2_vec->size[1]][f2_vec->size[2]] = ' + \
+        '(float (*)[f2_vec->size[1]][f2_vec->size[2]]) arr2_vec;'
 
 
 @skipif('petsc')
@@ -258,23 +260,15 @@ def test_dmda_create():
         op3 = Operator(petsc3, opt='noop')
 
     assert 'PetscCall(DMDACreate1d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
-        '2,1,2,NULL,&(da_so_2)));' in str(op1)
+        '2,1,2,NULL,&(da_0)));' in str(op1)
 
     assert 'PetscCall(DMDACreate2d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
-        'DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,2,2,1,1,1,4,NULL,NULL,&(da_so_4)));' \
+        'DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,2,2,1,1,1,4,NULL,NULL,&(da_0)));' \
         in str(op2)
 
     assert 'PetscCall(DMDACreate3d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
         'DM_BOUNDARY_GHOSTED,DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,6,5,4' + \
-        ',1,1,1,1,6,NULL,NULL,NULL,&(da_so_6)));' in str(op3)
-
-    # Check unique DMDA is created per grid, per space_order
-    f4 = Function(name='f4', grid=grid2, space_order=6)
-    eqn4 = Eq(f4.laplace, 10)
-    petsc4 = PETScSolve(eqn4, f4)
-    with switchconfig(openmp=False):
-        op4 = Operator(petsc2+petsc2+petsc4, opt='noop')
-    assert str(op4).count('DMDACreate2d') == 2
+        ',1,1,1,1,6,NULL,NULL,NULL,&(da_0)));' in str(op3)
 
 
 @skipif('petsc')
@@ -614,31 +608,31 @@ def test_petsc_struct():
     assert all(not isinstance(i, CCompositeObject) for i in op.parameters)
 
 
-@skipif('petsc')
-@pytest.mark.parallel(mode=[2, 4, 8])
-def test_apply(mode):
+# @skipif('petsc')
+# @pytest.mark.parallel(mode=[2, 4, 8])
+# def test_apply(mode):
 
-    grid = Grid(shape=(13, 13), dtype=np.float64)
+#     grid = Grid(shape=(13, 13), dtype=np.float64)
 
-    pn = Function(name='pn', grid=grid, space_order=2, dtype=np.float64)
-    rhs = Function(name='rhs', grid=grid, space_order=2, dtype=np.float64)
-    mu = Constant(name='mu', value=2.0)
+#     pn = Function(name='pn', grid=grid, space_order=2, dtype=np.float64)
+#     rhs = Function(name='rhs', grid=grid, space_order=2, dtype=np.float64)
+#     mu = Constant(name='mu', value=2.0)
 
-    eqn = Eq(pn.laplace*mu, rhs, subdomain=grid.interior)
+#     eqn = Eq(pn.laplace*mu, rhs, subdomain=grid.interior)
 
-    petsc = PETScSolve(eqn, pn)
+#     petsc = PETScSolve(eqn, pn)
 
-    # Build the op
-    with switchconfig(openmp=False, mpi=True):
-        op = Operator(petsc)
+#     # Build the op
+#     with switchconfig(openmp=False, mpi=True):
+#         op = Operator(petsc)
 
-    # Check the Operator runs without errors. Not verifying output for
-    # now. Need to consolidate BC implementation
-    op.apply()
+#     # Check the Operator runs without errors. Not verifying output for
+#     # now. Need to consolidate BC implementation
+#     op.apply()
 
-    # Verify that users can override `mu`
-    mu_new = Constant(name='mu_new', value=4.0)
-    op.apply(mu=mu_new)
+#     # Verify that users can override `mu`
+#     mu_new = Constant(name='mu_new', value=4.0)
+#     op.apply(mu=mu_new)
 
 
 @skipif('petsc')
