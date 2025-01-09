@@ -16,7 +16,7 @@ from devito.petsc.iet.utils import petsc_call, petsc_struct
 from devito.ir.support import SymbolRegistry
 
 
-class PETScCallbackBuilder:
+class CallbackBuilder:
     """
     Build IET routines to generate PETSc callback functions.
     """
