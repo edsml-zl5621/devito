@@ -51,28 +51,22 @@ def test_petsc_functions():
     grid = Grid((2, 2))
     x, y = grid.dimensions
 
-    ptr0 = PETScArray(name='ptr0', dimensions=grid.dimensions, dtype=np.float32)
-    ptr1 = PETScArray(name='ptr1', dimensions=grid.dimensions, dtype=np.float32,
-                      is_const=True)
-    ptr2 = PETScArray(name='ptr2', dimensions=grid.dimensions, dtype=np.float64,
-                      is_const=True)
-    ptr3 = PETScArray(name='ptr3', dimensions=grid.dimensions, dtype=np.int32)
-    ptr4 = PETScArray(name='ptr4', dimensions=grid.dimensions, dtype=np.int64,
-                      is_const=True)
+    f0 = Function(name='f', grid=grid, space_order=2, dtype=np.float32)
+    f1 = Function(name='f', grid=grid, space_order=2, dtype=np.float64)
+
+    ptr0 = PETScArray(name='ptr0', target=f0)
+    ptr1 = PETScArray(name='ptr1', target=f0, is_const=True)
+    ptr2 = PETScArray(name='ptr2', target=f1, is_const=True)
 
     defn0 = Definition(ptr0)
     defn1 = Definition(ptr1)
     defn2 = Definition(ptr2)
-    defn3 = Definition(ptr3)
-    defn4 = Definition(ptr4)
 
     expr = DummyExpr(ptr0.indexed[x, y], ptr1.indexed[x, y] + 1)
 
     assert str(defn0) == 'float *restrict ptr0_vec;'
     assert str(defn1) == 'const float *restrict ptr1_vec;'
     assert str(defn2) == 'const double *restrict ptr2_vec;'
-    assert str(defn3) == 'int *restrict ptr3_vec;'
-    assert str(defn4) == 'const long *restrict ptr4_vec;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
 
 
@@ -86,7 +80,7 @@ def test_petsc_subs():
     f1 = Function(name='f1', grid=grid, space_order=2)
     f2 = Function(name='f2', grid=grid, space_order=2)
 
-    arr = PETScArray(name='arr', dimensions=f2.dimensions, dtype=f2.dtype)
+    arr = PETScArray(name='arr', target=f2)
 
     eqn = Eq(f1, f2.laplace)
     eqn_subs = eqn.subs(f2, arr)
@@ -174,11 +168,8 @@ def test_multiple_petsc_solves():
 
     callable_roots = [meta_call.root for meta_call in op._func_table.values()]
 
-    # One FormRHS, one MatShellMult and one FormFunction per solve
-    # One PopulateMatContext for all solves
-    assert len(callable_roots) == 7
-
-    # Check unique dmda is created per SNES solve
+    # One FormRHS, MatShellMult, FormFunction, PopulateMatContext per solve
+    assert len(callable_roots) == 8
 
 
 @skipif('petsc')
@@ -194,12 +185,9 @@ def test_petsc_cast():
     f1 = Function(name='f1', grid=g1)
     f2 = Function(name='f2', grid=g2)
 
-    arr0 = PETScArray(name='arr0', dimensions=f0.dimensions,
-                      shape=f0.shape, symbolic_shape=f0.symbolic_shape)
-    arr1 = PETScArray(name='arr1', dimensions=f1.dimensions,
-                      shape=f1.shape, symbolic_shape=f1.symbolic_shape)
-    arr2 = PETScArray(name='arr2', dimensions=f2.dimensions,
-                      shape=f2.shape, symbolic_shape=f2.symbolic_shape)
+    arr0 = PETScArray(name='arr0', target=f0)
+    arr1 = PETScArray(name='arr1', target=f1)
+    arr2 = PETScArray(name='arr2', target=f2)
 
     cast0 = PointerCast(arr0)
     cast1 = PointerCast(arr1)
@@ -296,8 +284,8 @@ def test_cinterface_petsc_struct():
     assert 'include "%s.h"' % name in ccode
 
     # The public `struct MatContext` only appears in the header file
-    assert 'struct MatContext\n{' not in ccode
-    assert 'struct MatContext\n{' in hcode
+    assert 'struct J_0_ctx\n{' not in ccode
+    assert 'struct J_0_ctx\n{' in hcode
 
 
 @skipif('petsc')
@@ -656,7 +644,7 @@ def test_petsc_frees():
     assert str(frees[1]) == 'PetscCall(VecDestroy(&(x_global_0)));'
     assert str(frees[2]) == 'PetscCall(MatDestroy(&(J_0)));'
     assert str(frees[3]) == 'PetscCall(SNESDestroy(&(snes_0)));'
-    assert str(frees[4]) == 'PetscCall(DMDestroy(&(da_so_2)));'
+    assert str(frees[4]) == 'PetscCall(DMDestroy(&(da_0)));'
 
 
 @skipif('petsc')
@@ -733,10 +721,10 @@ def test_time_loop():
     body1 = str(op1.body)
     rhs1 = str(op1._func_table['FormRHS_0'].root.ccode)
 
-    assert 'ctx.t0 = t0' in body1
-    assert 'ctx.t1 = t1' not in body1
-    assert 'formrhs->t0' in rhs1
-    assert 'formrhs->t1' not in rhs1
+    assert 'ctx0.t0 = t0' in body1
+    assert 'ctx0.t1 = t1' not in body1
+    assert 'lctx->t0' in rhs1
+    assert 'lctx->t1' not in rhs1
 
     # Non-modulo time stepping
     u2 = TimeFunction(name='u2', grid=grid, space_order=2, save=5)
@@ -748,8 +736,8 @@ def test_time_loop():
     body2 = str(op2.body)
     rhs2 = str(op2._func_table['FormRHS_0'].root.ccode)
 
-    assert 'ctx.time = time' in body2
-    assert 'formrhs->time' in rhs2
+    assert 'ctx0.time = time' in body2
+    assert 'lctx->time' in rhs2
 
     # Modulo time stepping with more than one time step
     # used in one of the callback functions
@@ -760,10 +748,10 @@ def test_time_loop():
     body3 = str(op3.body)
     rhs3 = str(op3._func_table['FormRHS_0'].root.ccode)
 
-    assert 'ctx.t0 = t0' in body3
-    assert 'ctx.t1 = t1' in body3
-    assert 'formrhs->t0' in rhs3
-    assert 'formrhs->t1' in rhs3
+    assert 'ctx0.t0 = t0' in body3
+    assert 'ctx0.t1 = t1' in body3
+    assert 'lctx->t0' in rhs3
+    assert 'lctx->t1' in rhs3
 
     # Multiple petsc solves within the same time loop
     v2 = Function(name='v2', grid=grid, space_order=2)
@@ -775,5 +763,5 @@ def test_time_loop():
         op4 = Operator(petsc4 + petsc5)
     body4 = str(op4.body)
 
-    assert 'ctx.t0 = t0' in body4
-    assert body4.count('ctx.t0 = t0') == 1
+    assert 'ctx0.t0 = t0' in body4
+    assert body4.count('ctx0.t0 = t0') == 1

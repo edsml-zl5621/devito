@@ -37,31 +37,20 @@ def lower_petsc(iet, **kwargs):
     subs = {}
     efuncs = {}
 
-    # Create a different DMDA for each target with a unique space order
-    # unique_dmdas = create_dmda_objs(targets)
-    # objs.update(unique_dmdas)
-    # for dmda in unique_dmdas.values():
-    #     setup.extend(create_dmda_calls(dmda, objs))
-
     for iters, (injectsolve,) in injectsolve_mapper.items():
         # Provides flexibility to use various solvers with different combinations
         # of callbacks and configurations
         ObjBuilder, CCBuilder, SolverSetup = get_builder_classes(injectsolve)
 
         solver_objs = ObjBuilder(**kwargs).build(injectsolve, iters)
-        # setup.extend(create_dmda_calls(solver_objs['dmda'], objs))
 
         builder = CCBuilder(**kwargs)
-
-        # # Generate the solver setup for each InjectSolveDummy
-        # solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve)
-        # setup.extend(solver_setup)
 
         # Generate all PETSc callback functions for the target via recursive compilation
         matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
                                                         objs, solver_objs)
 
-        struct_local, struct_calls = builder.make_main_struct(solver_objs, objs)
+        struct_local, struct_main, struct_calls = builder.make_main_struct(solver_objs, objs)
 
         # Generate the solver setup for each InjectSolveDummy
         solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve)
@@ -71,23 +60,17 @@ def lower_petsc(iet, **kwargs):
         setup.extend([matvec_op, formfunc_op, BlankLine])
         # Only Transform the spatial iteration loop
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
-        subs.update({space_iter: List(body=runsolve)})
+
+        time_iters = builder.assign_time_iters(iters, struct_main)
+
+        subs.update({space_iter: List(body=tuple(time_iters)+runsolve)})
 
         new_efuncs = builder.uxreplace_efuncs(struct_local, solver_objs)
-        # from IPython import embed; embed()
+
         efuncs.update(new_efuncs)
 
-    # from IPython import embed; embed()
-    # efuncs_new = {}
-    # for efunc in efuncs.values():
-    #     efunc_new = efunc._rebuild(body=List(body=efunc.body.body+setup))
-    #     efuncs_new.update({efunc.name: efunc_new})
 
     iet = Transformer(subs).visit(iet)
-
-    # from IPython import embed; embed()
-
-    # iet = assign_time_iters(iet, struct)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
@@ -296,33 +279,6 @@ class SetupSolver:
             pc_set_type,
             ksp_set_from_ops
         )
-
-
-def assign_time_iters(iet, struct):
-    """
-    Assign time iterators to the struct within loops containing PETScCalls.
-    Ensure that assignment occurs only once per time loop, if necessary.
-    Assign only the iterators that are common between the struct fields
-    and the actual Iteration.
-    """
-    time_iters = [
-        i for i in FindNodes(Iteration).visit(iet)
-        if i.dim.is_Time and FindNodes(PETScCall).visit(i)
-    ]
-
-    if not time_iters:
-        return iet
-
-    mapper = {}
-    for iter in time_iters:
-        common_dims = [d for d in iter.dimensions if d in struct.fields]
-        common_dims = [
-            DummyExpr(FieldFromComposite(d, struct), d) for d in common_dims
-        ]
-        iter_new = iter._rebuild(nodes=List(body=tuple(common_dims)+iter.nodes))
-        mapper.update({iter: iter_new})
-
-    return Transformer(mapper).visit(iet)
 
 
 def retrieve_time_dims(iters):

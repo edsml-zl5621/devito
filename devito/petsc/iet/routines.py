@@ -3,8 +3,9 @@ from collections import OrderedDict
 import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
-                           Dereference, DummyExpr, BlankLine, Callable)
-from devito.symbolics import Byref, FieldFromPointer, Macro, cast_mapper
+                           Dereference, DummyExpr, BlankLine, Callable, FindNodes,
+                           Iteration)
+from devito.symbolics import Byref, FieldFromPointer, Macro, cast_mapper, FieldFromComposite
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import ModuloDimension, TimeDimension, Temp
@@ -384,7 +385,6 @@ class CallbackBuilder:
                              fields if isinstance(i.function, AbstractFunction)]
 
         dereference_targets = [Dereference(linsolveexpr.target, struct)]
-        # from IPython import embed; embed()
 
         formrhs_body = CallableBody(
             List(body=[body]),
@@ -392,8 +392,6 @@ class CallbackBuilder:
             stacks=stacks+tuple(dereference_funcs)+tuple(dereference_targets),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
-
-        # from IPython import embed; embed()
 
         # Replace non-function data with pointer to data in struct
 
@@ -410,7 +408,6 @@ class CallbackBuilder:
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
         target = injectsolve.expr.rhs.target
 
-        # dmda = objs['da_so_%s' % target.space_order]
         dmda = solver_objs['dmda']
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
@@ -461,15 +458,11 @@ class CallbackBuilder:
 
         dmda = solver_objs['dmda']
 
-        # from IPython import embed; embed()
-        # params = self.struct_params.append(solver_objs['targets'])
         params = filter_ordered(self.struct_params)
         params += [solver_objs['targets']]
-        # params = params.append(solver_objs['targets'])
-        # from IPython import embed; embed()
 
-        struct_local = petsc_struct(solver_objs['localctx'].name, filter_ordered(params), solver_objs['Jac'].name, liveness='eager')
-        struct_main = petsc_struct(self.sregistry.make_name(prefix='ctx'), filter_ordered(params), solver_objs['Jac'].name)
+        struct_local = petsc_struct(solver_objs['localctx'].name, filter_ordered(params), solver_objs['Jac'].name+'_ctx', liveness='eager')
+        struct_main = petsc_struct(self.sregistry.make_name(prefix='ctx'), filter_ordered(params), solver_objs['Jac'].name+'_ctx')
 
         struct_callback = self.generate_struct_callback(struct_main, objs)
         call_struct_callback = petsc_call(struct_callback.name, [Byref(struct_main)])
@@ -479,7 +472,7 @@ class CallbackBuilder:
         calls = [call_struct_callback] + calls_set_app_ctx
 
         self._efuncs[struct_callback.name] = struct_callback
-        return struct_local, calls
+        return struct_local, struct_main, calls
 
     def generate_struct_callback(self, struct_main, objs):
         body = [
@@ -504,6 +497,31 @@ class CallbackBuilder:
             )
             efuncs_new[key] = updated
         return efuncs_new
+
+    def assign_time_iters(self, iters, struct):
+        """
+        Assign time iterators to the struct.
+        Ensure that assignment occurs only once per time loop, if necessary.
+        Assign only the iterators that are common between the struct fields
+        and the actual Iteration.
+        """
+
+        time_iter = [
+            i for i in FindNodes(Iteration).visit(iters)
+            if i.dim.is_Time
+        ]
+
+        if not time_iter:
+            return []
+
+        assert len(time_iter) == 1
+        time_iter, = time_iter
+
+        common_dims = [d for d in time_iter.dimensions if d in struct.fields]
+        common_dims = [
+            DummyExpr(FieldFromComposite(d, struct), d) for d in common_dims
+        ]
+        return common_dims
 
 
 def build_local_struct(iet, name, liveness):
