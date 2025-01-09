@@ -3,15 +3,17 @@ import cgen as c
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (Transformer, MapNodes, Iteration, List, BlankLine,
                            DummyExpr, FindNodes, retrieve_iteration_tree,
-                           filter_iterations)
-from devito.symbolics import Byref, Macro, FieldFromComposite
+                           filter_iterations, Uxreplace)
+from devito.symbolics import Byref, Macro, FieldFromComposite, FieldFromPointer, cast_mapper
+from devito.symbolics.unevaluation import Mul
 from devito.types import Symbol
 from devito.petsc.types import (PetscMPIInt, DM, Mat, LocalVec, GlobalVec,
                                 KSP, PC, SNES, PetscErrorCode, DummyArg, PetscInt,
                                 StartPtr)
-from devito.petsc.iet.nodes import InjectSolveDummy, PETScCall
+from devito.petsc.iet.nodes import (InjectSolveDummy, PETScCall, FormFunctionCallback,
+                                    MatVecCallback)
 from devito.petsc.utils import solver_mapper, core_metadata
-from devito.petsc.iet.routines import CallbackBuilder
+from devito.petsc.iet.routines import CallbackBuilder, ObjectBuilder, SetupSolver, RunSolver
 from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
 
 
@@ -50,33 +52,26 @@ def lower_petsc(iet, **kwargs):
             injectsolve, objs, solver_objs
         )
 
-        solver_objs['localctx'] = cbbuilder.make_local_struct(solver_objs)
-        solver_objs['mainctx'] = cbbuilder.make_main_struct(solver_objs)
+        solver_objs['localctx'] = cbbuilder.local_struct(solver_objs)
+        solver_objs['mainctx'] = cbbuilder.main_struct(solver_objs)
 
         struct_callback = cbbuilder.make_struct_callback(solver_objs, objs)
 
-        # from IPython import embed; embed()
-
-
-        # struct_local, struct_main, struct_calls = cbbuilder.make_main_struct(solver_objs, objs)
-
         # Generate the solver setup for each InjectSolveDummy
-        solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve, struct_callback)
+        solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve, cbbuilder)
         setup.extend(solver_setup)
-        # setup.extend(struct_calls)
 
-        setup.extend([matvec_op, formfunc_op, BlankLine])
         # Only Transform the spatial iteration loop
-        space_iter, = spatial_injectsolve_iter(iters, injectsolve)
+        space_iter, = spatial_loop_nest(iters, injectsolve)
+        runsolve = SolverRun().run(
+            solver_objs, objs, injectsolve, iters, cbbuilder
+        )
+        subs.update({space_iter: runsolve})
 
-        time_iters = cbbuilder.assign_time_iters(iters, struct_main)
-
-        subs.update({space_iter: List(body=tuple(time_iters)+runsolve)})
-
-        new_efuncs = cbbuilder.uxreplace_efuncs(struct_local, solver_objs)
-
+        # Uxreplace the efuncs to replace the dummy struct with the actual local struct
+        # since now all of the struct params have been determined
+        new_efuncs = uxreplace_efuncs(cbbuilder.efuncs, solver_objs)
         efuncs.update(new_efuncs)
-
 
     iet = Transformer(subs).visit(iet)
 
@@ -123,198 +118,16 @@ def build_core_objects(target, **kwargs):
     }
 
 
-def create_dmda_objs(unique_targets):
-    unique_dmdas = {}
-    for target in unique_targets:
-        name = 'da_so_%s' % target.space_order
-        unique_dmdas[name] = DM(name=name, liveness='eager',
-                                stencil_width=target.space_order)
-    return unique_dmdas
+# def create_dmda_objs(unique_targets):
+#     unique_dmdas = {}
+#     for target in unique_targets:
+#         name = 'da_so_%s' % target.space_order
+#         unique_dmdas[name] = DM(name=name, liveness='eager',
+#                                 stencil_width=target.space_order)
+#     return unique_dmdas
 
 
-def create_dmda_calls(dmda, objs):
-    dmda_create = create_dmda(dmda, objs)
-    dm_setup = petsc_call('DMSetUp', [dmda])
-    dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
-    dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
-    return dmda_create, dm_setup, dm_mat_type, dm_get_local_info
-
-
-def create_dmda(dmda, objs):
-    no_of_space_dims = len(objs['grid'].dimensions)
-
-    # MPI communicator
-    args = [objs['comm']]
-
-    # Type of ghost nodes
-    args.extend(['DM_BOUNDARY_GHOSTED' for _ in range(no_of_space_dims)])
-
-    # Stencil type
-    if no_of_space_dims > 1:
-        args.append('DMDA_STENCIL_BOX')
-
-    # Global dimensions
-    args.extend(list(objs['grid'].shape)[::-1])
-    # No.of processors in each dimension
-    if no_of_space_dims > 1:
-        args.extend(list(objs['grid'].distributor.topology)[::-1])
-
-    # Number of degrees of freedom per node
-    args.append(1)
-    # "Stencil width" -> size of overlap
-    args.append(dmda.stencil_width)
-    args.extend([Null for _ in range(no_of_space_dims)])
-
-    # The distributed array object
-    args.append(Byref(dmda))
-
-    # The PETSc call used to create the DMDA
-    dmda = petsc_call('DMDACreate%sd' % no_of_space_dims, args)
-
-    return dmda
-
-
-class ObjectBuilder:
-    """
-    A base class for constructing objects needed for a PETSc solver.
-    Designed to be extended by subclasses, which can override the `build`
-    method to support specific use cases.
-    """
-    def __new__(cls, sregistry=None, **kwargs):
-        obj = object.__new__(cls)
-        obj.sregistry = sregistry
-        return obj
-
-    def build(self, injectsolve, iters):
-        target = injectsolve.expr.rhs.target
-        sreg = self.sregistry
-        return {
-            'Jac': Mat(sreg.make_name(prefix='J_')),
-            'x_global': GlobalVec(sreg.make_name(prefix='x_global_')),
-            'x_local': LocalVec(sreg.make_name(prefix='x_local_'), liveness='eager'),
-            'b_global': GlobalVec(sreg.make_name(prefix='b_global_')),
-            'b_local': LocalVec(sreg.make_name(prefix='b_local_')),
-            'ksp': KSP(sreg.make_name(prefix='ksp_')),
-            'pc': PC(sreg.make_name(prefix='pc_')),
-            'snes': SNES(sreg.make_name(prefix='snes_')),
-            'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
-            'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
-            'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
-            'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
-            'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
-            'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
-            'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
-            'true_dims': retrieve_time_dims(iters),
-            'target': target,
-            'time_mapper': injectsolve.expr.rhs.time_mapper,
-            'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
-                       stencil_width=target.space_order),
-            'dummyctx': Symbol('lctx'),
-            # TODO: extend to targets
-            'targets': injectsolve.expr.rhs.target,
-        }
-
-
-class SetupSolver:
-    def setup(self, solver_objs, objs, injectsolve, struct_callback):
-        target = solver_objs['target']
-
-        dmda = solver_objs['dmda']
-
-        solver_params = injectsolve.expr.rhs.solver_parameters
-
-        snes_create = petsc_call('SNESCreate', [objs['comm'], Byref(solver_objs['snes'])])
-
-        snes_set_dm = petsc_call('SNESSetDM', [solver_objs['snes'], dmda])
-
-        create_matrix = petsc_call('DMCreateMatrix', [dmda, Byref(solver_objs['Jac'])])
-
-        # NOTE: Assumming all solves are linear for now.
-        snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
-
-        snes_set_jac = petsc_call(
-            'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
-                                solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
-        )
-
-        global_x = petsc_call('DMCreateGlobalVector',
-                              [dmda, Byref(solver_objs['x_global'])])
-
-        global_b = petsc_call('DMCreateGlobalVector',
-                              [dmda, Byref(solver_objs['b_global'])])
-
-        local_b = petsc_call('DMCreateLocalVector',
-                             [dmda, Byref(solver_objs['b_local'])])
-
-        snes_get_ksp = petsc_call('SNESGetKSP',
-                                  [solver_objs['snes'], Byref(solver_objs['ksp'])])
-
-        ksp_set_tols = petsc_call(
-            'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
-                                 solver_params['ksp_atol'], solver_params['ksp_divtol'],
-                                 solver_params['ksp_max_it']]
-        )
-
-        ksp_set_type = petsc_call(
-            'KSPSetType', [solver_objs['ksp'], solver_mapper[solver_params['ksp_type']]]
-        )
-
-        ksp_get_pc = petsc_call(
-            'KSPGetPC', [solver_objs['ksp'], Byref(solver_objs['pc'])]
-        )
-
-        # Even though the default will be jacobi, set to PCNONE for now
-        pc_set_type = petsc_call('PCSetType', [solver_objs['pc'], 'PCNONE'])
-
-        ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
-
-        dmda_calls = create_dmda_calls(dmda, objs)
-
-        mainctx = solver_objs['mainctx']
-
-        call_struct_callback = petsc_call(struct_callback.name, [Byref(mainctx)])
-        calls_set_app_ctx = [
-            petsc_call('DMSetApplicationContext', [dmda, Byref(mainctx)])
-        ]
-        calls = [call_struct_callback] + calls_set_app_ctx
-
-        return dmda_calls + (
-            snes_create,
-            snes_set_dm,
-            create_matrix,
-            snes_set_jac,
-            snes_set_type,
-            global_x,
-            global_b,
-            local_b,
-            snes_get_ksp,
-            ksp_set_tols,
-            ksp_set_type,
-            ksp_get_pc,
-            pc_set_type,
-            ksp_set_from_ops
-        ) + tuple(calls)
-
-
-class RunSolver:
-    def run(self, solver_objs, objs, injectsolve):
-
-
-
-def retrieve_time_dims(iters):
-    time_iter = [i for i in iters if any(d.is_Time for d in i.dimensions)]
-    mapper = {}
-    if not time_iter:
-        return mapper
-    for d in time_iter[0].dimensions:
-        if d.is_Modulo:
-            mapper[d.origin] = d
-        elif d.is_Time:
-            mapper[d] = d
-    return mapper
-
-
-def spatial_injectsolve_iter(iter, injectsolve):
+def spatial_loop_nest(iter, injectsolve):
     spatial_body = []
     for tree in retrieve_iteration_tree(iter[0]):
         root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
@@ -334,6 +147,16 @@ def get_builder_classes(injectsolve):
     # returning subclasses of the classes listed below,
     # based on properties of `injectsolve`
     return ObjectBuilder, CallbackBuilder, SetupSolver, RunSolver
+
+
+def uxreplace_efuncs(efuncs, solver_objs):
+    efuncs_new = {}
+    for key, efunc in efuncs.items():
+        updated = Uxreplace({solver_objs['dummyctx']: solver_objs['localctx']}).visit(
+            efunc
+        )
+        efuncs_new[key] = updated
+    return efuncs_new
 
 
 Null = Macro('NULL')
