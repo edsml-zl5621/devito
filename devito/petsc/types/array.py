@@ -30,7 +30,7 @@ class PETScArray(ArrayBasic, Differentiable):
 
     __rkwargs__ = (AbstractFunction.__rkwargs__ +
                    ('dimensions', 'shape', 'liveness', 'coefficients',
-                    'space_order'))
+                    'space_order', 'dmda'))
 
     def __init_finalize__(self, *args, **kwargs):
 
@@ -43,6 +43,7 @@ class PETScArray(ArrayBasic, Differentiable):
                              " not %s" % (str(fd_weights_registry), self._coefficients))
         self._shape = kwargs.get('shape')
         self._space_order = kwargs.get('space_order', 1)
+        self._dmda = kwargs.get('dmda')
 
     @classmethod
     def __dtype_setup__(cls, **kwargs):
@@ -104,14 +105,18 @@ class PETScArray(ArrayBasic, Differentiable):
         # the user's PETSc configuration.
         return POINTER(dtype_to_ctype(self.dtype))
 
-    @property
-    def symbolic_shape(self):
-        field_from_composites = [
-            FieldFromComposite('g%sm' % d.name, self.dmda.info) for d in self.dimensions]
-        # Reverse it since DMDA is setup backwards to Devito dimensions.
-        return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
+    # @property
+    # def symbolic_shape(self):
+    #     field_from_composites = [
+    #         FieldFromComposite('g%sm' % d.name, self.dmda.info) for d in self.dimensions]
+    #     # Reverse it since DMDA is setup backwards to Devito dimensions.
+    #     return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
+
+    # @cached_property
+    # def dmda(self):
+    #     name = 'da_so_%s' % self.space_order
+    #     return DM(name=name, liveness='eager', stencil_width=self.space_order)
 
     @cached_property
     def dmda(self):
-        name = 'da_so_%s' % self.space_order
-        return DM(name=name, liveness='eager', stencil_width=self.space_order)
+        return self._dmda

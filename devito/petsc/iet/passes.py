@@ -34,12 +34,13 @@ def lower_petsc(iet, **kwargs):
 
     setup = []
     subs = {}
+    efuncs = {}
 
     # Create a different DMDA for each target with a unique space order
-    unique_dmdas = create_dmda_objs(targets)
-    objs.update(unique_dmdas)
-    for dmda in unique_dmdas.values():
-        setup.extend(create_dmda_calls(dmda, objs))
+    # unique_dmdas = create_dmda_objs(targets)
+    # objs.update(unique_dmdas)
+    # for dmda in unique_dmdas.values():
+    #     setup.extend(create_dmda_calls(dmda, objs))
 
     for iters, (injectsolve,) in injectsolve_mapper.items():
         # Provides flexibility to use various solvers with different combinations
@@ -50,21 +51,32 @@ def lower_petsc(iet, **kwargs):
 
         builder = CCBuilder(**kwargs)
 
-        # Generate the solver setup for each InjectSolveDummy
-        solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve)
-        setup.extend(solver_setup)
+        # # Generate the solver setup for each InjectSolveDummy
+        # solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve)
+        # setup.extend(solver_setup)
 
         # Generate all PETSc callback functions for the target via recursive compilation
         matvec_op, formfunc_op, runsolve = builder.make(injectsolve,
                                                         objs, solver_objs)
+
+        struct, struct_calls = builder.make_main_struct(solver_objs, objs)
+
+        # Generate the solver setup for each InjectSolveDummy
+        solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve)
+        setup.extend(solver_setup)
+        setup.extend(struct_calls)
+
         setup.extend([matvec_op, formfunc_op, BlankLine])
         # Only Transform the spatial iteration loop
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
 
-    # Generate callback to populate main struct object
-    struct, struct_calls = builder.make_main_struct(unique_dmdas, objs)
-    setup.extend(struct_calls)
+        # # calls to populate MatContext struct
+        # struct, struct_calls = builder.make_main_struct(unique_dmdas, objs)
+        # setup.extend(struct_calls)
+
+        efuncs.update(builder.efuncs)
+
 
     iet = Transformer(subs).visit(iet)
 
@@ -77,8 +89,7 @@ def lower_petsc(iet, **kwargs):
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
-    efuncs = tuple(builder.efuncs.values())
-    metadata.update({'efuncs': efuncs})
+    metadata.update({'efuncs': tuple(efuncs.values())})
 
     return iet, metadata
 
@@ -198,6 +209,8 @@ class ObjectBuilder:
             'true_dims': retrieve_time_dims(iters),
             'target': target,
             'time_mapper': injectsolve.expr.rhs.time_mapper,
+            'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
+                       stencil_width=target.space_order)
         }
 
 
@@ -205,7 +218,8 @@ class SetupSolver:
     def setup(self, solver_objs, objs, injectsolve):
         target = solver_objs['target']
 
-        dmda = objs['da_so_%s' % target.space_order]
+        # dmda = objs['da_so_%s' % target.space_order]
+        dmda = solver_objs['dmda']
 
         solver_params = injectsolve.expr.rhs.solver_parameters
 
