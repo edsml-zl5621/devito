@@ -95,8 +95,8 @@ class CallbackBuilder:
 
         struct = build_local_struct(body, 'matvec', liveness='eager')
 
-        y_matvec = linsolveexpr.arrays['y_matvec']
-        x_matvec = linsolveexpr.arrays['x_matvec']
+        y_matvec = linsolveexpr.arrays['y_matvec']._rebuild(function=None, dmda=dmda)
+        x_matvec = linsolveexpr.arrays['x_matvec']._rebuild(function=None, dmda=dmda)
 
         mat_get_dm = petsc_call('MatGetDM', [solver_objs['Jac'], Byref(dmda)])
 
@@ -191,6 +191,8 @@ class CallbackBuilder:
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         matvec_body = Uxreplace(subs).visit(matvec_body)
 
+        matvec_body = Uxreplace({linsolveexpr.arrays['y_matvec']: y_matvec, linsolveexpr.arrays['x_matvec']: x_matvec}).visit(matvec_body)
+
         self._struct_params.extend(struct.fields)
 
         return matvec_body
@@ -224,8 +226,8 @@ class CallbackBuilder:
 
         struct = build_local_struct(body, 'formfunc', liveness='eager')
 
-        y_formfunc = linsolveexpr.arrays['y_formfunc']
-        x_formfunc = linsolveexpr.arrays['x_formfunc']
+        y_formfunc = linsolveexpr.arrays['y_formfunc']._rebuild(function=None, dmda=dmda)
+        x_formfunc = linsolveexpr.arrays['x_formfunc']._rebuild(function=None, dmda=dmda)
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
@@ -312,6 +314,8 @@ class CallbackBuilder:
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for i in struct.fields}
         formfunc_body = Uxreplace(subs).visit(formfunc_body)
 
+        formfunc_body = Uxreplace({linsolveexpr.arrays['y_formfunc'].function: y_formfunc.function, linsolveexpr.arrays['x_formfunc']: x_formfunc}).visit(formfunc_body)
+
         self._struct_params.extend(struct.fields)
 
         return formfunc_body
@@ -342,7 +346,7 @@ class CallbackBuilder:
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
-        b_arr = linsolveexpr.arrays['b_tmp']
+        b_arr = linsolveexpr.arrays['b_tmp']._rebuild(function=None, dmda=dmda, name='new')
 
         vec_get_array = petsc_call(
             'VecGetArray', [solver_objs['b_local'], Byref(b_arr._C_symbol)]
@@ -389,6 +393,10 @@ class CallbackBuilder:
                 i in struct.fields if not isinstance(i.function, AbstractFunction)}
 
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
+
+        formrhs_body =formrhs_body.uxreplace({linsolveexpr.arrays['b_tmp']: b_arr})
+
+        from IPython import embed; embed()
 
         self._struct_params.extend(struct.fields)
 

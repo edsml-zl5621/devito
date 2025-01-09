@@ -18,8 +18,6 @@ __all__ = ['PETScSolve']
 def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
-    # dmda = DM(name='%s_dmda' % target.name, stencil_width=1)
-
     arrays = {
         p: PETScArray(name='%s_%s' % (p, target.name),
                            dtype=target.dtype,

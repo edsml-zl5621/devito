@@ -71,13 +71,9 @@ def lower_petsc(iet, **kwargs):
         space_iter, = spatial_injectsolve_iter(iters, injectsolve)
         subs.update({space_iter: List(body=runsolve)})
 
-        # # calls to populate MatContext struct
-        # struct, struct_calls = builder.make_main_struct(unique_dmdas, objs)
-        # setup.extend(struct_calls)
-
         efuncs.update(builder.efuncs)
 
-
+    # from IPython import embed; embed()
     iet = Transformer(subs).visit(iet)
 
     iet = assign_time_iters(iet, struct)
