@@ -25,7 +25,8 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
                            shape=target.grid.shape,
                            liveness='eager',
                            halo=[target.halo[d] for d in target.space_dimensions],
-                           space_order=target.space_order)
+                           space_order=target.space_order,
+                           symbolic_shape=target.symbolic_shape[::-1])
         for p in prefixes
     }
 
