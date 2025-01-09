@@ -22,7 +22,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         p: PETScArray(name='%s_%s' % (p, target.name),
                       target=target, liveness='eager')
         for p in prefixes
-    } 
+    }
 
     matvecs = []
     formfuncs = []
