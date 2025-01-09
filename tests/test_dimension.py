@@ -2064,7 +2064,8 @@ class TestConcretization:
         ix1 = SubDimension.right('x', x, 2)
         ix2 = SubDimension.middle('x', x, 2, 2)
 
-        rebuilt = concretize_subdims([ix0, ix1, ix2], sregistry=SymbolRegistry())
+        rebuilt = concretize_subdims([ix0, ix1, ix2], sregistry=SymbolRegistry(),
+                                     concretize_mapper={})
 
         assert rebuilt[0].is_left
         assert rebuilt[1].is_right
@@ -2105,3 +2106,25 @@ class TestConcretization:
         assert len({c.condition for c in conditionals}) == 2
         for c in conditionals:
             assert c.condition in expected_conditionals
+
+    def test_repeat_concretization(self):
+        """
+        Ensure that SubDimensions are consistently concretized to the same object
+        across multiple calls to the function. This is necessary when using
+        `rcompile` on equations with SubDimensions.
+        """
+
+        grid = Grid((2, 2))
+
+        x = Dimension('x')
+        ix = SubDimension.middle('ix', x, 2, 2)
+
+        u = Function(name='u', grid=grid)
+        eq = Eq(u, ix.ltkn)
+
+        kwargs = {'sregistry': SymbolRegistry(), 'concretize_mapper': {}}
+
+        exprs1 = concretize_subdims([eq], **kwargs)
+        exprs2 = concretize_subdims([eq], **kwargs)
+
+        assert exprs1 == exprs2

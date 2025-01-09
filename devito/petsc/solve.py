@@ -74,7 +74,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         formrhs=formrhs,
         arrays=arrays,
         time_mapper=time_mapper,
-    ), subdomain=eq.subdomain)
+    ))
 
     return [inject_solve]
 
