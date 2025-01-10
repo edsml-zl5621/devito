@@ -812,10 +812,6 @@ class TimeDependent(NonTimeDependent):
             i for i in FindNodes(Iteration).visit(iters)
             if i.dim.is_Time
         ]
-
-        if not time_iter:
-            return []
-
         assert len(time_iter) == 1
         time_iter, = time_iter
 
