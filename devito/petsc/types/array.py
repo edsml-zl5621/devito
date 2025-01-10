@@ -18,8 +18,8 @@ class PETScArray(ArrayBasic, Differentiable):
     allowing for the use of the `subs` method.
 
     PETScArray objects represent vector objects within PETSc.
-    They correspond to the spatial domain of a Function-like object passed
-    into PETScSolve from a user.
+    They correspond to the spatial domain of a Function-like object
+    provided by the user, which is passed to PETScSolve as the target.
 
     TODO: Potentially re-evaluate and separate into PETScFunction(Differentiable)
     and then PETScArray(ArrayBasic).
@@ -110,10 +110,6 @@ class PETScArray(ArrayBasic, Differentiable):
         # | grep -E "PETSC_(SCALAR|PRECISION)" to determine the precision of
         # the user's PETSc configuration.
         return POINTER(dtype_to_ctype(self.dtype))
-
-    @property
-    def halo(self):
-        return [self.target.halo[d] for d in self.target.space_dimensions]
 
     @property
     def symbolic_shape(self):

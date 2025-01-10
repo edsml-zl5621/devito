@@ -105,7 +105,7 @@ class CallbackBuilder:
         body = self.dep.uxreplace_time(body, solver_objs)
 
         struct = solver_objs['dummyctx']
-        fields = self.dummy_fields(body)
+        fields = self.dummy_fields(body, solver_objs)
 
         y_matvec = linsolveexpr.arrays['y_matvec']
         x_matvec = linsolveexpr.arrays['x_matvec']
@@ -192,12 +192,10 @@ class CallbackBuilder:
         dereference_funcs = [Dereference(i, struct) for i in
                              fields if isinstance(i.function, AbstractFunction)]
 
-        dereference_targets = [Dereference(linsolveexpr.target, struct)]
-
         matvec_body = CallableBody(
             List(body=body),
             init=(petsc_func_begin_user,),
-            stacks=stacks+tuple(dereference_funcs)+tuple(dereference_targets),
+            stacks=stacks+tuple(dereference_funcs),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
@@ -238,7 +236,7 @@ class CallbackBuilder:
 
         struct = solver_objs['dummyctx']
 
-        fields = self.dummy_fields(body)
+        fields = self.dummy_fields(body, solver_objs)
 
         y_formfunc = linsolveexpr.arrays['y_formfunc']
         x_formfunc = linsolveexpr.arrays['x_formfunc']
@@ -318,12 +316,10 @@ class CallbackBuilder:
         dereference_funcs = [Dereference(i, struct) for i in
                              fields if isinstance(i.function, AbstractFunction)]
 
-        dereference_targets = [Dereference(linsolveexpr.target, struct)]
-
         formfunc_body = CallableBody(
             List(body=body),
             init=(petsc_func_begin_user,),
-            stacks=stacks+tuple(dereference_funcs)+tuple(dereference_targets),
+            stacks=stacks+tuple(dereference_funcs),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),))
 
         # Replace non-function data with pointer to data in struct
@@ -372,7 +368,7 @@ class CallbackBuilder:
         body = self.dep.uxreplace_time(body, solver_objs)
 
         struct = solver_objs['dummyctx']
-        fields = self.dummy_fields(body)
+        fields = self.dummy_fields(body, solver_objs)
 
         dm_get_app_context = petsc_call(
             'DMGetApplicationContext', [dmda, Byref(struct._C_symbol)]
@@ -395,21 +391,16 @@ class CallbackBuilder:
         dereference_funcs = [Dereference(i, struct) for i in
                              fields if isinstance(i.function, AbstractFunction)]
 
-        dereference_targets = [Dereference(linsolveexpr.target, struct)]
-
         formrhs_body = CallableBody(
             List(body=[body]),
             init=(petsc_func_begin_user,),
-            stacks=stacks+tuple(dereference_funcs)+tuple(dereference_targets),
+            stacks=stacks+tuple(dereference_funcs),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
 
         # Replace non-function data with pointer to data in struct
-
-        # todo: this can be done on all efuncs i think, not here
         subs = {i._C_symbol: FieldFromPointer(i._C_symbol, struct) for
                 i in fields if not isinstance(i.function, AbstractFunction)}
-
         formrhs_body = Uxreplace(subs).visit(formrhs_body)
 
         self._struct_params.extend(fields)
@@ -465,7 +456,7 @@ class CallbackBuilder:
         self._struct_callback = struct_callback
         return struct_callback
 
-    def dummy_fields(self, iet):
+    def dummy_fields(self, iet, solver_objs):
         # Place all context data required by the shell routines into a struct
         fields = [
             i.function for i in FindSymbols('basics').visit(iet)
@@ -474,6 +465,7 @@ class CallbackBuilder:
                 i.is_Dimension and not isinstance(i, (TimeDimension, ModuloDimension))
             )
         ]
+        fields.append(solver_objs['target'])
         return fields
 
 
