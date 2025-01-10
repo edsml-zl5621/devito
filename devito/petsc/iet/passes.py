@@ -50,7 +50,6 @@ def lower_petsc(iet, **kwargs):
         # Generate all PETSc callback functions for the target via recursive compilation
         cbbuilder.make_core(injectsolve, objs, solver_objs)
 
-        solver_objs['localctx'] = cbbuilder.local_struct(solver_objs)
         solver_objs['mainctx'] = cbbuilder.main_struct(solver_objs)
 
         cbbuilder.make_struct_callback(solver_objs, objs)
@@ -66,8 +65,10 @@ def lower_petsc(iet, **kwargs):
         )
         subs.update({space_iter: runsolve})
 
-        # Uxreplace the efuncs to replace the dummy struct with the actual local struct
-        # since now all of the struct params have been determined
+        # Use Uxreplace on the efuncs to replace the dummy struct with
+        # the actual local struct, now that all the struct parameters
+        # for this solve have been determined
+        solver_objs['localctx'] = cbbuilder.local_struct(solver_objs)
         new_efuncs = uxreplace_efuncs(cbbuilder.efuncs, solver_objs)
         efuncs.update(new_efuncs)
 

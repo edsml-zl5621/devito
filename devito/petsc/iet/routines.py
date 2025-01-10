@@ -413,7 +413,6 @@ class CallbackBuilder:
         usually accessed via DMGetApplicationContext.
         """
         params = filter_ordered(self.struct_params)
-        params += [solver_objs['target']]
 
         return petsc_struct(
             solver_objs['dummyctx'].name,
@@ -428,7 +427,6 @@ class CallbackBuilder:
         DMSetApplicationContext
         """
         params = filter_ordered(self.struct_params)
-        params += [solver_objs['target']]
 
         return petsc_struct(
             self.sregistry.make_name(prefix='ctx'),
