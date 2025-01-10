@@ -652,36 +652,12 @@ class RunSolver:
         Returns a mapper, mapping the spatial loop nest to the calls
         to run the SNES solver.
         """
-        time_iters = self.assign_time_iters(iters, solver_objs['mainctx'])
+        time_iters = self.dep.assign_time_iters(iters, solver_objs['mainctx'])
         runsolve = self.runsolve(
             solver_objs, objs, cbbuilder.formrhs_callback, injectsolve
         )
         calls = List(body=tuple(time_iters)+runsolve)
         return calls
-
-    def assign_time_iters(self, iters, struct):
-        """
-        Assign time iterators to the struct.
-        Ensure that assignment occurs only once per time loop, if necessary.
-        Assign only the iterators that are common between the struct fields
-        and the actual Iteration.
-        """
-        time_iter = [
-            i for i in FindNodes(Iteration).visit(iters)
-            if i.dim.is_Time
-        ]
-
-        if not time_iter:
-            return []
-
-        assert len(time_iter) == 1
-        time_iter, = time_iter
-
-        common_dims = [d for d in time_iter.dimensions if d in struct.fields]
-        common_dims = [
-            DummyExpr(FieldFromComposite(d, struct), d) for d in common_dims
-        ]
-        return common_dims
 
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
         dmda = solver_objs['dmda']
@@ -745,6 +721,9 @@ class NonTimeDependent:
 
     def time_dep_replace(self, injectsolve, solver_objs, objs):
         return ()
+
+    def assign_time_iters(self, iters, struct):
+        return []
 
 
 class TimeDependent(NonTimeDependent):
@@ -821,6 +800,30 @@ class TimeDependent(NonTimeDependent):
                 'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
             ),)
             return vec_replace_array
+
+    def assign_time_iters(self, iters, struct):
+        """
+        Assign time iterators to the struct.
+        Ensure that assignment occurs only once per time loop, if necessary.
+        Assign only the iterators that are common between the struct fields
+        and the actual Iteration.
+        """
+        time_iter = [
+            i for i in FindNodes(Iteration).visit(iters)
+            if i.dim.is_Time
+        ]
+
+        if not time_iter:
+            return []
+
+        assert len(time_iter) == 1
+        time_iter, = time_iter
+
+        common_dims = [d for d in time_iter.dimensions if d in struct.fields]
+        common_dims = [
+            DummyExpr(FieldFromComposite(d, struct), d) for d in common_dims
+        ]
+        return common_dims
 
 
 Null = Macro('NULL')
