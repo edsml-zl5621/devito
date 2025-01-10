@@ -9,7 +9,8 @@ from devito.petsc.types import (PetscMPIInt, PetscErrorCode)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import core_metadata
 from devito.petsc.iet.routines import (CallbackBuilder, ObjectBuilder,
-                                       SetupSolver, RunSolver)
+                                       SetupSolver, RunSolver, TimeDependent,
+                                       NonTimeDependent)
 from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
 
 
@@ -38,10 +39,13 @@ def lower_petsc(iet, **kwargs):
     for iters, (injectsolve,) in injectsolve_mapper.items():
         # Provides flexibility to use various solvers with different combinations
         # of callbacks and configurations
-        ObjBuilder, CCBuilder, SolverSetup, SolverRun = get_builder_classes(injectsolve)
+        builder_classes = get_builder_classes(injectsolve)
+        ObjBuilder, CCBuilder, SolverSetup, SolverRun, dep = builder_classes
 
-        solver_objs = ObjBuilder(**kwargs).build(injectsolve, iters)
-        cbbuilder = CCBuilder(**kwargs)
+        time_dep = dep(injectsolve, **kwargs)
+
+        solver_objs = ObjBuilder(dep=time_dep, **kwargs).build(injectsolve, iters)
+        cbbuilder = CCBuilder(dep=time_dep, **kwargs)
 
         # Generate all PETSc callback functions for the target via recursive compilation
         cbbuilder.make_core(injectsolve, objs, solver_objs)
@@ -57,7 +61,7 @@ def lower_petsc(iet, **kwargs):
 
         # Only Transform the spatial iteration loop
         space_iter, = spatial_loop_nest(iters, injectsolve)
-        runsolve = SolverRun().run(
+        runsolve = SolverRun(dep=time_dep).run(
             solver_objs, objs, injectsolve, iters, cbbuilder
         )
         subs.update({space_iter: runsolve})
@@ -131,7 +135,10 @@ def get_builder_classes(injectsolve):
     # NOTE: This function will extend to support different solver types
     # returning subclasses of the classes listed below,
     # based on properties of `injectsolve`
-    return ObjectBuilder, CallbackBuilder, SetupSolver, RunSolver
+    time_mapper = injectsolve.expr.rhs.time_mapper
+    dependency_class = TimeDependent if time_mapper else NonTimeDependent
+
+    return ObjectBuilder, CallbackBuilder, SetupSolver, RunSolver, dependency_class
 
 
 def uxreplace_efuncs(efuncs, solver_objs):

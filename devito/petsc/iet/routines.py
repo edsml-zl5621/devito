@@ -26,11 +26,12 @@ class CallbackBuilder:
     """
     Build IET routines to generate PETSc callback functions.
     """
-    def __new__(cls, rcompile=None, sregistry=None, **kwargs):
+    def __new__(cls, rcompile=None, sregistry=None, dep=None, **kwargs):
         obj = object.__new__(cls)
         obj.rcompile = rcompile
         obj.sregistry = sregistry
         obj.concretize_mapper = kwargs.get('concretize_mapper', {})
+        obj.dep = dep
 
         obj._efuncs = OrderedDict()
         obj._struct_params = []
@@ -101,10 +102,10 @@ class CallbackBuilder:
 
         dmda = solver_objs['dmda']
 
-        body = uxreplace_time(body, solver_objs)
+        body = self.dep.uxreplace_time(body, solver_objs)
 
         struct = solver_objs['dummyctx']
-        fields = dummy_fields(body)
+        fields = self.dummy_fields(body)
 
         y_matvec = linsolveexpr.arrays['y_matvec']
         x_matvec = linsolveexpr.arrays['x_matvec']
@@ -233,11 +234,11 @@ class CallbackBuilder:
 
         dmda = solver_objs['dmda']
 
-        body = uxreplace_time(body, solver_objs)
+        body = self.dep.uxreplace_time(body, solver_objs)
 
         struct = solver_objs['dummyctx']
 
-        fields = dummy_fields(body)
+        fields = self.dummy_fields(body)
 
         y_formfunc = linsolveexpr.arrays['y_formfunc']
         x_formfunc = linsolveexpr.arrays['x_formfunc']
@@ -317,7 +318,6 @@ class CallbackBuilder:
         dereference_funcs = [Dereference(i, struct) for i in
                              fields if isinstance(i.function, AbstractFunction)]
 
-        # from IPython import embed; embed()
         dereference_targets = [Dereference(linsolveexpr.target, struct)]
 
         formfunc_body = CallableBody(
@@ -369,10 +369,10 @@ class CallbackBuilder:
             'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
         )
 
-        body = uxreplace_time(body, solver_objs)
+        body = self.dep.uxreplace_time(body, solver_objs)
 
         struct = solver_objs['dummyctx']
-        fields = dummy_fields(body)
+        fields = self.dummy_fields(body)
 
         dm_get_app_context = petsc_call(
             'DMGetApplicationContext', [dmda, Byref(struct._C_symbol)]
@@ -422,7 +422,7 @@ class CallbackBuilder:
         usually accessed via DMGetApplicationContext.
         """
         params = filter_ordered(self.struct_params)
-        params += [solver_objs['targets']]
+        params += [solver_objs['target']]
 
         return petsc_struct(
             solver_objs['dummyctx'].name,
@@ -437,7 +437,7 @@ class CallbackBuilder:
         DMSetApplicationContext
         """
         params = filter_ordered(self.struct_params)
-        params += [solver_objs['targets']]
+        params += [solver_objs['target']]
 
         return petsc_struct(
             self.sregistry.make_name(prefix='ctx'),
@@ -465,6 +465,17 @@ class CallbackBuilder:
         self._struct_callback = struct_callback
         return struct_callback
 
+    def dummy_fields(self, iet):
+        # Place all context data required by the shell routines into a struct
+        fields = [
+            i.function for i in FindSymbols('basics').visit(iet)
+            if not isinstance(i.function, (PETScArray, Temp))
+            and not (
+                i.is_Dimension and not isinstance(i, (TimeDimension, ModuloDimension))
+            )
+        ]
+        return fields
+
 
 class ObjectBuilder:
     """
@@ -472,9 +483,10 @@ class ObjectBuilder:
     Designed to be extended by subclasses, which can override the `build`
     method to support specific use cases.
     """
-    def __new__(cls, sregistry=None, **kwargs):
+    def __new__(cls, sregistry=None, dep=None, **kwargs):
         obj = object.__new__(cls)
         obj.sregistry = sregistry
+        obj.dep = dep
         return obj
 
     def build(self, injectsolve, iters):
@@ -496,14 +508,13 @@ class ObjectBuilder:
             'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
             'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
             'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
-            'true_dims': retrieve_time_dims(iters),
+            'true_dims': self.dep.retrieve_time_dims(iters),
+            # TODO: extend to targets
             'target': target,
             'time_mapper': injectsolve.expr.rhs.time_mapper,
             'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
                        stencil_width=target.space_order),
-            'dummyctx': Symbol('lctx'),
-            # TODO: extend to targets
-            'targets': injectsolve.expr.rhs.target,
+            'dummyctx': Symbol('lctx')
         }
 
 
@@ -570,7 +581,7 @@ class SetupSolver:
              FormFunctionCallback(builder.formfunc_callback.name, void, void), Null]
         )
 
-        dmda_calls = create_dmda_calls(dmda, objs)
+        dmda_calls = self.create_dmda_calls(dmda, objs)
 
         mainctx = solver_objs['mainctx']
 
@@ -599,8 +610,53 @@ class SetupSolver:
             formfunc_operation,
         ) + tuple(calls)
 
+    def create_dmda_calls(self, dmda, objs):
+        dmda_create = self.create_dmda(dmda, objs)
+        dm_setup = petsc_call('DMSetUp', [dmda])
+        dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
+        dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
+        return dmda_create, dm_setup, dm_mat_type, dm_get_local_info
+
+    def create_dmda(self, dmda, objs):
+        no_of_space_dims = len(objs['grid'].dimensions)
+
+        # MPI communicator
+        args = [objs['comm']]
+
+        # Type of ghost nodes
+        args.extend(['DM_BOUNDARY_GHOSTED' for _ in range(no_of_space_dims)])
+
+        # Stencil type
+        if no_of_space_dims > 1:
+            args.append('DMDA_STENCIL_BOX')
+
+        # Global dimensions
+        args.extend(list(objs['grid'].shape)[::-1])
+        # No.of processors in each dimension
+        if no_of_space_dims > 1:
+            args.extend(list(objs['grid'].distributor.topology)[::-1])
+
+        # Number of degrees of freedom per node
+        args.append(1)
+        # "Stencil width" -> size of overlap
+        args.append(dmda.stencil_width)
+        args.extend([Null for _ in range(no_of_space_dims)])
+
+        # The distributed array object
+        args.append(Byref(dmda))
+
+        # The PETSc call used to create the DMDA
+        dmda = petsc_call('DMDACreate%sd' % no_of_space_dims, args)
+
+        return dmda
+
 
 class RunSolver:
+    def __new__(cls, dep=None, **kwargs):
+        obj = object.__new__(cls)
+        obj.dep = dep
+        return obj
+
     def run(self, solver_objs, objs, injectsolve, iters, cbbuilder):
         """
         Returns a mapper, mapping the spatial loop nest to the calls
@@ -638,8 +694,6 @@ class RunSolver:
         return common_dims
 
     def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
-        target = injectsolve.expr.rhs.target
-
         dmda = solver_objs['dmda']
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
@@ -647,15 +701,7 @@ class RunSolver:
         local_x = petsc_call('DMCreateLocalVector',
                              [dmda, Byref(solver_objs['x_local'])])
 
-        if any(i.is_Time for i in target.dimensions):
-            vec_replace_array = time_dep_replace(
-                injectsolve, solver_objs, objs
-            )
-        else:
-            field_from_ptr = FieldFromPointer(target._C_field_data, target._C_symbol)
-            vec_replace_array = (petsc_call(
-                'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
-            ),)
+        vec_replace_array = self.dep.time_dep_replace(injectsolve, solver_objs, objs)
 
         dm_local_to_global_x = petsc_call(
             'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',
@@ -687,111 +733,104 @@ class RunSolver:
         )
 
 
-def dummy_fields(iet):
-    # Place all context data required by the shell routines into a struct
-    fields = [
-        i.function for i in FindSymbols('basics').visit(iet)
-        if not isinstance(i.function, (PETScArray, Temp))
-        and not (i.is_Dimension and not isinstance(i, (TimeDimension, ModuloDimension)))
-    ]
-    return fields
+class NonTimeDependent:
+    def __new__(cls, injectsolve, **kwargs):
+        obj = object.__new__(cls)
+        obj.injectsolve = injectsolve
+        return obj
+
+    @property
+    def is_target_time(self):
+        return False
+
+    @property
+    def target(self):
+        return self.injectsolve.expr.rhs.target
+
+    def uxreplace_time(self, body, solver_objs):
+        return body
+
+    def retrieve_time_dims(self, iters):
+        return {}
+
+    def time_dep_replace(self, injectsolve, solver_objs, objs):
+        return ()
 
 
-def uxreplace_time(body, solver_objs):
-    # TODO: Potentially introduce a TimeIteration abstraction to simplify
-    # all the time processing that is done (searches, replacements, ...)
-    # "manually" via free functions
-    time_spacing = solver_objs['target'].grid.stepping_dim.spacing
-    true_dims = solver_objs['true_dims']
+class TimeDependent(NonTimeDependent):
+    """
+    A class for managing time-dependent solvers.
 
-    time_mapper = {
-        v: k.xreplace({time_spacing: 1, -time_spacing: -1})
-        for k, v in solver_objs['time_mapper'].items()
-    }
-    subs = {symb: true_dims[time_mapper[symb]] for symb in time_mapper}
-    return Uxreplace(subs).visit(body)
+    This includes scenarios where the target is not directly a TimeFunction
+    but depends on other functions that are.
+    """
+    @property
+    def is_target_time(self):
+        return True if any(i.is_Time for i in self.target.dimensions) else False
 
+    def uxreplace_time(self, body, solver_objs):
+        time_spacing = self.target.grid.stepping_dim.spacing
+        true_dims = solver_objs['true_dims']
 
-def retrieve_time_dims(iters):
-    time_iter = [i for i in iters if any(d.is_Time for d in i.dimensions)]
-    mapper = {}
-    if not time_iter:
+        time_mapper = {
+            v: k.xreplace({time_spacing: 1, -time_spacing: -1})
+            for k, v in solver_objs['time_mapper'].items()
+        }
+        subs = {symb: true_dims[time_mapper[symb]] for symb in time_mapper}
+        return Uxreplace(subs).visit(body)
+
+    def retrieve_time_dims(self, iters):
+        time_iter = [i for i in iters if any(d.is_Time for d in i.dimensions)]
+        mapper = {}
+        if not time_iter:
+            return mapper
+        for d in time_iter[0].dimensions:
+            if d.is_Modulo:
+                mapper[d.origin] = d
+            elif d.is_Time:
+                mapper[d] = d
         return mapper
-    for d in time_iter[0].dimensions:
-        if d.is_Modulo:
-            mapper[d.origin] = d
-        elif d.is_Time:
-            mapper[d] = d
-    return mapper
 
+    def time_dep_replace(self, injectsolve, solver_objs, objs):
+        # Extract the target from the lhs, which has been lowered
+        # through the operator, allowing us to retrieve the target time symbol
+        # from it
+        target = self.injectsolve.expr.lhs
 
-def create_dmda_calls(dmda, objs):
-    dmda_create = create_dmda(dmda, objs)
-    dm_setup = petsc_call('DMSetUp', [dmda])
-    dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
-    dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
-    return dmda_create, dm_setup, dm_mat_type, dm_get_local_info
+        if self.is_target_time:
+            target_time = [
+                i for i, d in zip(target.indices, target.dimensions) if d.is_Time
+            ]
+            assert len(target_time) == 1
+            target_time = target_time.pop()
 
+            start_ptr = solver_objs['start_ptr']
 
-def create_dmda(dmda, objs):
-    no_of_space_dims = len(objs['grid'].dimensions)
+            vec_get_size = petsc_call(
+                'VecGetSize', [solver_objs['x_local'], Byref(solver_objs['localsize'])]
+            )
 
-    # MPI communicator
-    args = [objs['comm']]
+            field_from_ptr = FieldFromPointer(
+                target.function._C_field_data, target.function._C_symbol
+            )
 
-    # Type of ghost nodes
-    args.extend(['DM_BOUNDARY_GHOSTED' for _ in range(no_of_space_dims)])
+            expr = DummyExpr(
+                start_ptr, cast_mapper[(target.dtype, '*')](field_from_ptr) +
+                Mul(target_time, solver_objs['localsize']), init=True
+            )
 
-    # Stencil type
-    if no_of_space_dims > 1:
-        args.append('DMDA_STENCIL_BOX')
-
-    # Global dimensions
-    args.extend(list(objs['grid'].shape)[::-1])
-    # No.of processors in each dimension
-    if no_of_space_dims > 1:
-        args.extend(list(objs['grid'].distributor.topology)[::-1])
-
-    # Number of degrees of freedom per node
-    args.append(1)
-    # "Stencil width" -> size of overlap
-    args.append(dmda.stencil_width)
-    args.extend([Null for _ in range(no_of_space_dims)])
-
-    # The distributed array object
-    args.append(Byref(dmda))
-
-    # The PETSc call used to create the DMDA
-    dmda = petsc_call('DMDACreate%sd' % no_of_space_dims, args)
-
-    return dmda
-
-
-def time_dep_replace(injectsolve, solver_objs, objs):
-    target = injectsolve.expr.lhs
-    target_time = [
-        i for i, d in zip(target.indices, target.dimensions) if d.is_Time
-    ]
-    assert len(target_time) == 1
-    target_time = target_time.pop()
-
-    start_ptr = solver_objs['start_ptr']
-
-    vec_get_size = petsc_call(
-        'VecGetSize', [solver_objs['x_local'], Byref(solver_objs['localsize'])]
-    )
-
-    field_from_ptr = FieldFromPointer(
-        target.function._C_field_data, target.function._C_symbol
-    )
-
-    expr = DummyExpr(
-        start_ptr, cast_mapper[(target.dtype, '*')](field_from_ptr) +
-        Mul(target_time, solver_objs['localsize']), init=True
-    )
-
-    vec_replace_array = petsc_call('VecReplaceArray', [solver_objs['x_local'], start_ptr])
-    return (vec_get_size, expr, vec_replace_array)
+            vec_replace_array = petsc_call(
+                'VecReplaceArray', [solver_objs['x_local'], start_ptr]
+            )
+            return (vec_get_size, expr, vec_replace_array)
+        else:
+            field_from_ptr = FieldFromPointer(
+                target.function._C_field_data, target.function._C_symbol
+            )
+            vec_replace_array = (petsc_call(
+                'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
+            ),)
+            return vec_replace_array
 
 
 Null = Macro('NULL')
