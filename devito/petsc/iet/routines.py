@@ -328,7 +328,7 @@ class CallbackBuilder:
             vec_get_array_x,
             dm_get_local_info
         )
-        # from IPython import embed; embed()
+
         # Dereference function data in struct
         dereference_funcs = [Dereference(i, struct) for i in
                              fields if isinstance(i.function, AbstractFunction)]

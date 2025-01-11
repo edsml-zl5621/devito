@@ -113,13 +113,6 @@ class PETScArray(ArrayBasic, Differentiable):
         # the user's PETSc configuration.
         return POINTER(dtype_to_ctype(self.dtype))
 
-    # @property
-    # def symbolic_shape(self):
-    #     # TODO: double check if this should be reversed for dmda
-    #     tmp = tuple(self.target._C_get_field(FULL, d).size for d in self.dimensions)
-    #     return tuple(reversed(tmp))
-    #     # return tuple(self.target._C_get_field(FULL, d).size for d in self.dimensions)
-
     @property
     def symbolic_shape(self):
         field_from_composites = [

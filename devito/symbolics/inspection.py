@@ -278,7 +278,6 @@ def has_integer_args(*args):
         if isinstance(args[0], CCompositeObject):
             return False
         try:
-            # from IPython import embed; embed()
             return np.issubdtype(args[0].dtype, np.integer)
         except AttributeError:
             return args[0].is_integer
