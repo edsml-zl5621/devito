@@ -166,18 +166,22 @@ class CodePrinter(C99CodePrinter):
         """Print an absolute value. Use `abs` if can infer it is an Integer"""
         # AOMPCC errors with abs, always use fabs
         if isinstance(self.compiler, AOMPCompiler):
-            return "fabs(%s)" % self._print(expr.args[0])
+            # return "fabs(%s)" % self._print(expr.args[0])
+            return "abs(%s)" % self._print(expr.args[0])
         # Check if argument is an integer
         if has_integer_args(*expr.args[0].args):
             func = "abs"
         elif self.single_prec(expr):
-            func = "fabsf"
+            # func = "fabsf"
+            func = "abs"
         elif any([isinstance(a, Real) for a in expr.args[0].args]):
             # The previous condition isn't sufficient to detect case with
             # Python `float`s in that case, fall back to the "default"
-            func = "fabsf" if self.single_prec() else "fabs"
+            # func = "fabsf" if self.single_prec() else "fabs"
+            func = "abs"
         else:
-            func = "fabs"
+            func = "abs"
+            # func = "fabs"
         return f"{func}({self._print(expr.args[0])})"
 
     def _print_Add(self, expr, order=None):
