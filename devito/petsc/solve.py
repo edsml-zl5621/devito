@@ -43,7 +43,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         # from IPython import embed; embed()
         if isinstance(eq, EssentialBC):
             matvecs.append(Eq(
-                arrays['y_matvec'], target.grid.spacing_symbols[0]*target.grid.spacing_symbols[1],
+                arrays['y_matvec'], -2.0*arrays['x_matvec']/(target.grid.spacing[0]*target.grid.spacing[0]) -2.0*arrays['x_matvec']/(target.grid.spacing[1]*target.grid.spacing[1]),
                 subdomain=eq.subdomain
             ))
 
