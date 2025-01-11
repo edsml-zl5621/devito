@@ -13,6 +13,8 @@ from devito.symbolics.queries import q_routine
 from devito.tools import as_tuple, prod
 from devito.tools.dtypes_lowering import infer_dtype
 
+from devito.types import CCompositeObject
+
 __all__ = ['compare_ops', 'estimate_cost', 'has_integer_args', 'sympy_dtype']
 
 
@@ -273,7 +275,10 @@ def has_integer_args(*args):
         return False
 
     if len(args) == 1:
+        if isinstance(args[0], CCompositeObject):
+            return False
         try:
+            # from IPython import embed; embed()
             return np.issubdtype(args[0].dtype, np.integer)
         except AttributeError:
             return args[0].is_integer

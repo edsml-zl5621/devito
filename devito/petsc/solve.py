@@ -12,7 +12,11 @@ from devito.tools import as_tuple
 from devito.petsc.types import LinearSolveExpr, PETScArray, DMDALocalInfo
 
 
-__all__ = ['PETScSolve']
+__all__ = ['PETScSolve', 'EssentialBC']
+
+
+class EssentialBC(Eq):
+    pass
 
 
 def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
@@ -37,25 +41,42 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     for eq in eqns:
         b, F_target, targets = separate_eqn(eq, target)
 
-        # TODO: Current assumption is that problem is linear and user has not provided
-        # a jacobian. Hence, we can use F_target to form the jac-vec product
-        matvecs.append(Eq(
-            arrays['y_matvec'],
-            F_target.subs(targets_to_arrays(arrays['x_matvec'], targets)),
-            subdomain=eq.subdomain
-        ))
+        if isinstance(eq, EssentialBC):
+            matvecs.append(Eq(
+                arrays['y_matvec'], 1.,
+                subdomain=eq.subdomain
+            ))
 
-        formfuncs.append(Eq(
-            arrays['y_formfunc'],
-            F_target.subs(targets_to_arrays(arrays['x_formfunc'], targets)),
-            subdomain=eq.subdomain
-        ))
+            formfuncs.append(Eq(
+                arrays['y_formfunc'], 0.,
+                subdomain=eq.subdomain
+            ))
 
-        formrhs.append(Eq(
-            arrays['b_tmp'],
-            b,
-            subdomain=eq.subdomain
-        ))
+            formrhs.append(Eq(
+                arrays['b_tmp'],
+                0.,
+                subdomain=eq.subdomain
+            ))
+        else:
+            # TODO: Current assumption is that problem is linear and user has not provided
+            # a jacobian. Hence, we can use F_target to form the jac-vec product
+            matvecs.append(Eq(
+                arrays['y_matvec'],
+                F_target.subs(targets_to_arrays(arrays['x_matvec'], targets)),
+                subdomain=eq.subdomain
+            ))
+
+            formfuncs.append(Eq(
+                arrays['y_formfunc'],
+                F_target.subs(targets_to_arrays(arrays['x_formfunc'], targets)),
+                subdomain=eq.subdomain
+            ))
+
+            formrhs.append(Eq(
+                arrays['b_tmp'],
+                b,
+                subdomain=eq.subdomain
+            ))
 
     funcs = retrieve_functions(eqns)
     time_mapper = generate_time_mapper(funcs)

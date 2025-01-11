@@ -1,4 +1,5 @@
 from ctypes import POINTER
+import numpy as np
 
 from devito.tools import CustomDtype, dtype_to_cstr
 from devito.types import LocalObject, CCompositeObject, ModuloDimension, TimeDimension
