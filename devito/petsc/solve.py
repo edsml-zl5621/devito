@@ -40,10 +40,10 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
 
     for eq in eqns:
         b, F_target, targets = separate_eqn(eq, target)
-        # from IPython import embed; embed()
+
         if isinstance(eq, EssentialBC):
             matvecs.append(Eq(
-                arrays['y_matvec'], -2.0*arrays['x_matvec']/(target.grid.spacing[0]*target.grid.spacing[0]) -2.0*arrays['x_matvec']/(target.grid.spacing[1]*target.grid.spacing[1]),
+                arrays['y_matvec'], arrays['x_matvec'],
                 subdomain=eq.subdomain
             ))
 
@@ -77,13 +77,13 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
                 b,
                 subdomain=eq.subdomain
             ))
-    # from IPython import embed; embed()
+
     funcs = retrieve_functions(eqns)
     time_mapper = generate_time_mapper(funcs)
     matvecs, formfuncs, formrhs = (
         [eq.xreplace(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
     )
-    # from IPython import embed; embed()
+
     # Placeholder equation for inserting calls to the solver and generating
     # correct time loop etc
     inject_solve = InjectSolveEq(target, LinearSolveExpr(

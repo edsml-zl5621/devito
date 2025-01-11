@@ -130,7 +130,8 @@ class CodePrinter(C99CodePrinter):
         if "Pow" in self.known_functions:
             return self._print_Function(expr)
         PREC = precedence(expr)
-        suffix = 'f' if self.single_prec(expr) else ''
+        # suffix = 'f' if self.single_prec(expr) else ''
+        suffix = ''
         if equal_valued(expr.exp, -1):
             return self._print_Float(Float(1.0)) + '/' + \
                 self.parenthesize(expr.base, PREC)

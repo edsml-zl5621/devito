@@ -11,7 +11,6 @@ from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import Temp, Symbol
 from devito.tools import filter_ordered
-from devito.ir.support import SymbolRegistry
 
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
@@ -78,9 +77,8 @@ class CallbackBuilder:
 
     def make_matvec(self, injectsolve, objs, solver_objs):
         # Compile matvec `eqns` into an IET via recursive compilation
-        # irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
-        #                               options={'mpi': False}, sregistry=SymbolRegistry(),
-        #                               concretize_mapper=self.concretize_mapper)
+        # NOTE: Could switch to using a new SymbolRegistry here but would
+        # require the concretize_mapper
         irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
                                       options={'mpi': False})
         body_matvec = self.create_matvec_body(injectsolve,
@@ -219,11 +217,6 @@ class CallbackBuilder:
 
     def make_formfunc(self, injectsolve, objs, solver_objs):
         # Compile formfunc `eqns` into an IET via recursive compilation
-        # irs_formfunc, _ = self.rcompile(
-        #     injectsolve.expr.rhs.formfuncs,
-        #     options={'mpi': False}, sregistry=SymbolRegistry(),
-        #     concretize_mapper=self.concretize_mapper
-        # )
         irs_formfunc, _ = self.rcompile(
             injectsolve.expr.rhs.formfuncs,
             options={'mpi': False}
@@ -356,9 +349,6 @@ class CallbackBuilder:
 
     def make_formrhs(self, injectsolve, objs, solver_objs):
         # Compile formrhs `eqns` into an IET via recursive compilation
-        # irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
-        #                                options={'mpi': False}, sregistry=SymbolRegistry(),
-        #                                concretize_mapper=self.concretize_mapper)
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
                                        options={'mpi': False})
         body_formrhs = self.create_formrhs_body(injectsolve,
