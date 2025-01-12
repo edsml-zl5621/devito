@@ -78,6 +78,8 @@ class CallbackBuilder:
 
     def make_matvec(self, injectsolve, objs, solver_objs):
         # Compile matvec `eqns` into an IET via recursive compilation
+        # TODO: there is a bug with using concretize_mapper when some thicknesses
+        # are generated inside the main kernel first
         irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
                                       options={'mpi': False})
         body_matvec = self.create_matvec_body(injectsolve,
