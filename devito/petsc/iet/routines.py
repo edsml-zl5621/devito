@@ -473,7 +473,6 @@ class CallbackBuilder:
         fields = [
             f for f in fields if not (f.is_Dimension and not (f.is_Time or f.is_Modulo))
         ]
-        # fields = filter_ordered(fields)
         return fields
 
 

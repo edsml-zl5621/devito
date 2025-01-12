@@ -37,8 +37,7 @@ def lower_petsc(iet, **kwargs):
     efuncs = {}
 
     for iters, (injectsolve,) in injectsolve_mapper.items():
-        # Provides flexibility to use various solvers with different combinations
-        # of callbacks and configurations
+
         builder_classes = get_builder_classes(injectsolve)
         ObjBuilder, CBBuilder, SolverSetup, SolverRun, dep = builder_classes
 
@@ -47,18 +46,20 @@ def lower_petsc(iet, **kwargs):
         solver_objs = ObjBuilder(dep=time_dep, **kwargs).build(injectsolve, iters)
         cbbuilder = CBBuilder(dep=time_dep, **kwargs)
 
-        # Generate all PETSc callback functions for the target via recursive compilation
+        # Generate the core PETSc callback functions for the target via
+        # recursive compilation
         cbbuilder.make_core(injectsolve, objs, solver_objs)
 
         solver_objs['mainctx'] = cbbuilder.main_struct(solver_objs)
 
+        # Generate the callback function to populate the context struct
         cbbuilder.make_struct_callback(solver_objs, objs)
 
-        # Generate the solver setup for each InjectSolveDummy
+        # Generate the calls to set up the solver
         solver_setup = SolverSetup().setup(solver_objs, objs, injectsolve, cbbuilder)
         setup.extend(solver_setup)
 
-        # Only Transform the spatial iteration loop
+        # Transform the spatial iteration loop with the calls to execute the solver
         space_iter, = spatial_loop_nest(iters, injectsolve)
         runsolve = SolverRun(dep=time_dep).runsolve(
             solver_objs, objs, injectsolve, iters, cbbuilder
