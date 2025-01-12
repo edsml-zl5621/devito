@@ -40,12 +40,12 @@ def lower_petsc(iet, **kwargs):
         # Provides flexibility to use various solvers with different combinations
         # of callbacks and configurations
         builder_classes = get_builder_classes(injectsolve)
-        ObjBuilder, CCBuilder, SolverSetup, SolverRun, dep = builder_classes
+        ObjBuilder, CBBuilder, SolverSetup, SolverRun, dep = builder_classes
 
         time_dep = dep(injectsolve, **kwargs)
 
         solver_objs = ObjBuilder(dep=time_dep, **kwargs).build(injectsolve, iters)
-        cbbuilder = CCBuilder(dep=time_dep, **kwargs)
+        cbbuilder = CBBuilder(dep=time_dep, **kwargs)
 
         # Generate all PETSc callback functions for the target via recursive compilation
         cbbuilder.make_core(injectsolve, objs, solver_objs)
@@ -60,7 +60,7 @@ def lower_petsc(iet, **kwargs):
 
         # Only Transform the spatial iteration loop
         space_iter, = spatial_loop_nest(iters, injectsolve)
-        runsolve = SolverRun(dep=time_dep).run(
+        runsolve = SolverRun(dep=time_dep).runsolve(
             solver_objs, objs, injectsolve, iters, cbbuilder
         )
         subs.update({space_iter: runsolve})
@@ -143,13 +143,11 @@ def get_builder_classes(injectsolve):
 
 
 def uxreplace_efuncs(efuncs, solver_objs):
-    efuncs_new = {}
-    for key, efunc in efuncs.items():
-        updated = Uxreplace({solver_objs['dummyctx']: solver_objs['localctx']}).visit(
-            efunc
-        )
-        efuncs_new[key] = updated
-    return efuncs_new
+    def replace(efunc):
+        mapper = {solver_objs['dummyctx']: solver_objs['localctx']}
+        return Uxreplace(mapper).visit(efunc)
+
+    return {k: replace(v) for k, v in efuncs.items()}
 
 
 Null = Macro('NULL')

@@ -9,7 +9,7 @@ from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
                               FieldFromComposite)
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
-from devito.types import ModuloDimension, TimeDimension, Temp, Symbol
+from devito.types import Temp, Symbol
 from devito.tools import filter_ordered
 from devito.ir.support import SymbolRegistry
 
@@ -52,6 +52,10 @@ class CallbackBuilder:
         return self._struct_params
 
     @property
+    def filtered_struct_params(self):
+        return filter_ordered(self.struct_params)
+
+    @property
     def matvec_callback(self):
         return self._matvec_callback
 
@@ -68,15 +72,9 @@ class CallbackBuilder:
         return self._struct_callback
 
     def make_core(self, injectsolve, objs, solver_objs):
-        matvec_callback = self.make_matvec(injectsolve, objs, solver_objs)
-        formfunc_callback = self.make_formfunc(injectsolve, objs, solver_objs)
-        formrhs_callback = self.make_formrhs(injectsolve, objs, solver_objs)
-
-        self._efuncs[matvec_callback.name] = matvec_callback
-        self._efuncs[formfunc_callback.name] = formfunc_callback
-        self._efuncs[formrhs_callback.name] = formrhs_callback
-
-        return matvec_callback, formfunc_callback, formrhs_callback
+        self.make_matvec(injectsolve, objs, solver_objs)
+        self.make_formfunc(injectsolve, objs, solver_objs)
+        self.make_formrhs(injectsolve, objs, solver_objs)
 
     def make_matvec(self, injectsolve, objs, solver_objs):
         # Compile matvec `eqns` into an IET via recursive compilation
@@ -95,7 +93,7 @@ class CallbackBuilder:
             )
         )
         self._matvec_callback = matvec_callback
-        return matvec_callback
+        self._efuncs[matvec_callback.name] = matvec_callback
 
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
@@ -235,7 +233,7 @@ class CallbackBuilder:
                         solver_objs['Y_global'], solver_objs['dummy'])
         )
         self._formfunc_callback = formfunc_callback
-        return formfunc_callback
+        self._efuncs[formfunc_callback.name] = formfunc_callback
 
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
@@ -366,7 +364,7 @@ class CallbackBuilder:
             )
         )
         self._formrhs_callback = formrhs_callback
-        return formrhs_callback
+        self._efuncs[formrhs_callback.name] = formrhs_callback
 
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
@@ -432,58 +430,50 @@ class CallbackBuilder:
         This is the struct used within callback functions,
         usually accessed via DMGetApplicationContext.
         """
-        params = filter_ordered(self.struct_params)
-
         return petsc_struct(
             solver_objs['dummyctx'].name,
-            filter_ordered(params),
+            self.filtered_struct_params,
             solver_objs['Jac'].name+'_ctx',
             liveness='eager'
         )
 
     def main_struct(self, solver_objs):
         """
-        This is the struct initialised inside the main kernel and attached to the DM via
-        DMSetApplicationContext
+        This is the struct initialised inside the main kernel and
+        attached to the DM via DMSetApplicationContext.
         """
-        params = filter_ordered(self.struct_params)
-
         return petsc_struct(
             self.sregistry.make_name(prefix='ctx'),
-            filter_ordered(params),
+            self.filtered_struct_params,
             solver_objs['Jac'].name+'_ctx'
         )
 
     def make_struct_callback(self, solver_objs, objs):
-        struct_main = solver_objs['mainctx']
-
+        mainctx = solver_objs['mainctx']
         body = [
-            DummyExpr(FieldFromPointer(i._C_symbol, struct_main), i._C_symbol)
-            for i in struct_main.fields if i not in struct_main.time_dim_fields
+            DummyExpr(FieldFromPointer(i._C_symbol, mainctx), i._C_symbol)
+            for i in mainctx.callback_fields
         ]
         struct_callback_body = CallableBody(
-            List(body=body), init=tuple([petsc_func_begin_user]),
+            List(body=body), init=(petsc_func_begin_user,),
             retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
         )
         struct_callback = Callable(
             self.sregistry.make_name(prefix='PopulateMatContext_'),
             struct_callback_body, objs['err'],
-            parameters=[struct_main]
+            parameters=[mainctx]
         )
         self._efuncs[struct_callback.name] = struct_callback
         self._struct_callback = struct_callback
-        return struct_callback
 
     def dummy_fields(self, iet, solver_objs):
         # Place all context data required by the shell routines into a struct
+        fields = [f.function for f in FindSymbols('basics').visit(iet)]
+        fields = [f for f in fields if not isinstance(f.function, (PETScArray, Temp))]
         fields = [
-            i.function for i in FindSymbols('basics').visit(iet)
-            if not isinstance(i.function, (PETScArray, Temp))
-            and not (
-                i.is_Dimension and not isinstance(i, (TimeDimension, ModuloDimension))
-            )
+            f for f in fields if not (f.is_Dimension and not (f.is_Time or f.is_Modulo))
         ]
-        fields = filter_ordered(fields)
+        # fields = filter_ordered(fields)
         return fields
 
 
@@ -629,35 +619,37 @@ class SetupSolver:
         return dmda_create, dm_setup, dm_mat_type
 
     def create_dmda(self, dmda, objs):
-        no_of_space_dims = len(objs['grid'].dimensions)
+        grid = objs['grid']
+
+        nspace_dims = len(grid.dimensions)
 
         # MPI communicator
         args = [objs['comm']]
 
         # Type of ghost nodes
-        args.extend(['DM_BOUNDARY_GHOSTED' for _ in range(no_of_space_dims)])
+        args.extend(['DM_BOUNDARY_GHOSTED' for _ in range(nspace_dims)])
 
         # Stencil type
-        if no_of_space_dims > 1:
+        if nspace_dims > 1:
             args.append('DMDA_STENCIL_BOX')
 
         # Global dimensions
-        args.extend(list(objs['grid'].shape)[::-1])
+        args.extend(list(grid.shape)[::-1])
         # No.of processors in each dimension
-        if no_of_space_dims > 1:
-            args.extend(list(objs['grid'].distributor.topology)[::-1])
+        if nspace_dims > 1:
+            args.extend(list(grid.distributor.topology)[::-1])
 
         # Number of degrees of freedom per node
         args.append(1)
         # "Stencil width" -> size of overlap
         args.append(dmda.stencil_width)
-        args.extend([Null for _ in range(no_of_space_dims)])
+        args.extend([Null]*nspace_dims)
 
         # The distributed array object
         args.append(Byref(dmda))
 
         # The PETSc call used to create the DMDA
-        dmda = petsc_call('DMDACreate%sd' % no_of_space_dims, args)
+        dmda = petsc_call('DMDACreate%sd' % nspace_dims, args)
 
         return dmda
 
@@ -668,19 +660,14 @@ class RunSolver:
         obj.dep = dep
         return obj
 
-    def run(self, solver_objs, objs, injectsolve, iters, cbbuilder):
+    def runsolve(self, solver_objs, objs, injectsolve, iters, cbbuilder):
         """
-        Returns a mapper, mapping the spatial loop nest to the calls
-        to run the SNES solver.
+        Assigns the required time iterators to the struct and executes
+        the necessary calls to run the SNES solver.
         """
         time_iters = self.dep.assign_time_iters(iters, solver_objs['mainctx'])
-        runsolve = self.runsolve(
-            solver_objs, objs, cbbuilder.formrhs_callback, injectsolve
-        )
-        calls = List(body=tuple(time_iters)+runsolve)
-        return calls
+        rhs_callback = cbbuilder.formrhs_callback
 
-    def runsolve(self, solver_objs, objs, rhs_callback, injectsolve):
         dmda = solver_objs['dmda']
 
         rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
@@ -708,7 +695,7 @@ class RunSolver:
             dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
         )
 
-        return (
+        run_solver_calls = (time_iters,) + (
             rhs_call,
             local_x
         ) + vec_replace_array + (
@@ -718,6 +705,7 @@ class RunSolver:
             dm_global_to_local_x,
             BlankLine,
         )
+        return List(body=run_solver_calls)
 
 
 class NonTimeDependent:
@@ -756,7 +744,7 @@ class TimeDependent(NonTimeDependent):
     """
     @property
     def is_target_time(self):
-        return True if any(i.is_Time for i in self.target.dimensions) else False
+        return any(i.is_Time for i in self.target.dimensions)
 
     def uxreplace_time(self, body, solver_objs):
         time_spacing = self.target.grid.stepping_dim.spacing
@@ -772,8 +760,10 @@ class TimeDependent(NonTimeDependent):
     def retrieve_time_dims(self, iters):
         time_iter = [i for i in iters if any(d.is_Time for d in i.dimensions)]
         mapper = {}
+
         if not time_iter:
             return mapper
+
         for d in time_iter[0].dimensions:
             if d.is_Modulo:
                 mapper[d.origin] = d
@@ -783,8 +773,7 @@ class TimeDependent(NonTimeDependent):
 
     def time_dep_replace(self, injectsolve, solver_objs, objs):
         # Extract the target from the lhs, which has been lowered
-        # through the operator, allowing us to retrieve the target time symbol
-        # from it
+        # through the operator, enabling access to the target time symbol
         target = self.injectsolve.expr.lhs
 
         if self.is_target_time:
@@ -824,17 +813,17 @@ class TimeDependent(NonTimeDependent):
 
     def assign_time_iters(self, iters, struct):
         """
-        Assign time iterators to the struct.
-        Ensure that assignment occurs only once per time loop, if necessary.
-        Assign only the iterators that are common between the struct fields
-        and the actual Iteration.
+        - Assign required time iterators to the struct.
+        - Ensure that assignment occurs only once per time loop.
+        - Assign only the iterators that are common between the struct fields
+          and the actual Iteration.
         """
         time_iter = [
             i for i in FindNodes(Iteration).visit(iters)
             if i.dim.is_Time
         ]
         assert len(time_iter) == 1
-        time_iter, = time_iter
+        time_iter = time_iter.pop()
 
         common_dims = [d for d in time_iter.dimensions if d in struct.fields]
         common_dims = [
