@@ -46,7 +46,7 @@ class PETScArray(ArrayBasic, Differentiable):
         if self._coefficients not in fd_weights_registry:
             raise ValueError("coefficients must be one of %s"
                              " not %s" % (str(fd_weights_registry), self._coefficients))
-        
+
         self._localinfo = kwargs.get('localinfo', None)
 
     @property
