@@ -5,7 +5,7 @@ import pytest
 from conftest import skipif
 from devito import Grid, Function, TimeFunction, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
-                           FindNodes, PointerCast, retrieve_iteration_tree)
+                           FindNodes, retrieve_iteration_tree)
 from devito.types import Constant, CCompositeObject
 from devito.passes.iet.languages.C import CDataManager
 from devito.petsc.types import (DM, Mat, LocalVec, PetscMPIInt, KSP,
@@ -177,30 +177,37 @@ def test_petsc_cast():
     """
     Test casting of PETScArray.
     """
-    g0 = Grid((2))
-    g1 = Grid((2, 2))
-    g2 = Grid((2, 2, 2))
+    grid1 = Grid((2))
+    grid2 = Grid((2, 2))
+    grid3 = Grid((4, 5, 6))
 
-    f0 = Function(name='f0', grid=g0)
-    f1 = Function(name='f1', grid=g1)
-    f2 = Function(name='f2', grid=g2)
+    f1 = Function(name='f1', grid=grid1, space_order=2)
+    f2 = Function(name='f2', grid=grid2, space_order=4)
+    f3 = Function(name='f3', grid=grid3, space_order=6)
 
-    arr0 = PETScArray(name='arr0', target=f0)
-    arr1 = PETScArray(name='arr1', target=f1)
-    arr2 = PETScArray(name='arr2', target=f2)
+    eqn1 = Eq(f1.laplace, 10)
+    eqn2 = Eq(f2.laplace, 10)
+    eqn3 = Eq(f3.laplace, 10)
 
-    cast0 = PointerCast(arr0)
-    cast1 = PointerCast(arr1)
-    cast2 = PointerCast(arr2)
+    petsc1 = PETScSolve(eqn1, f1)
+    petsc2 = PETScSolve(eqn2, f2)
+    petsc3 = PETScSolve(eqn3, f3)
 
-    assert str(cast0) == \
-        'float (*restrict arr0) = (float (*)) arr0_vec;'
-    assert str(cast1) == \
-        'float (*restrict arr1)[f1_vec->size[1]] = ' + \
-        '(float (*)[f1_vec->size[1]]) arr1_vec;'
-    assert str(cast2) == \
-        'float (*restrict arr2)[f2_vec->size[1]][f2_vec->size[2]] = ' + \
-        '(float (*)[f2_vec->size[1]][f2_vec->size[2]]) arr2_vec;'
+    with switchconfig(openmp=False):
+        op1 = Operator(petsc1, opt='noop')
+        op2 = Operator(petsc2, opt='noop')
+        op3 = Operator(petsc3, opt='noop')
+
+    cb1 = [meta_call.root for meta_call in op1._func_table.values()]
+    cb2 = [meta_call.root for meta_call in op2._func_table.values()]
+    cb3 = [meta_call.root for meta_call in op3._func_table.values()]
+
+    assert 'float (*restrict x_matvec_f1) = ' + \
+        '(float (*)) x_matvec_f1_vec;' in str(cb1[0])
+    assert 'float (*restrict x_matvec_f2)[info.gxm] = ' + \
+        '(float (*)[info.gxm]) x_matvec_f2_vec;' in str(cb2[0])
+    assert 'float (*restrict x_matvec_f3)[info.gym][info.gxm] = ' + \
+        '(float (*)[info.gym][info.gxm]) x_matvec_f3_vec;' in str(cb3[0])
 
 
 @skipif('petsc')
@@ -219,8 +226,8 @@ def test_LinearSolveExpr():
     assert linsolveexpr.target == f
     # Check the solver parameters
     assert linsolveexpr.solver_parameters == \
-        {'ksp_type': 'gmres', 'pc_type': 'jacobi', 'ksp_rtol': 1e-07,
-         'ksp_atol': 1e-50, 'ksp_divtol': 10000.0, 'ksp_max_it': 10000}
+        {'ksp_type': 'gmres', 'pc_type': 'jacobi', 'ksp_rtol': 1e-05,
+         'ksp_atol': 1e-50, 'ksp_divtol': 100000.0, 'ksp_max_it': 10000}
 
 
 @skipif('petsc')

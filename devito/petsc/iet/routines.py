@@ -18,7 +18,7 @@ from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
 from devito.petsc.iet.utils import petsc_call, petsc_struct
 from devito.petsc.utils import solver_mapper
-from devito.petsc.types import (DM, Mat, LocalVec, GlobalVec, KSP, PC,
+from devito.petsc.types import (DM, CallbackDM, Mat, LocalVec, GlobalVec, KSP, PC,
                                 SNES, DummyArg, PetscInt, StartPtr)
 
 
@@ -100,7 +100,7 @@ class CallbackBuilder:
     def create_matvec_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        dmda = solver_objs['dmda']
+        dmda = solver_objs['callbackdm']
 
         body = self.dep.uxreplace_time(body, solver_objs)
 
@@ -142,7 +142,7 @@ class CallbackBuilder:
         )
 
         dm_get_local_info = petsc_call(
-            'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
+            'DMDAGetLocalInfo', [dmda, Byref(linsolveexpr.localinfo)]
         )
 
         vec_restore_array_y = petsc_call(
@@ -161,6 +161,14 @@ class CallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
+        dm_restore_local_xvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(solver_objs['X_local'])]
+        )
+
+        dm_restore_local_yvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(solver_objs['Y_local'])]
+        )
+
         # TODO: Some of the calls are placed in the `stacks` argument of the
         # `CallableBody` to ensure that they precede the `cast` statements. The
         # 'casts' depend on the calls, so this order is necessary. By doing this,
@@ -173,7 +181,9 @@ class CallbackBuilder:
             (vec_restore_array_y,
              vec_restore_array_x,
              dm_local_to_global_begin,
-             dm_local_to_global_end)
+             dm_local_to_global_end,
+             dm_restore_local_xvec,
+             dm_restore_local_yvec)
         )
 
         stacks = (
@@ -230,7 +240,7 @@ class CallbackBuilder:
     def create_formfunc_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        dmda = solver_objs['dmda']
+        dmda = solver_objs['callbackdm']
 
         body = self.dep.uxreplace_time(body, solver_objs)
 
@@ -273,7 +283,7 @@ class CallbackBuilder:
         )
 
         dm_get_local_info = petsc_call(
-            'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
+            'DMDAGetLocalInfo', [dmda, Byref(linsolveexpr.localinfo)]
         )
 
         vec_restore_array_y = petsc_call(
@@ -292,12 +302,22 @@ class CallbackBuilder:
             dmda, solver_objs['Y_local'], 'INSERT_VALUES', solver_objs['Y_global']
         ])
 
+        dm_restore_local_xvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(solver_objs['X_local'])]
+        )
+
+        dm_restore_local_yvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(solver_objs['Y_local'])]
+        )
+
         body = body._rebuild(
             body=body.body +
             (vec_restore_array_y,
              vec_restore_array_x,
              dm_local_to_global_begin,
-             dm_local_to_global_end)
+             dm_local_to_global_end,
+             dm_restore_local_xvec,
+             dm_restore_local_yvec)
         )
 
         stacks = (
@@ -351,7 +371,7 @@ class CallbackBuilder:
     def create_formrhs_body(self, injectsolve, body, solver_objs, objs):
         linsolveexpr = injectsolve.expr.rhs
 
-        dmda = solver_objs['dmda']
+        dmda = solver_objs['callbackdm']
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
@@ -362,7 +382,7 @@ class CallbackBuilder:
         )
 
         dm_get_local_info = petsc_call(
-            'DMDAGetLocalInfo', [dmda, Byref(dmda.info)]
+            'DMDAGetLocalInfo', [dmda, Byref(linsolveexpr.localinfo)]
         )
 
         body = self.dep.uxreplace_time(body, solver_objs)
@@ -463,7 +483,7 @@ class CallbackBuilder:
                 i.is_Dimension and not isinstance(i, (TimeDimension, ModuloDimension))
             )
         ]
-        fields.append(solver_objs['target'])
+        fields = filter_ordered(fields)
         return fields
 
 
@@ -504,6 +524,8 @@ class ObjectBuilder:
             'time_mapper': injectsolve.expr.rhs.time_mapper,
             'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
                        stencil_width=target.space_order),
+            'callbackdm': CallbackDM(sreg.make_name(prefix='callbackda_'),
+                                     liveness='eager', stencil_width=target.space_order),
             'dummyctx': Symbol('lctx')
         }
 
@@ -604,8 +626,7 @@ class SetupSolver:
         dmda_create = self.create_dmda(dmda, objs)
         dm_setup = petsc_call('DMSetUp', [dmda])
         dm_mat_type = petsc_call('DMSetMatType', [dmda, 'MATSHELL'])
-        dm_get_local_info = petsc_call('DMDAGetLocalInfo', [dmda, Byref(dmda.info)])
-        return dmda_create, dm_setup, dm_mat_type, dm_get_local_info
+        return dmda_create, dm_setup, dm_mat_type
 
     def create_dmda(self, dmda, objs):
         no_of_space_dims = len(objs['grid'].dimensions)
