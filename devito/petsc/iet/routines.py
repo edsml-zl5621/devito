@@ -79,8 +79,7 @@ class CallbackBuilder:
     def make_matvec(self, injectsolve, objs, solver_objs):
         # Compile matvec `eqns` into an IET via recursive compilation
         irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
-                                      options={'mpi': False}, sregistry=SymbolRegistry(),
-                                      concretize_mapper=self.concretize_mapper)
+                                      options={'mpi': False})
         body_matvec = self.create_matvec_body(injectsolve,
                                               List(body=irs_matvec.uiet.body),
                                               solver_objs, objs)
@@ -219,8 +218,7 @@ class CallbackBuilder:
         # Compile formfunc `eqns` into an IET via recursive compilation
         irs_formfunc, _ = self.rcompile(
             injectsolve.expr.rhs.formfuncs,
-            options={'mpi': False}, sregistry=SymbolRegistry(),
-            concretize_mapper=self.concretize_mapper
+            options={'mpi': False}
         )
         body_formfunc = self.create_formfunc_body(injectsolve,
                                                   List(body=irs_formfunc.uiet.body),
@@ -351,8 +349,7 @@ class CallbackBuilder:
     def make_formrhs(self, injectsolve, objs, solver_objs):
         # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
-                                       options={'mpi': False}, sregistry=SymbolRegistry(),
-                                       concretize_mapper=self.concretize_mapper)
+                                       options={'mpi': False})
         body_formrhs = self.create_formrhs_body(injectsolve,
                                                 List(body=irs_formrhs.uiet.body),
                                                 solver_objs, objs)

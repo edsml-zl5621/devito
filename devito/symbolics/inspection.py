@@ -275,7 +275,7 @@ def has_integer_args(*args):
     if len(args) == 1:
         try:
             return np.issubdtype(args[0].dtype, np.integer)
-        except AttributeError:
+        except (AttributeError, TypeError):
             return args[0].is_integer
 
     res = True
