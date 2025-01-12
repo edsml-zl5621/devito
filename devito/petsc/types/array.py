@@ -7,7 +7,7 @@ from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
 from devito.tools import dtype_to_ctype, as_tuple
-from devito.data import FULL
+from devito.symbolics import FieldFromComposite
 
 
 class PETScArray(ArrayBasic, Differentiable):
@@ -31,7 +31,7 @@ class PETScArray(ArrayBasic, Differentiable):
     _default_fd = 'taylor'
 
     __rkwargs__ = (AbstractFunction.__rkwargs__ +
-                   ('target', 'liveness', 'coefficients'))
+                   ('target', 'liveness', 'coefficients', 'localinfo'))
 
     def __init_finalize__(self, *args, **kwargs):
 
@@ -46,6 +46,8 @@ class PETScArray(ArrayBasic, Differentiable):
         if self._coefficients not in fd_weights_registry:
             raise ValueError("coefficients must be one of %s"
                              " not %s" % (str(fd_weights_registry), self._coefficients))
+
+        self._localinfo = kwargs.get('localinfo', None)
 
     @property
     def ndim(self):
@@ -90,6 +92,10 @@ class PETScArray(ArrayBasic, Differentiable):
     def space_order(self):
         return self.target.space_order
 
+    @property
+    def localinfo(self):
+        return self._localinfo
+
     @cached_property
     def _shape_with_inhalo(self):
         return self.target.shape_with_inhalo
@@ -100,12 +106,7 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @cached_property
     def _C_ctype(self):
-        # NOTE: Reverting to using float/double instead of PetscScalar for
-        # simplicity when opt='advanced'. Otherwise, Temp objects must also
-        # be converted to PetscScalar. Additional tests are needed to
-        # ensure this approach is fine. Previously, issues arose from
-        # mismatches between precision of Function objects in Devito and the
-        # precision of the PETSc configuration.
+        # TODO: swith to using PetsccScalar instead of float/double
         # TODO: Use cat $PETSC_DIR/$PETSC_ARCH/lib/petsc/conf/petscvariables
         # | grep -E "PETSC_(SCALAR|PRECISION)" to determine the precision of
         # the user's PETSc configuration.
@@ -113,5 +114,7 @@ class PETScArray(ArrayBasic, Differentiable):
 
     @property
     def symbolic_shape(self):
-        # TODO: double check if this should be reversed for dmda
-        return tuple(self.target._C_get_field(FULL, d).size for d in self.dimensions)
+        field_from_composites = [
+            FieldFromComposite('g%sm' % d.name, self.localinfo) for d in self.dimensions]
+        # Reverse it since DMDA is setup backwards to Devito dimensions.
+        return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)

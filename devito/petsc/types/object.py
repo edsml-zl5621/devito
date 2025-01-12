@@ -9,7 +9,9 @@ from devito.petsc.iet.utils import petsc_call
 
 class DM(LocalObject):
     """
-    PETSc Data Management object (DM).
+    PETSc Data Management object (DM). This is the primary DM instance
+    created within the main kernel and linked to the SNES
+    solver using `SNESSetDM`.
     """
     dtype = CustomDtype('DM')
 
@@ -22,16 +24,28 @@ class DM(LocalObject):
         return self._stencil_width
 
     @property
-    def info(self):
-        return DMDALocalInfo(name='%s_info' % self.name, liveness='eager')
-
-    @property
     def _C_free(self):
         return petsc_call('DMDestroy', [Byref(self.function)])
 
     @property
     def _C_free_priority(self):
         return 3
+
+
+class CallbackDM(LocalObject):
+    """
+    PETSc Data Management object (DM). This is the DM instance
+    accessed within the callback functions via `SNESGetDM`.
+    """
+    dtype = CustomDtype('DM')
+
+    def __init__(self, *args, stencil_width=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._stencil_width = stencil_width
+
+    @property
+    def stencil_width(self):
+        return self._stencil_width
 
 
 class Mat(LocalObject):
