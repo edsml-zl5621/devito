@@ -9,7 +9,7 @@ from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
 from devito.tools import as_tuple
-from devito.petsc.types import LinearSolveExpr, PETScArray
+from devito.petsc.types import LinearSolveExpr, PETScArray, DMDALocalInfo
 
 
 __all__ = ['PETScSolve']
@@ -18,14 +18,13 @@ __all__ = ['PETScSolve']
 def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
 
+    localinfo = DMDALocalInfo(name='info', liveness='eager')
+
     arrays = {
         p: PETScArray(name='%s_%s' % (p, target.name),
-                           dtype=target.dtype,
-                           dimensions=target.space_dimensions,
-                           shape=target.grid.shape,
-                           liveness='eager',
-                           halo=[target.halo[d] for d in target.space_dimensions],
-                           space_order=target.space_order)
+                      target=target,
+                      liveness='eager',
+                      localinfo=localinfo)
         for p in prefixes
     }
 
@@ -61,7 +60,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
     funcs = retrieve_functions(eqns)
     time_mapper = generate_time_mapper(funcs)
     matvecs, formfuncs, formrhs = (
-        [eq.subs(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
+        [eq.xreplace(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
     )
     # Placeholder equation for inserting calls to the solver and generating
     # correct time loop etc
@@ -74,6 +73,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         formrhs=formrhs,
         arrays=arrays,
         time_mapper=time_mapper,
+        localinfo=localinfo
     ))
 
     return [inject_solve]
