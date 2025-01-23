@@ -20,8 +20,6 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
 
     localinfo = DMDALocalInfo(name='info', liveness='eager')
 
-    localinfo = DMDALocalInfo(name='info', liveness='eager')
-
     arrays = {
         p: PETScArray(name='%s_%s' % (p, target.name),
                       target=target,
