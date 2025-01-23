@@ -45,11 +45,7 @@ def lower_petsc(iet, **kwargs):
         # Transform the spatial iteration loop with the calls to execute the solver
         subs.update(builder.solve.mapper)
 
-        # Use Uxreplace on the efuncs to replace the dummy struct with
-        # the actual local struct, now that all the struct parameters
-        # for this solve have been determined
-        new_efuncs = uxreplace_efuncs(builder.cbbuilder.efuncs, builder.solver_objs)
-        efuncs.update(new_efuncs)
+        efuncs.update(builder.efuncs)
 
 
     iet = Transformer(subs).visit(iet)
@@ -135,13 +131,18 @@ class Builder:
             self.solver_objs, objs, injectsolve, iters, self.cbbuilder, timedep=self.timedep
             )
 
+        # Use Uxreplace on the efuncs to replace the dummy struct with
+        # the actual local struct, now that all the struct parameters
+        # for this solve have been determined
+        self.efuncs = self.uxreplace_efuncs(self.cbbuilder.efuncs, self.solver_objs)
 
-def uxreplace_efuncs(efuncs, solver_objs):
-    def replace(efunc):
-        mapper = {solver_objs['dummyctx']: solver_objs['localctx']}
-        return Uxreplace(mapper).visit(efunc)
 
-    return {k: replace(v) for k, v in efuncs.items()}
+    def uxreplace_efuncs(self, efuncs, solver_objs):
+        def replace(efunc):
+            mapper = {solver_objs['dummyctx']: solver_objs['localctx']}
+            return Uxreplace(mapper).visit(efunc)
+
+        return {k: replace(v) for k, v in efuncs.items()}
 
 
 Null = Macro('NULL')
