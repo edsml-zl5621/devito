@@ -3,14 +3,13 @@ from collections import namedtuple
 
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import (Transformer, MapNodes, Iteration, BlankLine,
-                           FindNodes, retrieve_iteration_tree,
-                           filter_iterations, Uxreplace)
+                           FindNodes, Uxreplace)
 from devito.symbolics import Byref, Macro
 from devito.petsc.types import (PetscMPIInt, PetscErrorCode)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import core_metadata
 from devito.petsc.iet.routines import (CallbackBuilder, ObjectBuilder,
-                                       SetupSolver, RunSolver, TimeDependent,
+                                       SetupSolver, Solver, TimeDependent,
                                        NonTimeDependent)
 from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
 
@@ -39,39 +38,19 @@ def lower_petsc(iet, **kwargs):
 
     for iters, (injectsolve,) in injectsolve_mapper.items():
 
-        builder = get_builder(injectsolve)
+        builder = Builder(injectsolve, objs, iters, **kwargs)
 
-        timedep = builder.timedep(injectsolve, **kwargs)
-
-        solver_objs = builder.objbuilder(timedep=timedep, **kwargs).build(injectsolve, iters)
-        cbbuilder = builder.cbbuilder(timedep=timedep, **kwargs)
-
-        # Generate the core PETSc callback functions for the target via
-        # recursive compilation
-        cbbuilder.make_core(injectsolve, objs, solver_objs)
-
-        solver_objs['mainctx'] = cbbuilder.main_struct(solver_objs)
-
-        # Generate the callback function to populate the context struct
-        cbbuilder.make_struct_callback(solver_objs, objs)
-
-        # Generate the calls to set up the solver
-        solver_setup = builder.solversetup().setup(solver_objs, objs, injectsolve, cbbuilder)
-        setup.extend(solver_setup)
+        setup.extend(builder.solversetup.calls)
 
         # Transform the spatial iteration loop with the calls to execute the solver
-        space_iter, = spatial_loop_nest(iters, injectsolve)
-        runsolve = builder.solverrun(timedep=timedep).runsolve(
-            solver_objs, objs, injectsolve, iters, cbbuilder
-        )
-        subs.update({space_iter: runsolve})
+        subs.update(builder.solve.mapper)
 
         # Use Uxreplace on the efuncs to replace the dummy struct with
         # the actual local struct, now that all the struct parameters
         # for this solve have been determined
-        solver_objs['localctx'] = cbbuilder.local_struct(solver_objs)
-        new_efuncs = uxreplace_efuncs(cbbuilder.efuncs, solver_objs)
+        new_efuncs = uxreplace_efuncs(builder.cbbuilder.efuncs, builder.solver_objs)
         efuncs.update(new_efuncs)
+
 
     iet = Transformer(subs).visit(iet)
 
@@ -118,39 +97,43 @@ def build_core_objects(target, **kwargs):
     }
 
 
-def spatial_loop_nest(iter, injectsolve):
-    spatial_body = []
-    for tree in retrieve_iteration_tree(iter[0]):
-        root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
-        if injectsolve in FindNodes(InjectSolveDummy).visit(root):
-            spatial_body.append(root)
-    return spatial_body
-
-
-def get_builder(injectsolve):
+class Builder:
     """
-    Selects the appropriate classes to build/run this solve.
-    This function is designed to support future extensions, enabling
+    This class is designed to support future extensions, enabling
     different combinations of solver types, preconditioning methods,
     and other functionalities as needed.
+
+    The class will be extended to accommodate different solver types by
+    returning subclasses of the objects initialised in __init__, 
+    depending on the properties of `injectsolve`.
     """
-    # NOTE: This function will extend to support different solver types
-    # returning subclasses of the classes listed below,
-    # based on properties of `injectsolve`
-    time_mapper = injectsolve.expr.rhs.time_mapper
-    time_dependence = TimeDependent if time_mapper else NonTimeDependent
+    def __init__(self, injectsolve, objs, iters, **kwargs):
 
-    BuilderClasses = namedtuple('BuilderClasses', [
-        'objbuilder', 'cbbuilder', 'solversetup', 'solverrun', 'timedep'
-        ])
+        # Determine the time dependency class
+        time_mapper = injectsolve.expr.rhs.time_mapper
+        timedep = TimeDependent if time_mapper else NonTimeDependent
+        self.timedep = timedep(injectsolve, **kwargs)
 
-    return BuilderClasses(
-        ObjectBuilder,
-        CallbackBuilder,
-        SetupSolver,
-        RunSolver,
-        time_dependence
-    )
+        # Objects
+        self.objbuilder = ObjectBuilder(
+            injectsolve, iters, timedep=self.timedep, **kwargs
+        )
+        self.solver_objs = self.objbuilder.solver_objs
+
+        # Callbacks
+        self.cbbuilder = CallbackBuilder(
+            injectsolve, objs, self.solver_objs, timedep=self.timedep, **kwargs
+        )
+
+        # Solver setup
+        self.solversetup = SetupSolver(
+            self.solver_objs, objs, injectsolve, self.cbbuilder
+        )
+
+        # Execute the solver
+        self.solve = Solver(
+            self.solver_objs, objs, injectsolve, iters, self.cbbuilder, timedep=self.timedep
+            )
 
 
 def uxreplace_efuncs(efuncs, solver_objs):

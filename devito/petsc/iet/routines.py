@@ -4,7 +4,7 @@ import cgen as c
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference, DummyExpr, BlankLine, Callable, FindNodes,
-                           Iteration)
+                           Iteration, retrieve_iteration_tree, filter_iterations)
 from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
                               FieldFromComposite)
 from devito.symbolics.unevaluation import Mul
@@ -15,7 +15,7 @@ from devito.ir.support import SymbolRegistry
 
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
-                                    MatVecCallback)
+                                    MatVecCallback, InjectSolveDummy)
 from devito.petsc.iet.utils import petsc_call, petsc_struct
 from devito.petsc.utils import solver_mapper
 from devito.petsc.types import (DM, CallbackDM, Mat, LocalVec, GlobalVec, KSP, PC,
@@ -26,22 +26,26 @@ class CallbackBuilder:
     """
     Build IET routines to generate PETSc callback functions.
     """
-    def __new__(cls, rcompile=None, sregistry=None, timedep=None, **kwargs):
-        obj = object.__new__(cls)
-        obj.rcompile = rcompile
-        obj.sregistry = sregistry
-        obj.concretize_mapper = kwargs.get('concretize_mapper', {})
-        obj.timedep = timedep
+    def __init__(self, injectsolve, objs, solver_objs,
+                 rcompile=None, sregistry=None, timedep=None, **kwargs):
 
-        obj._efuncs = OrderedDict()
-        obj._struct_params = []
+        self.rcompile = rcompile
+        self.sregistry = sregistry
+        self.concretize_mapper = kwargs.get('concretize_mapper', {})
+        self.timedep = timedep
 
-        obj._matvec_callback = None
-        obj._formfunc_callback = None
-        obj._formrhs_callback = None
-        obj._struct_callback = None
+        self._efuncs = OrderedDict()
+        self._struct_params = []
 
-        return obj
+        self._matvec_callback = None
+        self._formfunc_callback = None
+        self._formrhs_callback = None
+        self._struct_callback = None
+
+        self.make_core(injectsolve, objs, solver_objs)
+        self.main_struct(solver_objs)
+        self.make_struct_callback(solver_objs, objs)
+        self.local_struct(solver_objs)
 
     @property
     def efuncs(self):
@@ -430,7 +434,7 @@ class CallbackBuilder:
         This is the struct used within callback functions,
         usually accessed via DMGetApplicationContext.
         """
-        return petsc_struct(
+        solver_objs['localctx'] = petsc_struct(
             solver_objs['dummyctx'].name,
             self.filtered_struct_params,
             solver_objs['Jac'].name+'_ctx',
@@ -442,7 +446,7 @@ class CallbackBuilder:
         This is the struct initialised inside the main kernel and
         attached to the DM via DMSetApplicationContext.
         """
-        return petsc_struct(
+        solver_objs['mainctx'] = petsc_struct(
             self.sregistry.make_name(prefix='ctx'),
             self.filtered_struct_params,
             solver_objs['Jac'].name+'_ctx'
@@ -482,11 +486,12 @@ class ObjectBuilder:
     Designed to be extended by subclasses, which can override the `build`
     method to support specific use cases.
     """
-    def __new__(cls, sregistry=None, timedep=None, **kwargs):
-        obj = object.__new__(cls)
-        obj.sregistry = sregistry
-        obj.timedep = timedep
-        return obj
+
+    def __init__(self, injectsolve, iters, sregistry=None, timedep=None, **kwargs):
+        self.sregistry = sregistry
+        self.timedep = timedep
+ 
+        self.solver_objs = self.build(injectsolve, iters)
 
     def build(self, injectsolve, iters):
         target = injectsolve.expr.rhs.target
@@ -520,7 +525,11 @@ class ObjectBuilder:
 
 
 class SetupSolver:
-    def setup(self, solver_objs, objs, injectsolve, builder):
+
+    def __init__(self, solver_objs, objs, injectsolve, cbbuilder):
+        self.calls = self.setup(solver_objs, objs, injectsolve, cbbuilder)
+
+    def setup(self, solver_objs, objs, injectsolve, cbbuilder):
         dmda = solver_objs['dmda']
 
         solver_params = injectsolve.expr.rhs.solver_parameters
@@ -573,20 +582,20 @@ class SetupSolver:
         matvec_operation = petsc_call(
             'MatShellSetOperation',
             [solver_objs['Jac'], 'MATOP_MULT',
-             MatVecCallback(builder.matvec_callback.name, void, void)]
+             MatVecCallback(cbbuilder.matvec_callback.name, void, void)]
         )
 
         formfunc_operation = petsc_call(
             'SNESSetFunction',
             [solver_objs['snes'], Null,
-             FormFunctionCallback(builder.formfunc_callback.name, void, void), Null]
+             FormFunctionCallback(cbbuilder.formfunc_callback.name, void, void), Null]
         )
 
         dmda_calls = self.create_dmda_calls(dmda, objs)
 
         mainctx = solver_objs['mainctx']
 
-        call_struct_callback = petsc_call(builder.struct_callback.name, [Byref(mainctx)])
+        call_struct_callback = petsc_call(cbbuilder.struct_callback.name, [Byref(mainctx)])
         calls_set_app_ctx = [
             petsc_call('DMSetApplicationContext', [dmda, Byref(mainctx)])
         ]
@@ -653,16 +662,21 @@ class SetupSolver:
         return dmda
 
 
-class RunSolver:
-    def __new__(cls, timedep=None, **kwargs):
-        obj = object.__new__(cls)
-        obj.timedep = timedep
-        return obj
+class Solver:
 
-    def runsolve(self, solver_objs, objs, injectsolve, iters, cbbuilder):
+    def __init__(self, solver_objs, objs, injectsolve, iters, cbbuilder,
+                 timedep=None, **kwargs):
+        self.timedep = timedep
+        self.calls = self.execute_solve(solver_objs, objs, injectsolve, iters, cbbuilder)
+        self.spatial_body = self.spatial_loop_nest(iters, injectsolve)
+
+        space_iter, = self.spatial_body
+        self.mapper = {space_iter: self.calls}
+
+    def execute_solve(self, solver_objs, objs, injectsolve, iters, cbbuilder):
         """
         Assigns the required time iterators to the struct and executes
-        the necessary calls to run the SNES solver.
+        the necessary calls to execute the SNES solver.
         """
         time_iters = self.timedep.assign_time_iters(iters, solver_objs['mainctx'])
         rhs_callback = cbbuilder.formrhs_callback
@@ -706,7 +720,15 @@ class RunSolver:
         )
         return List(body=run_solver_calls)
 
+    def spatial_loop_nest(self, iters, injectsolve):
+        spatial_body = []
+        for tree in retrieve_iteration_tree(iters[0]):
+            root = filter_iterations(tree, key=lambda i: i.dim.is_Space)[0]
+            if injectsolve in FindNodes(InjectSolveDummy).visit(root):
+                spatial_body.append(root)
+        return spatial_body
 
+    
 class NonTimeDependent:
     def __new__(cls, injectsolve, **kwargs):
         obj = object.__new__(cls)
