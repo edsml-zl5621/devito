@@ -492,12 +492,11 @@ class ObjectBuilder:
     method to support specific use cases.
     """
 
-    def __init__(self, injectsolve, sregistry=None, timedep=None, **kwargs):
+    def __init__(self, injectsolve, time_dim_mapper, sregistry=None, **kwargs):
         self.sregistry = sregistry
-        self.timedep = timedep
-        self.solver_objs = self._build(injectsolve)
+        self.solver_objs = self._build(injectsolve, time_dim_mapper)
 
-    def _build(self, injectsolve):
+    def _build(self, injectsolve, time_dim_mapper):
         target = injectsolve.expr.rhs.target
         sreg = self.sregistry
         return {
@@ -518,7 +517,7 @@ class ObjectBuilder:
             'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
             'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
             'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
-            'true_dims': self.timedep.time_dim_mapper,
+            'true_dims': time_dim_mapper,
             # TODO: extend to targets
             'target': target,
             'time_mapper': injectsolve.expr.rhs.time_mapper,
