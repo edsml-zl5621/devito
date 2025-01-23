@@ -107,9 +107,7 @@ class Builder:
         self.timedep = timedep(injectsolve, iters, **kwargs)
 
         # Objects
-        self.objbuilder = ObjectBuilder(
-            injectsolve, self.timedep.time_dim_mapper, **kwargs
-        )
+        self.objbuilder = ObjectBuilder(injectsolve, **kwargs)
         self.solver_objs = self.objbuilder.solver_objs
 
         # Callbacks

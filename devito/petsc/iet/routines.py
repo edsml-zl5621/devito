@@ -492,11 +492,11 @@ class ObjectBuilder:
     method to support specific use cases.
     """
 
-    def __init__(self, injectsolve, time_dim_mapper, sregistry=None, **kwargs):
+    def __init__(self, injectsolve, sregistry=None, **kwargs):
         self.sregistry = sregistry
-        self.solver_objs = self._build(injectsolve, time_dim_mapper)
+        self.solver_objs = self._build(injectsolve)
 
-    def _build(self, injectsolve, time_dim_mapper):
+    def _build(self, injectsolve):
         target = injectsolve.expr.rhs.target
         sreg = self.sregistry
         return {
@@ -517,10 +517,6 @@ class ObjectBuilder:
             'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
             'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
             'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
-            'true_dims': time_dim_mapper,
-            # TODO: extend to targets
-            'target': target,
-            'time_mapper': injectsolve.expr.rhs.time_mapper,
             'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
                        stencil_width=target.space_order),
             'callbackdm': CallbackDM(sreg.make_name(prefix='dm_'),
@@ -668,7 +664,6 @@ class SetupSolver:
 
 
 class Solver:
-
     def __init__(self, solver_objs, objs, injectsolve, iters, cbbuilder,
                  timedep=None, **kwargs):
         self.timedep = timedep
@@ -684,7 +679,7 @@ class Solver:
         the necessary calls to execute the SNES solver.
         """
         struct_assignment = self.timedep.assign_time_iters(solver_objs['mainctx'])
-   
+
         rhs_callback = cbbuilder.formrhs_callback
 
         dmda = solver_objs['dmda']
@@ -741,6 +736,7 @@ class NonTimeDependent:
         self.iters = iters
         self.kwargs = kwargs
         self.time_dim_mapper = self._retrieve_time_dims(iters)
+        self.init_time_mapper = injectsolve.expr.rhs.time_mapper
 
     @property
     def is_target_time(self):
@@ -776,13 +772,12 @@ class TimeDependent(NonTimeDependent):
 
     def uxreplace_time(self, body, solver_objs):
         time_spacing = self.target.grid.stepping_dim.spacing
-        true_dims = solver_objs['true_dims']
 
         time_mapper = {
             v: k.xreplace({time_spacing: 1, -time_spacing: -1})
-            for k, v in solver_objs['time_mapper'].items()
+            for k, v in self.init_time_mapper.items()
         }
-        subs = {symb: true_dims[time_mapper[symb]] for symb in time_mapper}
+        subs = {symb: self.time_dim_mapper[time_mapper[symb]] for symb in time_mapper}
         return Uxreplace(subs).visit(body)
 
     def _retrieve_time_dims(self, iters):
@@ -842,22 +837,30 @@ class TimeDependent(NonTimeDependent):
 
     def assign_time_iters(self, struct):
         """
-        - Assign required time iterators to the struct.
-        - Assign only the iterators that are common between the struct fields
-          and the actual Iteration.
-        """
-        time_iter = [
-            i for i in FindNodes(Iteration).visit(self.iters)
-            if i.dim.is_Time
-        ]
-        assert len(time_iter) == 1
-        time_iter = time_iter.pop()
+        Assign required time iterators to the struct.
+        These iterators are updated at each timestep in the main kernel
+        for use in callback functions.
 
-        common_dims = [d for d in time_iter.dimensions if d in struct.fields]
-        common_dims = [
-            DummyExpr(FieldFromComposite(d, struct), d) for d in common_dims
+        Examples
+        --------
+        >>> struct
+        ctx
+        >>> struct.fields
+        [h_x, x_M, x_m, f1(t, x), t0, t1]
+        >>> assigned = assign_time_iters(struct)
+        >>> print(assigned[0])
+        ctx.t0 = t0;
+        >>> print(assigned[1])
+        ctx.t1 = t1;
+        """
+        to_assign = [
+            f for f in struct.fields if (f.is_Dimension and (f.is_Time or f.is_Modulo))
         ]
-        return common_dims
+        time_iter_assignments = [
+            DummyExpr(FieldFromComposite(field, struct), field)
+            for field in to_assign
+        ]
+        return time_iter_assignments
 
 
 Null = Macro('NULL')
