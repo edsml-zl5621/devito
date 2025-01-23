@@ -10,7 +10,7 @@ from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import Temp, Symbol
-from devito.tools import filter_ordered
+from devito.tools import filter_ordered, memoized_func
 from devito.ir.support import SymbolRegistry
 
 from devito.petsc.types import PETScArray
@@ -26,12 +26,12 @@ class CallbackBuilder:
     """
     Build IET routines to generate PETSc callback functions.
     """
-    def __new__(cls, rcompile=None, sregistry=None, dep=None, **kwargs):
+    def __new__(cls, rcompile=None, sregistry=None, timedep=None, **kwargs):
         obj = object.__new__(cls)
         obj.rcompile = rcompile
         obj.sregistry = sregistry
         obj.concretize_mapper = kwargs.get('concretize_mapper', {})
-        obj.dep = dep
+        obj.timedep = timedep
 
         obj._efuncs = OrderedDict()
         obj._struct_params = []
@@ -100,7 +100,7 @@ class CallbackBuilder:
 
         dmda = solver_objs['callbackdm']
 
-        body = self.dep.uxreplace_time(body, solver_objs)
+        body = self.timedep.uxreplace_time(body, solver_objs)
 
         struct = solver_objs['dummyctx']
         fields = self.dummy_fields(body, solver_objs)
@@ -240,7 +240,7 @@ class CallbackBuilder:
 
         dmda = solver_objs['callbackdm']
 
-        body = self.dep.uxreplace_time(body, solver_objs)
+        body = self.timedep.uxreplace_time(body, solver_objs)
 
         struct = solver_objs['dummyctx']
 
@@ -383,7 +383,7 @@ class CallbackBuilder:
             'DMDAGetLocalInfo', [dmda, Byref(linsolveexpr.localinfo)]
         )
 
-        body = self.dep.uxreplace_time(body, solver_objs)
+        body = self.timedep.uxreplace_time(body, solver_objs)
 
         struct = solver_objs['dummyctx']
         fields = self.dummy_fields(body, solver_objs)
@@ -482,10 +482,10 @@ class ObjectBuilder:
     Designed to be extended by subclasses, which can override the `build`
     method to support specific use cases.
     """
-    def __new__(cls, sregistry=None, dep=None, **kwargs):
+    def __new__(cls, sregistry=None, timedep=None, **kwargs):
         obj = object.__new__(cls)
         obj.sregistry = sregistry
-        obj.dep = dep
+        obj.timedep = timedep
         return obj
 
     def build(self, injectsolve, iters):
@@ -507,7 +507,7 @@ class ObjectBuilder:
             'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
             'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
             'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
-            'true_dims': self.dep.retrieve_time_dims(iters),
+            'true_dims': self.timedep.retrieve_time_dims(iters),
             # TODO: extend to targets
             'target': target,
             'time_mapper': injectsolve.expr.rhs.time_mapper,
@@ -654,9 +654,9 @@ class SetupSolver:
 
 
 class RunSolver:
-    def __new__(cls, dep=None, **kwargs):
+    def __new__(cls, timedep=None, **kwargs):
         obj = object.__new__(cls)
-        obj.dep = dep
+        obj.timedep = timedep
         return obj
 
     def runsolve(self, solver_objs, objs, injectsolve, iters, cbbuilder):
@@ -664,7 +664,7 @@ class RunSolver:
         Assigns the required time iterators to the struct and executes
         the necessary calls to run the SNES solver.
         """
-        time_iters = self.dep.assign_time_iters(iters, solver_objs['mainctx'])
+        time_iters = self.timedep.assign_time_iters(iters, solver_objs['mainctx'])
         rhs_callback = cbbuilder.formrhs_callback
 
         dmda = solver_objs['dmda']
@@ -674,7 +674,7 @@ class RunSolver:
         local_x = petsc_call('DMCreateLocalVector',
                              [dmda, Byref(solver_objs['x_local'])])
 
-        vec_replace_array = self.dep.time_dep_replace(injectsolve, solver_objs, objs)
+        vec_replace_array = self.timedep.time_dep_replace(injectsolve, solver_objs, objs)
 
         dm_local_to_global_x = petsc_call(
             'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',
