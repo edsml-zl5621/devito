@@ -1,16 +1,13 @@
 import cgen as c
-from collections import namedtuple
 
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import (Transformer, MapNodes, Iteration, BlankLine,
-                           FindNodes, Uxreplace)
+from devito.ir.iet import Transformer, MapNodes, Iteration, BlankLine
 from devito.symbolics import Byref, Macro
 from devito.petsc.types import (PetscMPIInt, PetscErrorCode)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import core_metadata
-from devito.petsc.iet.routines import (CallbackBuilder, ObjectBuilder,
-                                       SetupSolver, Solver, TimeDependent,
-                                       NonTimeDependent)
+from devito.petsc.iet.routines import (CallbackBuilder, ObjectBuilder, SetupSolver,
+                                       Solver, TimeDependent, NonTimeDependent)
 from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
 
 
@@ -45,15 +42,14 @@ def lower_petsc(iet, **kwargs):
         # Transform the spatial iteration loop with the calls to execute the solver
         subs.update(builder.solve.mapper)
 
-        efuncs.update(builder.efuncs)
-
+        efuncs.update(builder.cbbuilder.efuncs)
 
     iet = Transformer(subs).visit(iet)
 
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
         init=init, body=body,
-        frees=(c.Line("PetscCall(PetscFinalize());"),)
+        frees=(petsc_call('PetscFinalize', []),)
     )
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
@@ -100,7 +96,7 @@ class Builder:
     and other functionalities as needed.
 
     The class will be extended to accommodate different solver types by
-    returning subclasses of the objects initialised in __init__, 
+    returning subclasses of the objects initialised in __init__,
     depending on the properties of `injectsolve`.
     """
     def __init__(self, injectsolve, objs, iters, **kwargs):
@@ -108,17 +104,18 @@ class Builder:
         # Determine the time dependency class
         time_mapper = injectsolve.expr.rhs.time_mapper
         timedep = TimeDependent if time_mapper else NonTimeDependent
-        self.timedep = timedep(injectsolve, **kwargs)
+        self.timedep = timedep(injectsolve, iters, **kwargs)
 
         # Objects
         self.objbuilder = ObjectBuilder(
-            injectsolve, iters, timedep=self.timedep, **kwargs
+            injectsolve, timedep=self.timedep, **kwargs
         )
         self.solver_objs = self.objbuilder.solver_objs
 
         # Callbacks
         self.cbbuilder = CallbackBuilder(
-            injectsolve, objs, self.solver_objs, timedep=self.timedep, **kwargs
+            injectsolve, objs, self.solver_objs, timedep=self.timedep,
+            **kwargs
         )
 
         # Solver setup
@@ -128,25 +125,14 @@ class Builder:
 
         # Execute the solver
         self.solve = Solver(
-            self.solver_objs, objs, injectsolve, iters, self.cbbuilder, timedep=self.timedep
-            )
-
-        # Use Uxreplace on the efuncs to replace the dummy struct with
-        # the actual local struct, now that all the struct parameters
-        # for this solve have been determined
-        self.efuncs = self.uxreplace_efuncs(self.cbbuilder.efuncs, self.solver_objs)
-
-
-    def uxreplace_efuncs(self, efuncs, solver_objs):
-        def replace(efunc):
-            mapper = {solver_objs['dummyctx']: solver_objs['localctx']}
-            return Uxreplace(mapper).visit(efunc)
-
-        return {k: replace(v) for k, v in efuncs.items()}
+            self.solver_objs, objs, injectsolve, iters,
+            self.cbbuilder, timedep=self.timedep
+        )
 
 
 Null = Macro('NULL')
 void = 'void'
+
 
 # TODO: Don't use c.Line here?
 petsc_func_begin_user = c.Line('PetscFunctionBeginUser;')

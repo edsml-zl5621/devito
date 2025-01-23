@@ -16,7 +16,7 @@ __all__ = ['PETScSolve']
 
 
 def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
-    prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
+    prefixes = ['y_matvec', 'x_matvec', 'f_formfunc', 'x_formfunc', 'b_tmp']
 
     localinfo = DMDALocalInfo(name='info', liveness='eager')
 
@@ -46,7 +46,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         ))
 
         formfuncs.append(Eq(
-            arrays['y_formfunc'],
+            arrays['f_formfunc'],
             F_target.subs(targets_to_arrays(arrays['x_formfunc'], targets)),
             subdomain=eq.subdomain
         ))
@@ -59,6 +59,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
 
     funcs = retrieve_functions(eqns)
     time_mapper = generate_time_mapper(funcs)
+
     matvecs, formfuncs, formrhs = (
         [eq.xreplace(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
     )
@@ -217,6 +218,18 @@ def generate_time_mapper(funcs):
     (and subsequently dropped and replaced with calls to run the solver).
     Therefore, the appropriate time loop will always be correctly generated inside
     the main kernel.
+
+    Examples
+    --------
+    >>> funcs = [
+    >>>     f1(t + dt, x, y),
+    >>>     g1(t + dt, x, y),
+    >>>     g2(t, x, y),
+    >>>     f1(t, x, y)
+    >>> ]
+    >>> generate_time_mapper(funcs)
+    {t + dt: tau0, t: tau1}
+
     """
     time_indices = list({
         i if isinstance(d, SteppingDimension) else d
