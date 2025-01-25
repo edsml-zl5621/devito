@@ -567,7 +567,7 @@ def test_callback_arguments():
     assert len(ff.parameters) == 4
 
     assert str(mv.parameters) == '(J_0, X_global_0, Y_global_0)'
-    assert str(ff.parameters) == '(snes_0, X_global_0, F_global_0, dummy_0)'
+    assert str(ff.parameters) == '(snes_0, X_global_0, F_global_0, dummy)'
 
 
 @skipif('petsc')

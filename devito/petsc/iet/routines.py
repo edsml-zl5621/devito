@@ -235,7 +235,7 @@ class CallbackBuilder:
             self.sregistry.make_name(prefix='FormFunction_'), body_formfunc,
             retval=objs['err'],
             parameters=(solver_objs['snes'], solver_objs['X_global'],
-                        solver_objs['F_global'], solver_objs['dummy'])
+                        solver_objs['F_global'], dummyptr)
         )
         self._formfunc_callback = formfunc_callback
         self._efuncs[formfunc_callback.name] = formfunc_callback
@@ -485,7 +485,7 @@ class CallbackBuilder:
         return mapper
 
 
-class ObjectBuilder:
+class BasicObjectBuilder:
     """
     A base class for constructing objects needed for a PETSc solver.
     Designed to be extended by subclasses, which can override the `build`
@@ -497,9 +497,41 @@ class ObjectBuilder:
         self.solver_objs = self._build(injectsolve)
 
     def _build(self, injectsolve):
+        """
+        Constructs the core dictionary of solver objects and allows 
+        subclasses to extend or modify it via `_extend_build`.
+
+        Returns:
+            dict: A dictionary containing the following objects:
+                - 'Jac' (Mat): A matrix representing the jacobian.
+                - 'x_global' (GlobalVec): The global solution vector.
+                - 'x_local' (LocalVec): The local solution vector.
+                - 'b_global': (GlobalVec) Global RHS vector `b`, where `F(x) = b`.
+                - 'b_local': (LocalVec) Local RHS vector `b`, where `F(x) = b`.
+                - 'ksp': (KSP) Krylov solver object that manages the linear solver.
+                - 'pc': (PC) Preconditioner object.
+                - 'snes': (SNES) Nonlinear solver object.
+                - 'X_global': (GlobalVec) Current guess for the solution,
+                   required by the FormFunction callback.
+                - 'X_local': (LocalVec) Current guess for the solution,
+                   required by the FormFunction callback.
+                - 'F_global': (GlobalVec) Global residual vector `F`, where `F(x) = b`.
+                - 'F_local': (LocalVec) Local residual vector `F`, where `F(x) = b`.
+                - 'Y_global': (GlobalVector) The output vector populated by the matrix-free 
+                   `MyMatShellMult` callback function.
+                - 'Y_local': (LocalVector) The output vector populated by the matrix-free 
+                   `MyMatShellMult` callback function.
+                - 'localsize' (PetscInt): The local length of the solution vector.
+                - 'start_ptr' (StartPtr): A pointer to the beginning of the solution array
+                   that will be updated during the current time step.
+                - 'dmda' (DM): The DMDA object associated with this solve, linked to
+                   the SNES object via `SNESSetDM`.
+                - 'callbackdm' (CallbackDM): The DM object accessed within callback
+                   functions via `SNESGetDM`.
+        """
         target = injectsolve.expr.rhs.target
         sreg = self.sregistry
-        return {
+        base_dict = {
             'Jac': Mat(sreg.make_name(prefix='J_')),
             'x_global': GlobalVec(sreg.make_name(prefix='x_global_')),
             'x_local': LocalVec(sreg.make_name(prefix='x_local_'), liveness='eager'),
@@ -509,12 +541,11 @@ class ObjectBuilder:
             'pc': PC(sreg.make_name(prefix='pc_')),
             'snes': SNES(sreg.make_name(prefix='snes_')),
             'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
-            'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
-            'F_global': GlobalVec(sreg.make_name(prefix='F_global_')),
             'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
-            'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
+            'F_global': GlobalVec(sreg.make_name(prefix='F_global_')),
             'F_local': LocalVec(sreg.make_name(prefix='F_local_'), liveness='eager'),
-            'dummy': DummyArg(sreg.make_name(prefix='dummy_')),
+            'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
+            'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
             'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
             'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
             'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
@@ -522,6 +553,14 @@ class ObjectBuilder:
             'callbackdm': CallbackDM(sreg.make_name(prefix='dm_'),
                                      liveness='eager', stencil_width=target.space_order),
         }
+        return self._extend_build(base_dict, injectsolve)
+
+    def _extend_build(self, base_dict, injectsolve):
+        """
+        Subclasses can override this method to extend or modify the
+        base dictionary of solver objects.
+        """
+        return base_dict
 
 
 class SetupSolver:
@@ -735,8 +774,8 @@ class NonTimeDependent:
         self.injectsolve = injectsolve
         self.iters = iters
         self.kwargs = kwargs
-        self.time_dim_mapper = self._retrieve_time_dims(iters)
-        self.init_time_mapper = injectsolve.expr.rhs.time_mapper
+        self.origin_to_moddim = self._origin_to_moddim_mapper(iters)
+        self.time_idx_to_symb = injectsolve.expr.rhs.time_mapper
 
     @property
     def is_target_time(self):
@@ -746,11 +785,11 @@ class NonTimeDependent:
     def target(self):
         return self.injectsolve.expr.rhs.target
 
+    def _origin_to_moddim_mapper(self, iters):
+        return {}
+
     def uxreplace_time(self, body, solver_objs):
         return body
-
-    def _retrieve_time_dims(self, iters):
-        return {}
 
     def time_dep_replace(self, injectsolve, solver_objs, objs):
         return ()
@@ -765,6 +804,21 @@ class TimeDependent(NonTimeDependent):
 
     This includes scenarios where the target is not directly a TimeFunction
     but depends on other functions that are.
+
+    Outline of time loop abstraction with PETSc:
+
+    - At PETScSolve, time indices are replaced with temporary `Symbol` objects via the mapper
+      (e.g., {t + dt: tau0, t: tau1}) to prevent the time loop from being generated in the
+      callback functions. These callbacks, needed for each `SNESSolve` at every time step, don't
+      require the time loop, but may still access data from other time steps.
+    - All `Function` objects are passed thorugh the initial lowering via the `LinearSolveExpr`
+      object, ensuring the correct time loop is generated in the main kernel.
+    - A `origin_to_moddim` mapper is created based on the modulo dimensions generated by the
+      `LinearSolveExpr` object in the main kernel (e.g., {t: t0, t + 1: t1}).
+    - These mappers are used to replace the temporary `Symbol` objects in the callback functions
+      with the correct modulo dimensions.
+    - Modulo dimensions are stored in the matrix context struct at each time step in the time loop
+      and can be accessed in the callback functions if needed.
     """
     @property
     def is_target_time(self):
@@ -773,14 +827,14 @@ class TimeDependent(NonTimeDependent):
     def uxreplace_time(self, body, solver_objs):
         time_spacing = self.target.grid.stepping_dim.spacing
 
-        time_mapper = {
+        mapper = {
             v: k.xreplace({time_spacing: 1, -time_spacing: -1})
-            for k, v in self.init_time_mapper.items()
+            for k, v in self.time_idx_to_symb.items()
         }
-        subs = {symb: self.time_dim_mapper[time_mapper[symb]] for symb in time_mapper}
-        return Uxreplace(subs).visit(body)
+        symb_to_moddim = {symb: self.origin_to_moddim[mapper[symb]] for symb in mapper}
+        return Uxreplace(symb_to_moddim).visit(body)
 
-    def _retrieve_time_dims(self, iters):
+    def _origin_to_moddim_mapper(self, iters):
         time_iter = [i for i in iters if any(d.is_Time for d in i.dimensions)]
         mapper = {}
 
@@ -866,6 +920,7 @@ class TimeDependent(NonTimeDependent):
 Null = Macro('NULL')
 void = 'void'
 dummyctx = Symbol('lctx')
+dummyptr = DummyArg('dummy')
 
 
 # TODO: Don't use c.Line here?

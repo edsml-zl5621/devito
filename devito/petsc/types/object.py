@@ -65,14 +65,18 @@ class Mat(LocalObject):
 
 class LocalVec(LocalObject):
     """
-    PETSc Vector object (Vec).
+    PETSc local vector object (Vec).
+    A local vector has ghost locations that contain values that are
+    owned by other MPI ranks.
     """
     dtype = CustomDtype('Vec')
 
 
 class GlobalVec(LocalObject):
     """
-    PETSc Vector object (Vec).
+    PETSc global vector object (Vec).
+    A global vector is a parallel vector that has no duplicate values
+    between MPI ranks. A global vector has no ghost locations.
     """
     dtype = CustomDtype('Vec')
 
@@ -156,6 +160,10 @@ class PetscErrorCode(LocalObject):
 
 
 class DummyArg(LocalObject):
+    """
+    A void pointer used to satisfy the function
+    signature of the `FormFunction` callback.
+    """
     dtype = CustomDtype('void', modifier='*')
 
 
