@@ -5,31 +5,32 @@ from devito.tools import Reconstructable, sympy_mutex
 
 class LinearSolveExpr(sympy.Function, Reconstructable):
     """
-    A symbolic expression passed through the Operator, containing the metadata 
-    needed to execute a linear solver. Linear problems are handled with `SNESSetType(snes, KSPONLY)`, enabling
-    a unified interface for both linear and nonlinear solvers.
+    A symbolic expression passed through the Operator, containing the metadata
+    needed to execute a linear solver. Linear problems are handled with
+    `SNESSetType(snes, KSPONLY)`, enabling a unified interface for both
+    linear and nonlinear solvers.
 
     # TODO: extend this
     defaults:
-        - 'ksp_type': String with the name of the PETSc Krylov method. Default is 
-                      'gmres' (Generalized Minimal Residual Method).
-                      https://petsc.org/main/manualpages/KSP/KSPType/
+        - 'ksp_type': String with the name of the PETSc Krylov method.
+           Default is 'gmres' (Generalized Minimal Residual Method).
+           https://petsc.org/main/manualpages/KSP/KSPType/
 
-        - 'pc_type': String with the name of the PETSc preconditioner. Default is 
-                     'jacobi' (i.e diagonal scaling preconditioning).
-                     https://petsc.org/main/manualpages/PC/PCType/
+        - 'pc_type': String with the name of the PETSc preconditioner.
+           Default is 'jacobi' (i.e diagonal scaling preconditioning).
+           https://petsc.org/main/manualpages/PC/PCType/
 
         KSP tolerances:
         https://petsc.org/release/manualpages/KSP/KSPSetTolerances/
 
-        - 'ksp_rtol': Relative convergence tolerance. Default 
+        - 'ksp_rtol': Relative convergence tolerance. Default
                       is 1e-5.
-        - 'ksp_atol': Absolute convergence for tolerance. Default 
+        - 'ksp_atol': Absolute convergence for tolerance. Default
                       is 1e-50.
         - 'ksp_divtol': Divergence tolerance, amount residual norm can
                         increase before `KSPConvergedDefault()` concludes
                         that the method is diverging. Default is 1e5.
-        - 'ksp_max_it': Maximum number of iterations to use. Default 
+        - 'ksp_max_it': Maximum number of iterations to use. Default
                         is 1e4.
     """
 
