@@ -6,7 +6,7 @@ from devito.symbolics import Byref, Macro
 from devito.petsc.types import (PetscMPIInt, PetscErrorCode)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import core_metadata
-from devito.petsc.iet.routines import (CallbackBuilder, BasicObjectBuilder, SetupSolver,
+from devito.petsc.iet.routines import (CallbackBuilder, BaseObjectBuilder, BaseSetup,
                                        Solver, TimeDependent, NonTimeDependent)
 from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
 
@@ -107,7 +107,7 @@ class Builder:
         self.timedep = timedep(injectsolve, iters, **kwargs)
 
         # Objects
-        self.objbuilder = BasicObjectBuilder(injectsolve, **kwargs)
+        self.objbuilder = BaseObjectBuilder(injectsolve, **kwargs)
         self.solver_objs = self.objbuilder.solver_objs
 
         # Callbacks
@@ -117,7 +117,7 @@ class Builder:
         )
 
         # Solver setup
-        self.solversetup = SetupSolver(
+        self.solversetup = BaseSetup(
             self.solver_objs, objs, injectsolve, self.cbbuilder
         )
 

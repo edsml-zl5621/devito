@@ -480,7 +480,7 @@ class CallbackBuilder:
         return mapper
 
 
-class BasicObjectBuilder:
+class BaseObjectBuilder:
     """
     A base class for constructing objects needed for a PETSc solver.
     Designed to be extended by subclasses, which can override the `_extend_build`
@@ -558,7 +558,7 @@ class BasicObjectBuilder:
         return base_dict
 
 
-class SetupSolver:
+class BaseSetup:
     def __init__(self, solver_objs, objs, injectsolve, cbbuilder):
         self.calls = self._setup(solver_objs, objs, injectsolve, cbbuilder)
 
@@ -636,7 +636,7 @@ class SetupSolver:
         ]
         calls = [call_struct_callback] + calls_set_app_ctx + [BlankLine]
 
-        return dmda_calls + (
+        base_setup = dmda_calls + (
             snes_create,
             snes_set_dm,
             create_matrix,
@@ -654,6 +654,15 @@ class SetupSolver:
             matvec_operation,
             formfunc_operation,
         ) + tuple(calls)
+
+        extended_setup = self._extend_setup(solver_objs, objs, injectsolve, cbbuilder)
+        return base_setup + tuple(extended_setup)
+
+    def _extend_setup(self, solver_objs, objs, injectsolve, cbbuilder):
+        """
+        Hook for subclasses to add additional setup calls.
+        """
+        return []
 
     def _create_dmda_calls(self, dmda, objs):
         dmda_create = self._create_dmda(dmda, objs)
