@@ -31,7 +31,6 @@ class CallbackBuilder:
 
         self.rcompile = rcompile
         self.sregistry = sregistry
-        self.concretize_mapper = kwargs.get('concretize_mapper', {})
         self.timedep = timedep
         self.solver_objs = solver_objs
 
@@ -85,8 +84,7 @@ class CallbackBuilder:
     def _make_matvec(self, injectsolve, objs, solver_objs):
         # Compile matvec `eqns` into an IET via recursive compilation
         irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
-                                      options={'mpi': False}, sregistry=SymbolRegistry(),
-                                      concretize_mapper=self.concretize_mapper)
+                                      options={'mpi': False}, sregistry=self.sregistry)
         body_matvec = self._create_matvec_body(injectsolve,
                                                List(body=irs_matvec.uiet.body),
                                                solver_objs, objs)
@@ -224,8 +222,7 @@ class CallbackBuilder:
         # Compile formfunc `eqns` into an IET via recursive compilation
         irs_formfunc, _ = self.rcompile(
             injectsolve.expr.rhs.formfuncs,
-            options={'mpi': False}, sregistry=SymbolRegistry(),
-            concretize_mapper=self.concretize_mapper
+            options={'mpi': False}, sregistry=self.sregistry
         )
         body_formfunc = self._create_formfunc_body(injectsolve,
                                                    List(body=irs_formfunc.uiet.body),
@@ -354,8 +351,7 @@ class CallbackBuilder:
     def _make_formrhs(self, injectsolve, objs, solver_objs):
         # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
-                                       options={'mpi': False}, sregistry=SymbolRegistry(),
-                                       concretize_mapper=self.concretize_mapper)
+                                       options={'mpi': False}, sregistry=self.sregistry)
         body_formrhs = self._create_formrhs_body(injectsolve,
                                                  List(body=irs_formrhs.uiet.body),
                                                  solver_objs, objs)
@@ -511,19 +507,19 @@ class BasicObjectBuilder:
                 - 'ksp': (KSP) Krylov solver object that manages the linear solver.
                 - 'pc': (PC) Preconditioner object.
                 - 'snes': (SNES) Nonlinear solver object.
-                - 'X_global': (GlobalVec) Current guess for the solution,
-                   required by the FormFunction callback.
-                - 'X_local': (LocalVec) Current guess for the solution,
-                   required by the FormFunction callback.
                 - 'F_global': (GlobalVec) Global residual vector `F`, where `F(x) = b`.
                 - 'F_local': (LocalVec) Local residual vector `F`, where `F(x) = b`.
                 - 'Y_global': (GlobalVector) The output vector populated by the
                    matrix-free `MyMatShellMult` callback function.
                 - 'Y_local': (LocalVector) The output vector populated by the matrix-free
                    `MyMatShellMult` callback function.
+                - 'X_global': (GlobalVec) Current guess for the solution,
+                   required by the FormFunction callback.
+                - 'X_local': (LocalVec) Current guess for the solution,
+                   required by the FormFunction callback.
                 - 'localsize' (PetscInt): The local length of the solution vector.
                 - 'start_ptr' (StartPtr): A pointer to the beginning of the solution array
-                   that will be updated during the current time step.
+                   that will be updated at each time step.
                 - 'dmda' (DM): The DMDA object associated with this solve, linked to
                    the SNES object via `SNESSetDM`.
                 - 'callbackdm' (CallbackDM): The DM object accessed within callback
@@ -540,12 +536,12 @@ class BasicObjectBuilder:
             'ksp': KSP(sreg.make_name(prefix='ksp_')),
             'pc': PC(sreg.make_name(prefix='pc_')),
             'snes': SNES(sreg.make_name(prefix='snes_')),
-            'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
-            'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
             'F_global': GlobalVec(sreg.make_name(prefix='F_global_')),
             'F_local': LocalVec(sreg.make_name(prefix='F_local_'), liveness='eager'),
             'Y_global': GlobalVec(sreg.make_name(prefix='Y_global_')),
             'Y_local': LocalVec(sreg.make_name(prefix='Y_local_'), liveness='eager'),
+            'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
+            'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
             'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
             'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
             'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
@@ -728,7 +724,7 @@ class Solver:
         local_x = petsc_call('DMCreateLocalVector',
                              [dmda, Byref(solver_objs['x_local'])])
 
-        vec_replace_array = self.timedep.time_dep_replace(injectsolve, solver_objs, objs)
+        vec_replace_array = self.timedep.replace_array(solver_objs)
 
         dm_local_to_global_x = petsc_call(
             'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',
@@ -791,8 +787,30 @@ class NonTimeDependent:
     def uxreplace_time(self, body):
         return body
 
-    def time_dep_replace(self, injectsolve, solver_objs, objs):
-        return ()
+    def replace_array(self, solver_objs):
+        """
+        VecReplaceArray() is a PETSc function that allows replacing the array
+        of a `Vec` with a user provided array.
+        https://petsc.org/release/manualpages/Vec/VecReplaceArray/
+
+        This function is used to replace the array of the PETSc solution `Vec`
+        with the array from the `Function` object representing the target.
+
+        Examples
+        --------
+        >>> self.target
+        f1(x, y)
+        >>> call = replace_array(solver_objs)
+        >>> print(call)
+        PetscCall(VecReplaceArray(x_local_0,f1_vec->data));
+        """
+        field_from_ptr = FieldFromPointer(
+                self.target.function._C_field_data, self.target.function._C_symbol
+            )
+        vec_replace_array = (petsc_call(
+                'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
+            ),)
+        return vec_replace_array
 
     def assign_time_iters(self, struct):
         return []
@@ -808,42 +826,60 @@ class TimeDependent(NonTimeDependent):
     Outline of time loop abstraction with PETSc:
 
     - At PETScSolve, time indices are replaced with temporary `Symbol` objects
-      via the mapper (e.g., {t + dt: tau0, t: tau1}) to prevent the time loop
+      via a mapper (e.g., {t: tau0, t + dt: tau1}) to prevent the time loop
       from being generated in the callback functions. These callbacks, needed
       for each `SNESSolve` at every time step, don't require the time loop, but
-      may still access data from other time steps.
+      may still need access to data from other time steps.
     - All `Function` objects are passed thorugh the initial lowering via the
       `LinearSolveExpr` object, ensuring the correct time loop is generated
       in the main kernel.
     - Another mapper is created based on the modulo dimensions
       generated by the `LinearSolveExpr` object in the main kernel
-      (e.g., {t: t0, t + 1: t1}).
-    - These two mappers are used to replace the temporary `Symbol` objects in the
-      callback functions with the correct modulo dimensions.
-    - Modulo dimensions are stored in the matrix context struct at each time
-      step in the time loop and can be accessed in the callback functions if needed.
+      (e.g., {time: time, t: t0, t + 1: t1}).
+    - These two mappers are used to generate a final mapper `symb_to_moddim`
+      (e.g. {tau0: t0, tau1: t1}) which is used at the IET level to
+      replace the temporary `Symbol` objects in the callback functions with
+      the correct modulo dimensions.
+    - Modulo dimensions are updated in the matrix context struct at each time
+      step and can be accessed in the callback functions where needed.
     """
     @property
     def is_target_time(self):
         return any(i.is_Time for i in self.target.dimensions)
+    
+    @property
+    def time_spacing(self):
+        return self.target.grid.stepping_dim.spacing
+
+    @property
+    def target_time(self):
+        target_time = [
+            i for i, d in zip(self.target.indices, self.target.dimensions)
+            if d.is_Time
+        ]
+        assert len(target_time) == 1
+        target_time = target_time.pop()
+        return target_time
 
     @property
     def symb_to_moddim(self):
-        time_spacing = self.target.grid.stepping_dim.spacing
+        """
+        Maps temporary `Symbol` objects created during `PETScSolve` to their
+        corresponding modulo dimensions (e.g. creates {tau0: t0, tau1: t1}).
+        """
         mapper = {
-            v: k.xreplace({time_spacing: 1, -time_spacing: -1})
+            v: k.xreplace({self.time_spacing: 1, -self.time_spacing: -1})
             for k, v in self.time_idx_to_symb.items()
         }
-        symb_to_moddim = {symb: self.origin_to_moddim[mapper[symb]] for symb in mapper}
-        return symb_to_moddim
+        return {symb: self.origin_to_moddim[mapper[symb]] for symb in mapper}
 
     def uxreplace_time(self, body):
         return Uxreplace(self.symb_to_moddim).visit(body)
 
     def _origin_to_moddim_mapper(self, iters):
         """
-        Maps time dimensions in a list of `Iteration` objects to their
-        corresponding origins.
+        Creates a mapper of the origin of the time dimensions to their corresponding
+        modulo dimensions from a list of `Iteration` objects.
 
         Examples
         --------
@@ -867,17 +903,37 @@ class TimeDependent(NonTimeDependent):
                     mapper[d] = d
         return mapper
 
-    def time_dep_replace(self, injectsolve, solver_objs, objs):
-        # Extract the target from the lhs, which has been lowered
-        # through the operator, enabling access to the target time symbol
-        target = self.injectsolve.expr.lhs
+    def replace_array(self, solver_objs):
+        """
+        In the case that the actual target is time-dependent e.g a `TimeFunction`,
+        a pointer to the first element in the array that will be updated during the time step is 
+        passed to VecReplaceArray().
 
+        Examples
+        --------
+        >>> self.target
+        f1(time + dt, x, y)
+        >>> calls = replace_array(solver_objs)
+        >>> print(List(body=calls))
+        PetscCall(VecGetSize(x_local_0,&(localsize_0)));
+        float * start_ptr_0 = (time + 1)*localsize_0 + (float*)(f1_vec->data);
+        PetscCall(VecReplaceArray(x_local_0,start_ptr_0));
+
+        >>> self.target
+        f1(t + dt, x, y)
+        >>> calls = replace_array(solver_objs)
+        >>> print(List(body=calls))
+        PetscCall(VecGetSize(x_local_0,&(localsize_0)));
+        float * start_ptr_0 = t1*localsize_0 + (float*)(f1_vec->data);
+        """
         if self.is_target_time:
-            target_time = [
-                i for i, d in zip(target.indices, target.dimensions) if d.is_Time
-            ]
-            assert len(target_time) == 1
-            target_time = target_time.pop()
+            mapper = {self.time_spacing: 1, -self.time_spacing: -1}
+            target_time = self.target_time.xreplace(mapper)
+
+            try:
+                target_time = self.origin_to_moddim[target_time]
+            except KeyError:
+                pass
 
             start_ptr = solver_objs['start_ptr']
 
@@ -886,11 +942,11 @@ class TimeDependent(NonTimeDependent):
             )
 
             field_from_ptr = FieldFromPointer(
-                target.function._C_field_data, target.function._C_symbol
+                self.target.function._C_field_data, self.target.function._C_symbol
             )
 
             expr = DummyExpr(
-                start_ptr, cast_mapper[(target.dtype, '*')](field_from_ptr) +
+                start_ptr, cast_mapper[(self.target.dtype, '*')](field_from_ptr) +
                 Mul(target_time, solver_objs['localsize']), init=True
             )
 
@@ -899,13 +955,7 @@ class TimeDependent(NonTimeDependent):
             )
             return (vec_get_size, expr, vec_replace_array)
         else:
-            field_from_ptr = FieldFromPointer(
-                target.function._C_field_data, target.function._C_symbol
-            )
-            vec_replace_array = (petsc_call(
-                'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
-            ),)
-            return vec_replace_array
+            return super().replace_array(solver_objs)
 
     def assign_time_iters(self, struct):
         """
