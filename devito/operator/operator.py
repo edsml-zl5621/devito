@@ -263,7 +263,6 @@ class Operator(Callable):
         """
         # Create a symbol registry
         kwargs.setdefault('sregistry', SymbolRegistry())
-        kwargs.setdefault('concretize_mapper', {})
 
         expressions = as_tuple(expressions)
 
@@ -389,8 +388,6 @@ class Operator(Callable):
         init_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)
 
         clusters = cls._specialize_clusters(clusters, **kwargs)
-
-        clusters = petsc_project(clusters)
 
         # Operation count after specialization
         final_ops = sum(estimate_cost(c.exprs) for c in clusters if c.is_dense)

@@ -351,7 +351,7 @@ class CallbackBuilder:
         # Compile formrhs `eqns` into an IET via recursive compilation
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
                                        options={'mpi': False}, sregistry=self.sregistry)
-        body_formrhs = self._create_formrhs_body(injectsolve,
+        body_formrhs = self._create_form_rhs_body(injectsolve,
                                                  List(body=irs_formrhs.uiet.body),
                                                  solver_objs, objs)
 
@@ -364,7 +364,7 @@ class CallbackBuilder:
         self._formrhs_callback = formrhs_callback
         self._efuncs[formrhs_callback.name] = formrhs_callback
 
-    def _create_formrhs_body(self, injectsolve, body, solver_objs, objs):
+    def _create_form_rhs_body(self, injectsolve, body, solver_objs, objs):
         linsolve_expr = injectsolve.expr.rhs
 
         dmda = solver_objs['callbackdm']
