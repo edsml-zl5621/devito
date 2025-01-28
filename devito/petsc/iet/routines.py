@@ -11,7 +11,6 @@ from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import Temp, Symbol
 from devito.tools import filter_ordered
-from devito.ir.support import SymbolRegistry
 
 from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
@@ -805,11 +804,11 @@ class NonTimeDependent:
         PetscCall(VecReplaceArray(x_local_0,f1_vec->data));
         """
         field_from_ptr = FieldFromPointer(
-                self.target.function._C_field_data, self.target.function._C_symbol
-            )
+            self.target.function._C_field_data, self.target.function._C_symbol
+        )
         vec_replace_array = (petsc_call(
-                'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
-            ),)
+            'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
+        ),)
         return vec_replace_array
 
     def assign_time_iters(self, struct):
@@ -846,7 +845,7 @@ class TimeDependent(NonTimeDependent):
     @property
     def is_target_time(self):
         return any(i.is_Time for i in self.target.dimensions)
-    
+
     @property
     def time_spacing(self):
         return self.target.grid.stepping_dim.spacing
@@ -906,8 +905,8 @@ class TimeDependent(NonTimeDependent):
     def replace_array(self, solver_objs):
         """
         In the case that the actual target is time-dependent e.g a `TimeFunction`,
-        a pointer to the first element in the array that will be updated during the time step is 
-        passed to VecReplaceArray().
+        a pointer to the first element in the array that will be updated during
+        the time step is passed to VecReplaceArray().
 
         Examples
         --------
