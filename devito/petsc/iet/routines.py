@@ -483,7 +483,7 @@ class CallbackBuilder:
 class BasicObjectBuilder:
     """
     A base class for constructing objects needed for a PETSc solver.
-    Designed to be extended by subclasses, which can override the `build`
+    Designed to be extended by subclasses, which can override the `_extend_build`
     method to support specific use cases.
     """
 
@@ -829,7 +829,7 @@ class TimeDependent(NonTimeDependent):
       from being generated in the callback functions. These callbacks, needed
       for each `SNESSolve` at every time step, don't require the time loop, but
       may still need access to data from other time steps.
-    - All `Function` objects are passed thorugh the initial lowering via the
+    - All `Function` objects are passed through the initial lowering via the
       `LinearSolveExpr` object, ensuring the correct time loop is generated
       in the main kernel.
     - Another mapper is created based on the modulo dimensions
