@@ -573,7 +573,7 @@ class SetupSolver:
 
         create_matrix = petsc_call('DMCreateMatrix', [dmda, Byref(solver_objs['Jac'])])
 
-        # NOTE: Assumming all solves are linear for now.
+        # NOTE: Assuming all solves are linear for now.
         snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
 
         snes_set_jac = petsc_call(

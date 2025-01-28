@@ -212,7 +212,7 @@ def generate_time_mapper(funcs):
     Replace time indices with `Symbols` in equations used within
     PETSc callback functions. These symbols are Uxreplaced at the IET
     level to align with the `TimeDimension` and `ModuloDimension` objects
-    present in the inital lowering.
+    present in the initial lowering.
     NOTE: All functions used in PETSc callback functions are attached to
     the `LinearSolveExpr` object, which is passed through the initial lowering
     (and subsequently dropped and replaced with calls to run the solver).

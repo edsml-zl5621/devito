@@ -60,7 +60,7 @@ def lower_petsc(iet, **kwargs):
 
 def init_petsc(**kwargs):
     # Initialize PETSc -> for now, assuming all solver options have to be
-    # specifed via the parameters dict in PETScSolve
+    # specified via the parameters dict in PETScSolve
     # TODO: Are users going to be able to use PETSc command line arguments?
     # In firedrake, they have an options_prefix for each solver, enabling the use
     # of command line options
