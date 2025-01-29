@@ -8,94 +8,134 @@ from devito.types import Eq, Symbol, SteppingDimension, TimeFunction
 from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
-from devito.tools import as_tuple
-from devito.petsc.types import LinearSolveExpr, PETScArray, DMDALocalInfo
+from devito.tools import as_tuple, filter_ordered
+from devito.petsc.types import LinearSolveExpr, PETScArray, DMDALocalInfo, FieldData, MultipleFieldData
 
 
 __all__ = ['PETScSolve', 'EssentialBC']
 
 
-def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
-    prefixes = ['y_matvec', 'x_matvec', 'f_formfunc', 'x_formfunc', 'b_tmp']
+def PETScSolve(eqns_targets, target=None, solver_parameters=None, **kwargs):
+    if target is not None:
+        injectsolve = InjectSolve().build({target: eqns_targets}, solver_parameters)
+        # TODO: the return should probs just be the InjectSolveEq object, not put into a list
+        return injectsolve
 
-    localinfo = DMDALocalInfo(name='info', liveness='eager')
+    # If users want segregated solvers, they create multiple PETScSolve objects,
+    # rather than passing multiple targets to a single PETScSolve object
+    else:
+        injectsolve = InjectSolveNested().build(eqns_targets, solver_parameters)
+        return injectsolve
 
-    arrays = {
-        p: PETScArray(name='%s_%s' % (p, target.name),
-                      target=target,
-                      liveness='eager',
-                      localinfo=localinfo)
-        for p in prefixes
-    }
 
-    matvecs = []
-    formfuncs = []
-    formrhs = []
+class InjectSolve:
+    def build(self, eqns_targets, solver_parameters):
+        target, funcs, fielddata, time_mapper = self.build_eq(
+            eqns_targets, solver_parameters
+        )
+        # Placeholder equation for inserting calls to the solver and generating
+        # correct time loop etc.
+        return [InjectSolveEq(target, LinearSolveExpr(
+                funcs, solver_parameters, fielddata=fielddata, time_mapper=time_mapper,
+                localinfo=localinfo))]
 
-    eqns = as_tuple(eqns)
+    def build_eq(self, eqns_targets, solver_parameters):
+        target, eqns = next(iter(eqns_targets.items()))
+        eqns = as_tuple(eqns)
+        funcs = get_funcs(eqns)
+        time_mapper = generate_time_mapper(funcs)
+        fielddata = self.generate_field_data(eqns, target, time_mapper)
+        return target, tuple(funcs), fielddata, time_mapper
 
-    for eq in eqns:
+    def generate_field_data(self, eqns, target, time_mapper):
+        # TODO: change these names
+        prefixes = ['y_matvec', 'x_matvec', 'f_formfunc', 'x_formfunc', 'b_tmp']
+
+        arrays = {
+            p: PETScArray(name='%s_%s' % (p, target.name),
+                        target=target,
+                        liveness='eager',
+                        localinfo=localinfo)
+            for p in prefixes
+        }
+
+        matvecs, formfuncs, formrhs = zip(
+            *[self.build_callback_eqns(eq, target, arrays, time_mapper) for eq in eqns]
+        )
+
+        # todo, I think the prefixes could be specific to the solve not the fielddata ?
+        tmp =  FieldData(
+            target=target,
+            matvecs=matvecs,
+            formfuncs=formfuncs,
+            formrhs=formrhs,
+            arrays=arrays,
+        )
+        return tmp
+
+    def build_callback_eqns(self, eq, target, arrays, time_mapper):
         b, F_target, targets = separate_eqn(eq, target)
+        name = target.name
 
+        matvec = self.make_matvec(eq, F_target, arrays, name, targets)
+        formfunc = self.make_formfunc(eq, F_target, arrays, name, targets)
+        formrhs = self.make_rhs(eq, b, arrays, name)
+
+        return tuple(expr.subs(time_mapper) for expr in (matvec, formfunc, formrhs))
+
+    def make_matvec(self, eq, F_target, arrays, name, targets):
         if isinstance(eq, EssentialBC):
-            matvecs.append(Eq(
+            return Eq(
                 arrays['y_matvec'], arrays['x_matvec'],
                 subdomain=eq.subdomain
-            ))
-
-            formfuncs.append(Eq(
-                arrays['y_formfunc'], 0.,
-                subdomain=eq.subdomain
-            ))
-
-            formrhs.append(Eq(
-                arrays['b_tmp'],
-                0.,
-                subdomain=eq.subdomain
-            ))
-
+            )
         else:
-            # TODO: Current assumption is that problem is linear and user has not provided
-            # a jacobian. Hence, we can use F_target to form the jac-vec product
-            matvecs.append(Eq(
+            return Eq(
                 arrays['y_matvec'],
                 F_target.subs(targets_to_arrays(arrays['x_matvec'], targets)),
                 subdomain=eq.subdomain
-            ))
+            )
 
-            formfuncs.append(Eq(
+    def make_formfunc(self, eq, F_target, arrays, name, targets):
+        if isinstance(eq, EssentialBC):
+            return Eq(
+                arrays['f_formfunc'], 0.,
+                subdomain=eq.subdomain
+            )
+        else:
+            return Eq(
                 arrays['f_formfunc'],
                 F_target.subs(targets_to_arrays(arrays['x_formfunc'], targets)),
                 subdomain=eq.subdomain
-            ))
+            )
 
-            formrhs.append(Eq(
-                arrays['b_tmp'],
-                b,
+    def make_rhs(self, eq, b, arrays, name):
+        if isinstance(eq, EssentialBC):
+            return Eq(
+                arrays['b_tmp'], 0,
                 subdomain=eq.subdomain
-        ))
+            )
+        else:
+            return Eq(
+                arrays['b_tmp'], b,
+                subdomain=eq.subdomain
+            )
 
-    funcs = retrieve_functions(eqns)
-    time_mapper = generate_time_mapper(funcs)
 
-    matvecs, formfuncs, formrhs = (
-        [eq.xreplace(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
-    )
-    # Placeholder equation for inserting calls to the solver and generating
-    # correct time loop etc
-    inject_solve = InjectSolveEq(target, LinearSolveExpr(
-        expr=tuple(funcs),
-        target=target,
-        solver_parameters=solver_parameters,
-        matvecs=matvecs,
-        formfuncs=formfuncs,
-        formrhs=formrhs,
-        arrays=arrays,
-        time_mapper=time_mapper,
-        localinfo=localinfo
-    ))
+class InjectSolveNested(InjectSolve):
+    def build_eq(self, eqns_targets, solver_parameters):
+        combined_eqns = [item for sublist in eqns_targets.values() for item in sublist]
+        funcs = get_funcs(combined_eqns)
+        time_mapper = generate_time_mapper(funcs)
 
-    return [inject_solve]
+        all_data = MultipleFieldData()
+
+        for target, eqns in eqns_targets.items():
+            eqns = as_tuple(eqns)
+            fielddata = self.generate_field_data(eqns, target, time_mapper)
+            all_data.add_field_data(fielddata)
+
+        return target, tuple(funcs), all_data, time_mapper
 
 
 class EssentialBC(Eq):
@@ -261,3 +301,16 @@ def generate_time_mapper(funcs):
     })
     tau_symbs = [Symbol('tau%d' % i) for i in range(len(time_indices))]
     return dict(zip(time_indices, tau_symbs))
+
+
+def get_funcs(eqns):
+    funcs = [
+        func
+        for eq in eqns
+        for func in retrieve_functions(eval_time_derivatives(eq.lhs - eq.rhs))
+    ]
+    return filter_ordered(funcs)
+
+
+lhs = Symbol('lhs')
+localinfo = DMDALocalInfo(name='info', liveness='eager')

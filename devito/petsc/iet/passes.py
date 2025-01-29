@@ -20,11 +20,15 @@ def lower_petsc(iet, **kwargs):
     if not injectsolve_mapper:
         return iet, {}
 
-    targets = [i.expr.rhs.target for (i,) in injectsolve_mapper.values()]
+    # from IPython import embed; embed()
+    unique_grids = {i.expr.rhs.grid for (i,) in injectsolve_mapper.values()}
     init = init_petsc(**kwargs)
 
-    # Assumption is that all targets have the same grid so can use any target here
-    objs = build_core_objects(targets[-1], **kwargs)
+    # Assumption is that all solves are on the same grid
+    if len(unique_grids) > 1:
+        raise ValueError("All PETScSolves must use the same Grid, but multiple found.")
+    grid = unique_grids.pop()
+    objs = build_core_objects(grid, **kwargs)
 
     # Create core PETSc calls (not specific to each PETScSolve)
     core = make_core_petsc_calls(objs, **kwargs)
@@ -75,9 +79,9 @@ def make_core_petsc_calls(objs, **kwargs):
     return call_mpi, BlankLine
 
 
-def build_core_objects(target, **kwargs):
+def build_core_objects(grid, **kwargs):
     if kwargs['options']['mpi']:
-        communicator = target.grid.distributor._obj_comm
+        communicator = grid.distributor._obj_comm
     else:
         communicator = 'PETSC_COMM_SELF'
 
@@ -85,7 +89,7 @@ def build_core_objects(target, **kwargs):
         'size': PetscMPIInt(name='size'),
         'comm': communicator,
         'err': PetscErrorCode(name='err'),
-        'grid': target.grid
+        'grid': grid
     }
 
 

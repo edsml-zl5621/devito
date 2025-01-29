@@ -3,7 +3,11 @@ import sympy
 from devito.tools import Reconstructable, sympy_mutex
 
 
-class LinearSolveExpr(sympy.Function, Reconstructable):
+class SolveExpr(sympy.Function, Reconstructable):
+    pass
+
+
+class LinearSolveExpr(SolveExpr):
     """
     A symbolic expression passed through the Operator, containing the metadata
     needed to execute a linear solver. Linear problems are handled with
@@ -35,8 +39,7 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     """
 
     __rargs__ = ('expr',)
-    __rkwargs__ = ('target', 'solver_parameters', 'matvecs',
-                   'formfuncs', 'formrhs', 'arrays', 'time_mapper',
+    __rkwargs__ = ('solver_parameters', 'fielddata', 'time_mapper',
                    'localinfo')
 
     defaults = {
@@ -48,9 +51,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         'ksp_max_it': 1e4  # Maximum iterations
     }
 
-    def __new__(cls, expr, target=None, solver_parameters=None,
-                matvecs=None, formfuncs=None, formrhs=None,
-                arrays=None, time_mapper=None, localinfo=None, **kwargs):
+    def __new__(cls, expr, solver_parameters=None,
+                fielddata=None, time_mapper=None, localinfo=None, **kwargs):
 
         if solver_parameters is None:
             solver_parameters = cls.defaults
@@ -62,12 +64,8 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
             obj = sympy.Function.__new__(cls, expr)
 
         obj._expr = expr
-        obj._target = target
         obj._solver_parameters = solver_parameters
-        obj._matvecs = matvecs
-        obj._formfuncs = formfuncs
-        obj._formrhs = formrhs
-        obj._arrays = arrays
+        obj._fielddata = fielddata if fielddata else FieldData()
         obj._time_mapper = time_mapper
         obj._localinfo = localinfo
         return obj
@@ -93,28 +91,12 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
         return self._expr
 
     @property
-    def target(self):
-        return self._target
+    def fielddata(self):
+        return self._fielddata
 
     @property
     def solver_parameters(self):
         return self._solver_parameters
-
-    @property
-    def matvecs(self):
-        return self._matvecs
-
-    @property
-    def formfuncs(self):
-        return self._formfuncs
-
-    @property
-    def formrhs(self):
-        return self._formrhs
-
-    @property
-    def arrays(self):
-        return self._arrays
 
     @property
     def time_mapper(self):
@@ -124,8 +106,84 @@ class LinearSolveExpr(sympy.Function, Reconstructable):
     def localinfo(self):
         return self._localinfo
 
+    @property
+    def grid(self):
+        return self.fielddata.grid
+
     @classmethod
     def eval(cls, *args):
         return None
 
     func = Reconstructable._rebuild
+
+
+
+class FieldData:
+    def __init__(self, target=None, matvecs=None, formfuncs=None, formrhs=None,
+                 arrays=None, **kwargs):
+        self._target = kwargs.get('target', target)
+        self._matvecs = matvecs
+        self._formfuncs = formfuncs
+        self._formrhs = formrhs
+        self._arrays = arrays
+    
+    @property
+    def target(self):
+        return self._target
+
+    @property
+    def matvecs(self):
+        return self._matvecs
+    
+    @property
+    def formfuncs(self):
+        return self._formfuncs
+
+    @property
+    def formrhs(self):
+        return self._formrhs
+    
+    @property
+    def arrays(self):
+        return self._arrays
+
+    @property
+    def space_dimensions(self):
+        return self.target.space_dimensions
+
+    @property
+    def grid(self):
+        return self.target.grid
+
+
+
+class MultipleFieldData(FieldData):
+    def __init__(self):
+        self.field_data_list = []
+
+    def add_field_data(self, field_data):
+        self.field_data_list.append(field_data)
+
+    def get_field_data(self, target):
+        for field_data in self.field_data_list:
+            if field_data.target == target:
+                return field_data
+        raise ValueError("FieldData with target %s not found." % target)
+    pass
+
+    @property
+    def targets(self):
+        return tuple(field_data.target for field_data in self.field_data_list)
+
+    @property
+    def space_dimensions(self):
+        space_dims, = {field_data.space_dimensions for field_data in self.field_data_list}
+        return space_dims
+
+    @property
+    def grid(self):
+        grids = [t.grid for t in self.targets]
+        if len(set(grids)) > 1:
+            raise ValueError("All targets within a PETScSolve have to have the same grid.")
+        return grids.pop()
+    
