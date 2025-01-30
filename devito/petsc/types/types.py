@@ -117,7 +117,6 @@ class LinearSolveExpr(SolveExpr):
     func = Reconstructable._rebuild
 
 
-
 class FieldData:
     def __init__(self, target=None, matvecs=None, formfuncs=None, formrhs=None,
                  arrays=None, **kwargs):
@@ -155,6 +154,13 @@ class FieldData:
     def grid(self):
         return self.target.grid
 
+    @property
+    def space_order(self):
+        return self.target.space_order
+
+    @property
+    def targets(self):
+        return (self.target,)
 
 
 class MultipleFieldData(FieldData):
@@ -172,6 +178,10 @@ class MultipleFieldData(FieldData):
     pass
 
     @property
+    def target(self):
+        return None
+
+    @property
     def targets(self):
         return tuple(field_data.target for field_data in self.field_data_list)
 
@@ -186,4 +196,13 @@ class MultipleFieldData(FieldData):
         if len(set(grids)) > 1:
             raise ValueError("All targets within a PETScSolve have to have the same grid.")
         return grids.pop()
+
+    @property
+    def space_order(self):
+        # NOTE: since we use DMDA to create vecs for the coupled solves, all fields must have the same space order
+        # ... re think this? could be a limitation. For now, just force the space order to be the same
+        space_orders = [t.space_order for t in self.targets]
+        if len(set(space_orders)) > 1:
+            raise ValueError("All targets within a PETScSolve have to have the same space order.")
+        return space_orders.pop()
     

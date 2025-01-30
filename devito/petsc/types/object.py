@@ -1,7 +1,7 @@
 from ctypes import POINTER
 
-from devito.tools import CustomDtype, dtype_to_cstr
-from devito.types import LocalObject, CCompositeObject, ModuloDimension, TimeDimension
+from devito.tools import CustomDtype, dtype_to_cstr, as_tuple
+from devito.types import LocalObject, CCompositeObject, ModuloDimension, TimeDimension, ArrayObject, CustomDimension
 from devito.symbolics import Byref
 
 from devito.petsc.iet.utils import petsc_call
@@ -209,3 +209,105 @@ class StartPtr(LocalObject):
     def __init__(self, name, dtype):
         super().__init__(name=name)
         self.dtype = CustomDtype(dtype_to_cstr(dtype), modifier=' *')
+
+
+# TODO may have to re-think this, not sure if quite right -> CREATE A BASE CLASS FOR 
+#  ALL OBJECTS WHICH APPEAR AS A *PTR and then need to be indexed into to destroy them i.e each element of the array
+class IS(ArrayObject):
+    """
+    Index set object used for efficient indexing into vectors and matrices.
+    https://petsc.org/release/manualpages/IS/IS/
+    """
+    _data_alignment = False
+
+    def __init_finalize__(self, *args, **kwargs):
+        self._nindices = kwargs.pop('nindices', ())
+        super().__init_finalize__(*args, **kwargs)
+
+    @classmethod
+    def __indices_setup__(cls, **kwargs):
+        try:
+            return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
+        except KeyError:
+            nindices = kwargs.get('nindices', ())
+            dim = CustomDimension(name='d', symbolic_size=nindices)
+            return (dim,), (dim,)
+
+    @property
+    def dim(self):
+        assert len(self.dimensions) == 1
+        return self.dimensions[0]
+
+    @property
+    def nindices(self):
+        return self._nindices
+
+    @property
+    def dtype(self):
+        return CustomDtype('IS', modifier=' *')
+
+    @property
+    def _C_name(self):
+        return self.name
+
+    @property
+    def _mem_stack(self):
+        return False
+
+    @property
+    def _C_free(self):
+        destroy_calls = [
+            petsc_call('ISDestroy', [Byref(self.indexify().subs({self.dim: i}))])
+            for i in range(self._nindices)
+        ]
+        destroy_calls.append(petsc_call('PetscFree', [self.function]))
+        return destroy_calls
+
+
+class SubDM(ArrayObject):
+
+    _data_alignment = False
+
+    def __init_finalize__(self, *args, **kwargs):
+        self._nindices = kwargs.pop('nindices', ())
+        super().__init_finalize__(*args, **kwargs)
+
+    @classmethod
+    def __indices_setup__(cls, **kwargs):
+        try:
+            return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
+        except KeyError:
+            nindices = kwargs.get('nindices', ())
+            dim = CustomDimension(name='d', symbolic_size=nindices)
+            return (dim,), (dim,)
+
+    @property
+    def dim(self):
+        assert len(self.dimensions) == 1
+        return self.dimensions[0]
+
+    @property
+    def nindices(self):
+        return self._nindices
+
+    @property
+    def dtype(self):
+        return CustomDtype('DM', modifier=' *')
+
+    @property
+    def _C_name(self):
+        return self.name
+
+    @property
+    def _mem_stack(self):
+        return False
+
+    # NOTE ADD THE FUNCTIONALITY SO THAT ARRAYOBJECTS CAN BE DESTROYED .. or re-think this class
+    @property
+    def _C_free(self):
+        destroy_calls = [
+            petsc_call('DMDestroy', [Byref(self.indexify().subs({self.dim: i}))])
+            for i in range(self._nindices)
+        ]
+        destroy_calls.append(petsc_call('PetscFree', [self.function]))
+        return destroy_calls

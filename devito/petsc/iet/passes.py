@@ -3,11 +3,12 @@ import cgen as c
 from devito.passes.iet.engine import iet_pass
 from devito.ir.iet import Transformer, MapNodes, Iteration, BlankLine
 from devito.symbolics import Byref, Macro
-from devito.petsc.types import (PetscMPIInt, PetscErrorCode)
+from devito.petsc.types import (PetscMPIInt, PetscErrorCode, FieldData, MultipleFieldData)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import core_metadata
-from devito.petsc.iet.routines import (CallbackBuilder, BaseObjectBuilder, BaseSetup,
-                                       Solver, TimeDependent, NonTimeDependent)
+from devito.petsc.iet.routines import (CBBuilder, CCBBuilder, BaseObjectBuilder, CoupledObjectBuilder,
+                                       BaseSetup, CoupledSetup, Solver, CoupledSolver,
+                                       TimeDependent, NonTimeDependent)
 from devito.petsc.iet.utils import petsc_call, petsc_call_mpi
 
 
@@ -20,10 +21,7 @@ def lower_petsc(iet, **kwargs):
     if not injectsolve_mapper:
         return iet, {}
 
-    # from IPython import embed; embed()
     unique_grids = {i.expr.rhs.grid for (i,) in injectsolve_mapper.values()}
-    init = init_petsc(**kwargs)
-
     # Assumption is that all solves are on the same grid
     if len(unique_grids) > 1:
         raise ValueError("All PETScSolves must use the same Grid, but multiple found.")
@@ -50,6 +48,7 @@ def lower_petsc(iet, **kwargs):
 
     iet = Transformer(subs).visit(iet)
 
+    init = init_petsc(**kwargs)
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
         init=init, body=body,
@@ -110,26 +109,56 @@ class Builder:
         timedep = TimeDependent if time_mapper else NonTimeDependent
         self.timedep = timedep(injectsolve, iters, **kwargs)
 
+        # TODO: obvs improve this
+        if isinstance(injectsolve.expr.rhs.fielddata, MultipleFieldData):
+            coupled = True
+        else:
+            coupled = False
+
+
         # Objects
-        self.objbuilder = BaseObjectBuilder(injectsolve, **kwargs)
+        if coupled:
+            self.objbuilder = CoupledObjectBuilder(injectsolve, **kwargs)
+        else:
+            self.objbuilder = BaseObjectBuilder(injectsolve, **kwargs)
         self.solver_objs = self.objbuilder.solver_objs
 
         # Callbacks
-        self.cbbuilder = CallbackBuilder(
-            injectsolve, objs, self.solver_objs, timedep=self.timedep,
-            **kwargs
-        )
+        if coupled:
+            self.cbbuilder = CCBBuilder(
+                injectsolve, objs, self.solver_objs, timedep=self.timedep,
+                **kwargs
+            )
+        else:
+            self.cbbuilder = CBBuilder(
+                injectsolve, objs, self.solver_objs, timedep=self.timedep,
+                **kwargs
+            )
 
-        # Solver setup
-        self.solversetup = BaseSetup(
-            self.solver_objs, objs, injectsolve, self.cbbuilder
-        )
+        if coupled:
+            # Solver setup
+            self.solversetup = CoupledSetup(
+                self.solver_objs, objs, injectsolve, self.cbbuilder
+            )
+        else:
+            self.solversetup = BaseSetup(
+                self.solver_objs, objs, injectsolve, self.cbbuilder
+            )
 
-        # Execute the solver
-        self.solve = Solver(
-            self.solver_objs, objs, injectsolve, iters,
-            self.cbbuilder, timedep=self.timedep
-        )
+        # NOTE: might not acc need a separate coupled class for this->rethink
+        # just addding one for the purposes of debugging and figuring out the coupled abstraction
+        if coupled:
+            # Execute the solver
+            self.solve = CoupledSolver(
+                self.solver_objs, objs, injectsolve, iters,
+                self.cbbuilder, timedep=self.timedep
+            )
+        else:
+            # Execute the solver
+            self.solve = Solver(
+                self.solver_objs, objs, injectsolve, iters,
+                self.cbbuilder, timedep=self.timedep
+            )
 
 
 Null = Macro('NULL')

@@ -1,6 +1,7 @@
 from collections import OrderedDict
 
 import cgen as c
+import numpy as np
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference, DummyExpr, BlankLine, Callable, FindNodes,
@@ -9,7 +10,7 @@ from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
                               FieldFromComposite)
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
-from devito.types import Temp, Symbol
+from devito.types import Temp, Symbol, CustomDimension
 from devito.tools import filter_ordered
 
 from devito.petsc.types import PETScArray
@@ -18,10 +19,10 @@ from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
 from devito.petsc.iet.utils import petsc_call, petsc_struct
 from devito.petsc.utils import solver_mapper
 from devito.petsc.types import (DM, CallbackDM, Mat, LocalVec, GlobalVec, KSP, PC,
-                                SNES, DummyArg, PetscInt, StartPtr)
+                                SNES, DummyArg, PetscInt, StartPtr, IS, SubDM)
 
 
-class CallbackBuilder:
+class CBBuilder:
     """
     Build IET routines to generate PETSc callback functions.
     """
@@ -37,6 +38,7 @@ class CallbackBuilder:
         self._struct_params = []
 
         self._matvec_callback = None
+        self._matvecs = None
         self._formfunc_callback = None
         self._formrhs_callback = None
         self._struct_callback = None
@@ -61,7 +63,16 @@ class CallbackBuilder:
 
     @property
     def matvec_callback(self):
-        return self._matvec_callback
+        """
+        This is the matvec callback associated with the whole Jacobian i.e
+        is set in the main kernel via
+        `PetscCall(MatShellSetOperation(J,MATOP_MULT,(void (*)(void))MyMatShellMult));`
+        """
+        return self._matvecs
+
+    @property
+    def matvecs(self):
+        return self._matvecs
 
     @property
     def formfunc_callback(self):
@@ -82,8 +93,10 @@ class CallbackBuilder:
 
     def _make_matvec(self, injectsolve, objs, solver_objs):
         # Compile matvec `eqns` into an IET via recursive compilation
-        irs_matvec, _ = self.rcompile(injectsolve.expr.rhs.matvecs,
-                                      options={'mpi': False}, sregistry=self.sregistry)
+        matvecs = injectsolve.expr.rhs.fielddata.matvecs
+        irs_matvec, _ = self.rcompile(
+            matvecs, options={'mpi': False}, sregistry=self.sregistry
+        )
         body_matvec = self._create_matvec_body(injectsolve,
                                                List(body=irs_matvec.uiet.body),
                                                solver_objs, objs)
@@ -95,7 +108,7 @@ class CallbackBuilder:
                 solver_objs['Jac'], solver_objs['X_global'], solver_objs['Y_global']
             )
         )
-        self._matvec_callback = matvec_callback
+        self._matvecs = matvec_callback
         self._efuncs[matvec_callback.name] = matvec_callback
 
     def _create_matvec_body(self, injectsolve, body, solver_objs, objs):
@@ -107,8 +120,9 @@ class CallbackBuilder:
 
         fields = self._dummy_fields(body, solver_objs)
 
-        y_matvec = linsolve_expr.arrays['y_matvec']
-        x_matvec = linsolve_expr.arrays['x_matvec']
+        # TODO: maybe this shouldn't be attached to the fielddata -> think about this
+        y_matvec = linsolve_expr.fielddata.arrays['y_matvec']
+        x_matvec = linsolve_expr.fielddata.arrays['x_matvec']
 
         mat_get_dm = petsc_call('MatGetDM', [solver_objs['Jac'], Byref(dmda)])
 
@@ -219,9 +233,9 @@ class CallbackBuilder:
 
     def _make_formfunc(self, injectsolve, objs, solver_objs):
         # Compile formfunc `eqns` into an IET via recursive compilation
+        formfuncs = injectsolve.expr.rhs.fielddata.formfuncs
         irs_formfunc, _ = self.rcompile(
-            injectsolve.expr.rhs.formfuncs,
-            options={'mpi': False}, sregistry=self.sregistry
+            formfuncs, options={'mpi': False}, sregistry=self.sregistry
         )
         body_formfunc = self._create_formfunc_body(injectsolve,
                                                    List(body=irs_formfunc.uiet.body),
@@ -245,8 +259,8 @@ class CallbackBuilder:
 
         fields = self._dummy_fields(body, solver_objs)
 
-        f_formfunc = linsolve_expr.arrays['f_formfunc']
-        x_formfunc = linsolve_expr.arrays['x_formfunc']
+        f_formfunc = linsolve_expr.fielddata.arrays['f_formfunc']
+        x_formfunc = linsolve_expr.fielddata.arrays['x_formfunc']
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
@@ -349,8 +363,10 @@ class CallbackBuilder:
 
     def _make_formrhs(self, injectsolve, objs, solver_objs):
         # Compile formrhs `eqns` into an IET via recursive compilation
-        irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
-                                       options={'mpi': False}, sregistry=self.sregistry)
+        formrhs = injectsolve.expr.rhs.fielddata.formrhs
+        irs_formrhs, _ = self.rcompile(
+            formrhs, options={'mpi': False}, sregistry=self.sregistry
+        )
         body_formrhs = self._create_formrhs_body(injectsolve,
                                                  List(body=irs_formrhs.uiet.body),
                                                  solver_objs, objs)
@@ -371,7 +387,7 @@ class CallbackBuilder:
 
         snes_get_dm = petsc_call('SNESGetDM', [solver_objs['snes'], Byref(dmda)])
 
-        b_arr = linsolve_expr.arrays['b_tmp']
+        b_arr = linsolve_expr.fielddata.arrays['b_tmp']
 
         vec_get_array = petsc_call(
             'VecGetArray', [solver_objs['b_local'], Byref(b_arr._C_symbol)]
@@ -480,6 +496,11 @@ class CallbackBuilder:
         return mapper
 
 
+class CCBBuilder(CBBuilder):
+    def _make_core(self, injectsolve, objs, solver_objs):
+        pass
+
+
 class BaseObjectBuilder:
     """
     A base class for constructing objects needed for a PETSc solver.
@@ -489,6 +510,7 @@ class BaseObjectBuilder:
 
     def __init__(self, injectsolve, sregistry=None, **kwargs):
         self.sregistry = sregistry
+        self.fielddata = injectsolve.expr.rhs.fielddata
         self.solver_objs = self._build(injectsolve)
 
     def _build(self, injectsolve):
@@ -524,7 +546,6 @@ class BaseObjectBuilder:
                 - 'callbackdm' (CallbackDM): The DM object accessed within callback
                    functions via `SNESGetDM`.
         """
-        target = injectsolve.expr.rhs.target
         sreg = self.sregistry
         base_dict = {
             'Jac': Mat(sreg.make_name(prefix='J_')),
@@ -542,13 +563,24 @@ class BaseObjectBuilder:
             'X_global': GlobalVec(sreg.make_name(prefix='X_global_')),
             'X_local': LocalVec(sreg.make_name(prefix='X_local_'), liveness='eager'),
             'localsize': PetscInt(sreg.make_name(prefix='localsize_')),
-            'start_ptr': StartPtr(sreg.make_name(prefix='start_ptr_'), target.dtype),
             'dmda': DM(sreg.make_name(prefix='da_'), liveness='eager',
-                       stencil_width=target.space_order),
-            'callbackdm': CallbackDM(sreg.make_name(prefix='dm_'),
-                                     liveness='eager', stencil_width=target.space_order),
+                       stencil_width=self.fielddata.space_order),
+            'callbackdm': CallbackDM(
+                sreg.make_name(prefix='dm_'), liveness='eager',
+                stencil_width=self.fielddata.space_order
+            ),
         }
+        base_dict = self._per_target(base_dict)
         return self._extend_build(base_dict, injectsolve)
+
+    def _per_target(self, base_dict):
+        sreg = self.sregistry
+        targets = self.fielddata.targets
+        for target in targets:
+            base_dict[target.name+'_ptr'] = StartPtr(
+                sreg.make_name(prefix='%s_ptr' % target.name), target.dtype
+            )
+        return base_dict
 
     def _extend_build(self, base_dict, injectsolve):
         """
@@ -558,8 +590,22 @@ class BaseObjectBuilder:
         return base_dict
 
 
+class CoupledObjectBuilder(BaseObjectBuilder):
+    def _extend_build(self, base_dict, injectsolve):
+        # TODO: add a no_of_targets attribute to the FieldData object
+        no_targets = len(self.fielddata.targets)
+        base_dict['fields'] = IS(
+            name=self.sregistry.make_name(prefix='fields_'), nindices=no_targets
+            )
+        base_dict['subdms'] = SubDM(
+            name=self.sregistry.make_name(prefix='subdms_'), nsubdms=no_targets
+            )
+        return base_dict
+
+
 class BaseSetup:
     def __init__(self, solver_objs, objs, injectsolve, cbbuilder):
+        self.injectsolve = injectsolve
         self.calls = self._setup(solver_objs, objs, injectsolve, cbbuilder)
 
     def _setup(self, solver_objs, objs, injectsolve, cbbuilder):
@@ -692,7 +738,7 @@ class BaseSetup:
             args.extend(list(grid.distributor.topology)[::-1])
 
         # Number of degrees of freedom per node
-        args.append(1)
+        args.append(self.dof_per_node)
         # "Stencil width" -> size of overlap
         args.append(dmda.stencil_width)
         args.extend([Null]*nspace_dims)
@@ -704,6 +750,122 @@ class BaseSetup:
         dmda = petsc_call('DMDACreate%sd' % nspace_dims, args)
 
         return dmda
+
+    @property
+    def dof_per_node(self):
+        return 1
+
+
+class CoupledSetup(BaseSetup):
+
+    # TODO: don't actually need to override this, just overriding for purposes of debugging
+    #/ engineering the coupled solvers
+    def _setup(self, solver_objs, objs, injectsolve, cbbuilder):
+        dmda = solver_objs['dmda']
+
+        solver_params = injectsolve.expr.rhs.solver_parameters
+
+        snes_create = petsc_call('SNESCreate', [objs['comm'], Byref(solver_objs['snes'])])
+
+        snes_set_dm = petsc_call('SNESSetDM', [solver_objs['snes'], dmda])
+
+        create_matrix = petsc_call('DMCreateMatrix', [dmda, Byref(solver_objs['Jac'])])
+
+        # NOTE: Assuming all solves are linear for now.
+        snes_set_type = petsc_call('SNESSetType', [solver_objs['snes'], 'SNESKSPONLY'])
+
+        snes_set_jac = petsc_call(
+            'SNESSetJacobian', [solver_objs['snes'], solver_objs['Jac'],
+                                solver_objs['Jac'], 'MatMFFDComputeJacobian', Null]
+        )
+
+        global_x = petsc_call('DMCreateGlobalVector',
+                              [dmda, Byref(solver_objs['x_global'])])
+
+        global_b = petsc_call('DMCreateGlobalVector',
+                              [dmda, Byref(solver_objs['b_global'])])
+
+        local_b = petsc_call('DMCreateLocalVector',
+                             [dmda, Byref(solver_objs['b_local'])])
+
+        snes_get_ksp = petsc_call('SNESGetKSP',
+                                  [solver_objs['snes'], Byref(solver_objs['ksp'])])
+
+        ksp_set_tols = petsc_call(
+            'KSPSetTolerances', [solver_objs['ksp'], solver_params['ksp_rtol'],
+                                 solver_params['ksp_atol'], solver_params['ksp_divtol'],
+                                 solver_params['ksp_max_it']]
+        )
+
+        ksp_set_type = petsc_call(
+            'KSPSetType', [solver_objs['ksp'], solver_mapper[solver_params['ksp_type']]]
+        )
+
+        ksp_get_pc = petsc_call(
+            'KSPGetPC', [solver_objs['ksp'], Byref(solver_objs['pc'])]
+        )
+
+        # Even though the default will be jacobi, set to PCNONE for now
+        pc_set_type = petsc_call('PCSetType', [solver_objs['pc'], 'PCNONE'])
+
+        ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
+
+        # matvec_operation = petsc_call(
+        #     'MatShellSetOperation',
+        #     [solver_objs['Jac'], 'MATOP_MULT',
+        #      MatVecCallback(cbbuilder.matvec_callback.name, void, void)]
+        # )
+
+        # formfunc_operation = petsc_call(
+        #     'SNESSetFunction',
+        #     [solver_objs['snes'], Null,
+        #      FormFunctionCallback(cbbuilder.formfunc_callback.name, void, void), Null]
+        # )
+
+        dmda_calls = self._create_dmda_calls(dmda, objs)
+
+        mainctx = solver_objs['mainctx']
+
+        call_struct_callback = petsc_call(
+            cbbuilder.struct_callback.name, [Byref(mainctx)]
+        )
+        calls_set_app_ctx = [
+            petsc_call('DMSetApplicationContext', [dmda, Byref(mainctx)])
+        ]
+        calls = [call_struct_callback] + calls_set_app_ctx
+
+        base_setup = dmda_calls + (
+            snes_create,
+            snes_set_dm,
+            create_matrix,
+            snes_set_jac,
+            snes_set_type,
+            global_x,
+            global_b,
+            local_b,
+            snes_get_ksp,
+            ksp_set_tols,
+            ksp_set_type,
+            ksp_get_pc,
+            pc_set_type,
+            ksp_set_from_ops,
+            # matvec_operation,
+            # formfunc_operation,
+        ) + tuple(calls)
+
+        extended_setup = self._extend_setup(solver_objs, objs, injectsolve, cbbuilder)
+        return base_setup + tuple(extended_setup) + (BlankLine,)
+
+    @property
+    def dof_per_node(self):
+        return len(self.injectsolve.expr.rhs.fielddata.targets)
+
+    def _extend_setup(self, solver_objs, objs, injectsolve, cbbuilder):
+        dmda = solver_objs['dmda']
+        create_field_decomp = petsc_call(
+            'DMCreateFieldDecomposition', [dmda, Null, Null, Byref(solver_objs['fields']), Byref(solver_objs['subdms'])]
+            )
+        return [create_field_decomp]
 
 
 class Solver:
@@ -773,6 +935,56 @@ class Solver:
         return spatial_body
 
 
+class CoupledSolver(Solver):
+    # NOTE: note this is obvs for debugging, shouldn't acc need to override this whole function
+    def _execute_solve(self, solver_objs, objs, injectsolve, iters, cbbuilder):
+        """
+        Assigns the required time iterators to the struct and executes
+        the necessary calls to execute the SNES solver.
+        """
+        struct_assignment = self.timedep.assign_time_iters(solver_objs['mainctx'])
+
+        rhs_callback = cbbuilder.formrhs_callback
+
+        dmda = solver_objs['dmda']
+
+        # rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
+
+        local_x = petsc_call('DMCreateLocalVector',
+                             [dmda, Byref(solver_objs['x_local'])])
+
+        vec_replace_array = self.timedep.replace_array(solver_objs)
+
+        dm_local_to_global_x = petsc_call(
+            'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',
+                                solver_objs['x_global']]
+        )
+
+        dm_local_to_global_b = petsc_call(
+            'DMLocalToGlobal', [dmda, solver_objs['b_local'], 'INSERT_VALUES',
+                                solver_objs['b_global']]
+        )
+
+        snes_solve = petsc_call('SNESSolve', [
+            solver_objs['snes'], solver_objs['b_global'], solver_objs['x_global']]
+        )
+
+        dm_global_to_local_x = petsc_call('DMGlobalToLocal', [
+            dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
+        )
+
+        run_solver_calls = (struct_assignment,) + (
+            local_x,
+        ) + vec_replace_array + (
+            dm_local_to_global_x,
+            dm_local_to_global_b,
+            snes_solve,
+            dm_global_to_local_x,
+            BlankLine,
+        )
+        return List(body=run_solver_calls)
+
+
 class NonTimeDependent:
     def __init__(self, injectsolve, iters, **kwargs):
         self.injectsolve = injectsolve
@@ -786,8 +998,10 @@ class NonTimeDependent:
         return False
 
     @property
-    def target(self):
-        return self.injectsolve.expr.rhs.target
+    # TODO: for coupled solves, could have a case where one function is a TimeFunction
+    # but the other is a Function, but they both depend on time.
+    def targets(self):
+        return self.injectsolve.expr.rhs.fielddata.targets
 
     def _origin_to_moddim_mapper(self, iters):
         return {}
@@ -812,13 +1026,16 @@ class NonTimeDependent:
         >>> print(call)
         PetscCall(VecReplaceArray(x_local_0,f1_vec->data));
         """
-        field_from_ptr = FieldFromPointer(
-            self.target.function._C_field_data, self.target.function._C_symbol
-        )
-        vec_replace_array = (petsc_call(
-            'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
-        ),)
-        return vec_replace_array
+        to_replace = []
+        for target in self.targets:
+            field_from_ptr = FieldFromPointer(
+                target.function._C_field_data, target.function._C_symbol
+            )
+            vec_replace_array = (petsc_call(
+                'VecReplaceArray', [solver_objs['x_local'], field_from_ptr]
+            ),)
+            to_replace.extend(vec_replace_array)
+        return tuple(to_replace)
 
     def assign_time_iters(self, struct):
         return []

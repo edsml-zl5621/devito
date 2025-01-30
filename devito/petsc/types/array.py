@@ -2,7 +2,7 @@ from functools import cached_property
 from ctypes import POINTER
 
 from devito.types.utils import DimensionTuple
-from devito.types.array import ArrayBasic
+from devito.types.array import ArrayBasic, Array
 from devito.finite_differences import Differentiable
 from devito.types.basic import AbstractFunction
 from devito.finite_differences.tools import fd_weights_registry
@@ -118,3 +118,15 @@ class PETScArray(ArrayBasic, Differentiable):
             FieldFromComposite('g%sm' % d.name, self.localinfo) for d in self.dimensions]
         # Reverse it since DMDA is setup backwards to Devito dimensions.
         return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
+
+
+# class IS(Array):
+#     # @property
+#     # def symbolic_shape(self):
+#     #     field_from_composites = ['4' for d in self.dimensions]
+#     #     # Reverse it since DMDA is setup backwards to Devito dimensions.
+#     #     return DimensionTuple(*field_from_composites[::-1], getters=self.dimensions)
+#     pass
+
+# class SubDM(Array):
+#     pass
