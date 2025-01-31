@@ -83,8 +83,7 @@ class LinearSolveExpr(SolveExpr):
 
     def __eq__(self, other):
         return (isinstance(other, LinearSolveExpr) and
-                self.expr == other.expr and
-                self.target == other.target)
+                self.expr == other.expr)
 
     @property
     def expr(self):

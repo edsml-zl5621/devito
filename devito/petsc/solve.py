@@ -49,6 +49,7 @@ class InjectSolve:
 
     def generate_field_data(self, eqns, target, time_mapper):
         # TODO: change these names
+        # TODO: fielddata needs to extend/change to be a data per submatrix, i.e a list of matvecs, formfuncs, formrhs etc for each submatrix with a label /indexsert identifying it's location in the larger Jacobian
         prefixes = ['y_matvec', 'x_matvec', 'f_formfunc', 'x_formfunc', 'b_tmp']
 
         arrays = {

@@ -257,6 +257,11 @@ class ArrayObject(ArrayBasic):
     def _C_ctype(self):
         return self.dtype
 
+    # @property
+    # def _C_ctype(self):
+    #     import ctypes
+    #     return ctypes.c_int
+
     @property
     def fields(self):
         return self._fields
