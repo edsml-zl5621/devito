@@ -1072,7 +1072,8 @@ class Dereference(ExprStmt, Node):
             ret.extend(flatten(i.free_symbols for i in self.pointee.symbolic_shape[1:]))
             ret.extend(self.pointer.free_symbols)
         else:
-            assert issubclass(self.pointer._C_ctype, ctypes._Pointer)
+            # from IPython import embed; embed()
+            # assert issubclass(self.pointer._C_ctype, ctypes._Pointer)
             ret.extend([self.pointer._C_symbol, self.pointee._C_symbol])
         return tuple(filter_ordered(ret))
 

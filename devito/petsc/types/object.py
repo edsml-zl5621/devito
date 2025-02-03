@@ -176,9 +176,9 @@ class PETScStruct(CCompositeObject):
 
     __rargs__ = ('name', 'pname', 'fields')
 
-    def __init__(self, name, pname, fields, liveness='lazy'):
+    def __init__(self, name, pname, fields, modifier=None, liveness='lazy'):
         pfields = [(i._C_name, i._C_ctype) for i in fields]
-        super().__init__(name, pname, pfields, liveness)
+        super().__init__(name, pname, pfields, modifier, liveness)
         self._fields = fields
 
     @property
@@ -203,14 +203,22 @@ class PETScStruct(CCompositeObject):
         return [f for f in self.fields if f not in self.time_dim_fields]
 
     # TODO: reevaluate this, does it even ever go here?
-    @property
-    def _C_ctype(self):
-        # from IPython import embed; embed()
-        return POINTER(self.dtype) if self.liveness == \
-            'eager' else self.dtype
+    # @property
+    # def _C_ctype(self):
+    #     # from IPython import embed; embed()
+    #     return POINTER(self.dtype) if self.liveness == \
+    #         'eager' else self.dtype
 
     _C_modifier = ' *'
 
+
+    @property
+    def _fields_(self):
+        return [(i._C_name, i._C_ctype) for i in self.fields]
+
+    @property
+    def __name__(self):
+        return self.name
 
 class StartPtr(LocalObject):
     def __init__(self, name, dtype):
@@ -316,10 +324,6 @@ class SubDM(ArrayObject):
     @property
     def _mem_stack(self):
         return False
-
-    @property
-    def _C_ctype(self):
-        return ctypes.c_void_p
 
     # NOTE ADD THE FUNCTIONALITY SO THAT ARRAYOBJECTS CAN BE DESTROYED .. or re-think this class
     @property

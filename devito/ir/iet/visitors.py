@@ -24,7 +24,7 @@ from devito.tools import (GenericVisitor, as_tuple, ctypes_to_cstr, filter_order
                           c_restrict_void_p, sorted_priority)
 from devito.types.basic import AbstractFunction, Basic
 from devito.types import (ArrayObject, CompositeObject, Dimension, Pointer,
-                          IndexedData, DeviceMap)
+                          IndexedData, DeviceMap, CCompositeObject)
 
 
 __all__ = ['FindApplications', 'FindNodes', 'FindSections', 'FindSymbols',
@@ -193,14 +193,19 @@ class CGen(Visitor):
         Convert ctypes.Struct -> cgen.Structure.
         """
         ctype = obj._C_ctype
-        try:
-            while issubclass(ctype, ctypes._Pointer):
-                ctype = ctype._type_
 
-            if not issubclass(ctype, ctypes.Structure):
-                return None
+        try:
+            # Unwrap pointers safely without a while loop
+            if isinstance(ctype, ctypes._Pointer):
+                ctype = getattr(ctype, "_type_", ctype)  # Avoid errors if _type_ is missing
+
+            # Ensure ctype is a class before using issubclass
+            if not isinstance(ctype, type) or not issubclass(ctype, ctypes.Structure):
+                if isinstance(obj, CCompositeObject):
+                    ctype = obj  # Handle CCompositeObject case
+                else:
+                    return None
         except TypeError:
-            # E.g., `ctype` is of type `dtypes_lowering.CustomDtype`
             return None
 
         try:
@@ -647,7 +652,6 @@ class CGen(Visitor):
 
     def _operator_typedecls(self, o, mode='all'):
         xfilter0 = lambda i: self._gen_struct_decl(i) is not None
-
         if mode == 'all':
             xfilter1 = xfilter0
         else:
@@ -659,18 +663,23 @@ class CGen(Visitor):
 
         # This is essentially to rule out vector types which are declared already
         # in some external headers
-        xfilter = lambda i: (xfilter1(i) and
-                             not is_external_ctype(i._C_ctype, o._includes))
+        # xfilter = lambda i: (xfilter1(i) and
+        #                      not is_external_ctype(i._C_ctype, o._includes))
+        xfilter = lambda i: xfilter1(i)
 
         candidates = o.parameters + tuple(o._dspace.parts)
         typedecls = [self._gen_struct_decl(i) for i in candidates if xfilter(i)]
+        # NOTE: the only reason my petsc structs appeared (previously) is because they were args to the populate callback
+        # but they won'y appear in the ccode as structs if they weren't args to the populate callback
         for i in o._func_table.values():
             if not i.local:
                 continue
+            # tmp = [j for j in i.root.parameters if xfilter(j)]
+            # from IPython import embed; embed()
             typedecls.extend([self._gen_struct_decl(j) for j in i.root.parameters
                               if xfilter(j)])
         typedecls = filter_sorted(typedecls, key=lambda i: i.tpname)
-
+        # from IPython import embed; embed()
         return typedecls
 
     def _operator_globals(self, o, mode='all'):
@@ -716,7 +725,7 @@ class CGen(Visitor):
         if mode in ('all', 'public') and o._compiler.src_ext in ('cpp', 'cu'):
             typedecls.append(c.Extern('C', signature))
         typedecls = [i for j in typedecls for i in (j, blankline)]
-
+        # from IPython import embed; embed()
         # Global variables
         globs = self._operator_globals(o, mode)
         if globs:

@@ -1,7 +1,7 @@
 from ctypes import byref
 import sympy
 
-from devito.tools import Pickable, as_tuple, sympy_mutex
+from devito.tools import Pickable, as_tuple, sympy_mutex, CustomDtype
 from devito.types.args import ArgProvider
 from devito.types.caching import Uncached
 from devito.types.basic import Basic, LocalType
@@ -249,11 +249,17 @@ class CCompositeObject(CompositeObject, LocalType):
 
     __rargs__ = ('name', 'pname', 'pfields')
 
-    def __init__(self, name, pname, pfields, liveness='lazy'):
-        super().__init__(name, pname, pfields)
+    def __init__(self, name, pname, pfields, modifier=None, liveness='lazy'):
+        # TODO: HAVE A SEPARATE PETSC struct for the ones that appear inside callback functions
+        # to make sure the * appears
+        dtype = CustomDtype('struct %s' % pname, modifier=modifier)
+        Object.__init__(self, name, dtype, None)
+        self._pname = pname
+        # TODO: not sure if I really need the liveness
         assert liveness in ['eager', 'lazy']
         self._liveness = liveness
 
     @property
-    def dtype(self):
-        return self._dtype._type_
+    def _fields_(self):
+        return self.fields
+

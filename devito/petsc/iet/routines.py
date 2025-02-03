@@ -13,7 +13,7 @@ from devito.types.basic import AbstractFunction
 from devito.types import Temp, Symbol, CustomDimension
 from devito.tools import filter_ordered
 
-from devito.petsc.types import PETScArray
+from devito.petsc.types import PETScArray, PETScStruct
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatShellSetOp, InjectSolveDummy)
 from devito.petsc.iet.utils import petsc_call, petsc_struct
@@ -45,8 +45,6 @@ class CBBuilder:
         self._formrhs_callback = None
         self._struct_callback = None
 
-        # TODO: do i really need to pass solver_objs through like tihs?
-        # can;t i just access it like self.solver_objs
         self._make_core()
         self._main_struct()
         self._make_struct_callback()
@@ -594,7 +592,7 @@ class CCBBuilder(CBBuilder):
         cb = Callable(
             self.sregistry.make_name(prefix='PopulateCoupledContext_'),
             body, self.objs['err'],
-            parameters=[coupled_ctx]
+            parameters=[coupled_ctx]+coupled_ctx.callback_fields
         )
         self._efuncs[cb.name] = cb
         self._coupled_struct_callback = cb
@@ -707,16 +705,28 @@ class CoupledObjectBuilder(BaseObjectBuilder):
 
         # fields = [base_dict['n_submats'], base_dict['subdms'], base_dict['snes']]
         # from IPython import embed; embed()
-        fields = [injectsolve.expr.rhs.fielddata.targets[0].grid.spacing_symbols[0]]
-        base_dict['jacctx'] = petsc_struct('whole_jac',
-            fields,
-            'JacobianContext',
+        # fields = [injectsolve.expr.rhs.fielddata.targets[0].grid.spacing_symbols[0]]
+        fields = [base_dict['snes']]
+
+        # base_dict['jacctx'] = petsc_struct('whole_jac',
+        #     fields,
+        #     'JacobianContext',
+        # )
+        # base_dict['ljacctx'] = petsc_struct('whole_jac_local',
+        #     fields,
+        #     'JacobianContext',
+        #     liveness='eager'
+        # )
+        #  TODO: use petsc_struct -> adapt it
+        base_dict['jacctx'] = PETScStruct(
+            name='whole_jac', pname='JacobianContext',
+            fields=fields, liveness='lazy'
         )
-        base_dict['ljacctx'] = petsc_struct('whole_jac_local',
-            fields,
-            'JacobianContext',
-            liveness='eager'
+        base_dict['ljacctx'] = PETScStruct(
+            name='whole_jac_local', pname='JacobianContext',
+            fields=fields, modifier=' *', liveness='eager'
         )
+        # from IPython import embed; embed()
         return base_dict
 
 
@@ -992,11 +1002,11 @@ class CoupledSetup(BaseSetup):
         ffps = [DummyExpr(FieldFromComposite(i._C_symbol, solver_objs['jacctx']), i._C_symbol) for i in solver_objs['jacctx'].fields]
         # ffps
         shell_set_ctx = petsc_call('MatShellSetContext', [solver_objs['Jac'], Byref(solver_objs['jacctx']._C_symbol)])
-
+        
         call_coupled_struct_callback = petsc_call(
-            cbbuilder.coupled_struct_callback.name, [Byref(solver_objs['jacctx'])]
+            cbbuilder.coupled_struct_callback.name, [Byref(solver_objs['jacctx'])] + solver_objs['jacctx'].fields
         )
-        return [create_field_decomp, matop_create_submats_op] + ffps + [call_coupled_struct_callback, shell_set_ctx]
+        return [create_field_decomp, matop_create_submats_op] + [call_coupled_struct_callback, shell_set_ctx]
 
 
 class Solver:
