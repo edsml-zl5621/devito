@@ -19,7 +19,7 @@ from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
 from devito.petsc.iet.utils import petsc_call, petsc_struct
 from devito.petsc.utils import solver_mapper
 from devito.petsc.types import (DM, CallbackDM, Mat, LocalVec, GlobalVec, KSP, PC,
-                                SNES, DummyArg, PetscInt, StartPtr, IS, SubDM, SubMats)
+                                SNES, DummyArg, PetscInt, StartPtr, SingleIS, IS, SubDM, SubMats)
 
 
 class CBBuilder:
@@ -593,9 +593,11 @@ class CCBBuilder(CBBuilder):
 
         deref_subdm = Dereference(sobjs['subdms'], sobjs['ljacctx'])
 
-        set_dm = DummyExpr(sobjs['dm'], sobjs['subdms'])
+        set_dm = DummyExpr(FieldFromPointer(sobjs['subdm'], sobjs['submat_ctx']), sobjs['subdms'].indexed[sobjs['row_idx']])
+        # fix:todo: the SUBMAT_CTX doesn't appear in the ccode because it's not an argument to any function -> fix this in the cgen structure code
+        set_rows = DummyExpr(FieldFromPointer(sobjs['rows'], sobjs['submat_ctx']), Byref(sobjs['all_IS_rows'].indexed[sobjs['row_idx']]))
 
-        iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type, malloc, row_idx, col_idx, set_dm]), i, sobjs['n_submats']-1)
+        iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type, malloc, row_idx, col_idx, set_dm, set_rows]), i, sobjs['n_submats']-1)
 
 
         body = [mat_get_dm, dm_get_info, subblock_rows, subblock_cols, BlankLine, iteration]
@@ -765,8 +767,14 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         base_dict['subblockrows'] = PetscInt(self.sregistry.make_name(prefix='subblockrows_'))
         base_dict['subblockcols'] = PetscInt(self.sregistry.make_name(prefix='subblockcols_'))
 
-        base_dict['rows'] = IS(name=self.sregistry.make_name(prefix='rows_'), nindices=no_targets)
-        base_dict['cols'] = IS(name=self.sregistry.make_name(prefix='cols_'), nindices=no_targets)
+        base_dict['all_IS_rows'] = IS(name=self.sregistry.make_name(prefix='allrows_'), nindices=no_targets)
+        base_dict['all_IS_cols'] = IS(name=self.sregistry.make_name(prefix='allcols_'), nindices=no_targets)
+
+        # the single IS rows owned by each submatrix
+        base_dict['rows'] = SingleIS(name=self.sregistry.make_name(prefix='rows_'))
+        base_dict['cols'] = SingleIS(name=self.sregistry.make_name(prefix='cols_'))
+
+
         # probably can just use the existing 'callbackdm'
         base_dict['subdm'] = DM(self.sregistry.make_name(prefix='subdm_'), liveness='eager')
 
@@ -778,6 +786,7 @@ class CoupledObjectBuilder(BaseObjectBuilder):
 
         base_dict['row_idx'] = PetscInt(self.sregistry.make_name(prefix='row_idx_'))
         base_dict['col_idx'] = PetscInt(self.sregistry.make_name(prefix='col_idx_'))
+        
         return base_dict
 
 

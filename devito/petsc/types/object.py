@@ -229,6 +229,13 @@ class StartPtr(LocalObject):
 
 
 
+class SingleIS(LocalObject):
+    """
+    """
+    dtype = CustomDtype('IS')
+
+
+
 ################################### rethink ALL BELOW since they are just ptrs to already exisiting classes e.g Mat *submats....
 # need to be able to index them though etc...
 # TODO may have to re-think this, not sure if quite right -> CREATE A BASE CLASS FOR 
