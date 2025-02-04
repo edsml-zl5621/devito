@@ -211,14 +211,14 @@ class PETScStruct(CCompositeObject):
 
     _C_modifier = ' *'
 
-
     @property
     def _fields_(self):
         return [(i._C_name, i._C_ctype) for i in self.fields]
 
+    # IMPROVE: this is because of the use inside iet/visitors struct decl 
     @property
     def __name__(self):
-        return self.name
+        return self.pname
 
 class StartPtr(LocalObject):
     def __init__(self, name, dtype):

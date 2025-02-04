@@ -21,7 +21,7 @@ from devito.symbolics import (FieldFromComposite, FieldFromPointer,
                               ListInitializer, ccode, uxreplace)
 from devito.tools import (GenericVisitor, as_tuple, ctypes_to_cstr, filter_ordered,
                           filter_sorted, flatten, is_external_ctype,
-                          c_restrict_void_p, sorted_priority)
+                          c_restrict_void_p, sorted_priority, CustomDtype)
 from devito.types.basic import AbstractFunction, Basic
 from devito.types import (ArrayObject, CompositeObject, Dimension, Pointer,
                           IndexedData, DeviceMap, CCompositeObject)
@@ -195,18 +195,20 @@ class CGen(Visitor):
         ctype = obj._C_ctype
 
         try:
-            # Unwrap pointers safely without a while loop
-            if isinstance(ctype, ctypes._Pointer):
-                ctype = getattr(ctype, "_type_", ctype)  # Avoid errors if _type_ is missing
+            while issubclass(ctype, ctypes._Pointer):
+                ctype = ctype._type_
 
-            # Ensure ctype is a class before using issubclass
-            if not isinstance(ctype, type) or not issubclass(ctype, ctypes.Structure):
-                if isinstance(obj, CCompositeObject):
-                    ctype = obj  # Handle CCompositeObject case
-                else:
-                    return None
+            if not issubclass(ctype, ctypes.Structure):
+                return None
         except TypeError:
-            return None
+            # E.g., `ctype` is of type `dtypes_lowering.CustomDtype`
+            pass
+
+        if isinstance(ctype, CustomDtype):
+            if isinstance(obj, CCompositeObject):
+                ctype = obj
+            else:
+                return None
 
         try:
             return obj._C_typedecl

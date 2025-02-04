@@ -5,12 +5,12 @@ import numpy as np
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference, DummyExpr, BlankLine, Callable, FindNodes,
-                           retrieve_iteration_tree, filter_iterations)
+                           retrieve_iteration_tree, filter_iterations, Iteration)
 from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
                               FieldFromComposite)
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
-from devito.types import Temp, Symbol, CustomDimension
+from devito.types import Temp, Symbol, CustomDimension, Dimension
 from devito.tools import filter_ordered
 
 from devito.petsc.types import PETScArray, PETScStruct
@@ -461,12 +461,14 @@ class CBBuilder:
         usually accessed via DMGetApplicationContext.
         """
         # from IPython import embed; embed()
+        # TODO: can probs drop liveness now?
         localctx = petsc_struct(
             dummyctx.name,
             self.filtered_struct_params['J00'],
             self.solver_objs['Jac'].name+'_ctx',
-            liveness='eager'
+            liveness='eager', modifier=' *'
         )
+        # localctx = PETScStruct(localctx.name, localctx.dtype, localctx.value)
         return localctx
 
     def _main_struct(self):
@@ -509,6 +511,7 @@ class CBBuilder:
         return fields
 
     def _uxreplace_efuncs(self):
+        # from IPython import embed; embed()
         lstruct = self.local_struct()
         mapper = {}
         visitor = Uxreplace({dummyctx: lstruct})
@@ -568,10 +571,24 @@ class CCBBuilder(CBBuilder):
     # TODO: obvs improve these names
     def _create_submat_callback_body(self):
         sobjs = self.solver_objs
-        malloc = petsc_call('PetscMalloc1', [sobjs['n_submats'], sobjs['submats']])
+
+        mat_get_dm = petsc_call('MatGetDM', [sobjs['Jac'], Byref(sobjs['callbackdm'])])
+
         shell_get_ctx = petsc_call('MatShellGetContext', [sobjs['Jac'], sobjs['ljacctx']._C_symbol])
 
-        body = [malloc, shell_get_ctx]
+        dm_get_info = petsc_call('DMGetInfo', [sobjs['callbackdm'], Null, Byref(sobjs['M']), Byref(sobjs['N']), Null, Null, Null, Null, Byref(sobjs['dof']), Null, Null, Null, Null, Null])
+        
+        subblock_rows = DummyExpr(sobjs['subblockrows'], Mul(sobjs['M'], sobjs['N']))
+        subblock_cols = DummyExpr(sobjs['subblockcols'], Mul(sobjs['M'], sobjs['N']))
+
+        mat_create = petsc_call('MatCreate', [self.objs['comm'], Byref(sobjs['block'])])
+        mat_set_sizes = petsc_call('MatSetSizes', [sobjs['block'], 'PETSC_DECIDE', 'PETSC_DECIDE', sobjs['subblockrows'], sobjs['subblockcols']])
+        mat_set_type = petsc_call('MatSetType', [sobjs['block'], 'MATSHELL'])
+
+        i = Dimension(name='i')
+        iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type]), i, sobjs['n_submats']-1)
+
+        body = [mat_get_dm, shell_get_ctx, dm_get_info, subblock_rows, subblock_cols, BlankLine, iteration]
         body = CallableBody(
             List(body=tuple(body)),
             init=(petsc_func_begin_user,),
@@ -699,14 +716,15 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         base_dict['subdms'] = SubDM(
             name=self.sregistry.make_name(prefix='subdms_'), nindices=no_targets
             )
-        base_dict['n_submats'] = PetscInt(self.sregistry.make_name(prefix='n_submats_'))
+        # CHANGE THIS TO PETSCINT
+        base_dict['n_submats'] = Symbol(self.sregistry.make_name(prefix='n_submats_'), dtype=np.int32)
         base_dict['submats'] = SubMats(name=self.sregistry.make_name(prefix='submats_'),
                                        nindices=no_targets*no_targets)
 
-        # fields = [base_dict['n_submats'], base_dict['subdms'], base_dict['snes']]
+        fields = [base_dict['n_submats'], base_dict['subdms'], base_dict['fields'], base_dict['snes']]
         # from IPython import embed; embed()
         # fields = [injectsolve.expr.rhs.fielddata.targets[0].grid.spacing_symbols[0]]
-        fields = [base_dict['snes']]
+        # fields = [base_dict['snes']]
 
         # base_dict['jacctx'] = petsc_struct('whole_jac',
         #     fields,
@@ -726,7 +744,15 @@ class CoupledObjectBuilder(BaseObjectBuilder):
             name='whole_jac_local', pname='JacobianContext',
             fields=fields, modifier=' *', liveness='eager'
         )
+
+        # global submatrix sizes
+        base_dict['M'] = PetscInt(self.sregistry.make_name(prefix='M_'))
+        base_dict['N'] = PetscInt(self.sregistry.make_name(prefix='N_'))
         # from IPython import embed; embed()
+        base_dict['dof'] = PetscInt(self.sregistry.make_name(prefix='dof_'))
+        base_dict['block'] = Mat(self.sregistry.make_name(prefix='block_'))
+        base_dict['subblockrows'] = PetscInt(self.sregistry.make_name(prefix='subblockrows_'))
+        base_dict['subblockcols'] = PetscInt(self.sregistry.make_name(prefix='subblockcols_'))
         return base_dict
 
 
