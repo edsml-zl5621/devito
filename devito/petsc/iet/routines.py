@@ -7,7 +7,7 @@ from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference, DummyExpr, BlankLine, Callable, FindNodes,
                            retrieve_iteration_tree, filter_iterations, Iteration)
 from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
-                              FieldFromComposite)
+                              FieldFromComposite, IntDiv, Mod)
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import Temp, Symbol, CustomDimension, Dimension
@@ -574,7 +574,7 @@ class CCBBuilder(CBBuilder):
 
         mat_get_dm = petsc_call('MatGetDM', [sobjs['Jac'], Byref(sobjs['callbackdm'])])
 
-        shell_get_ctx = petsc_call('MatShellGetContext', [sobjs['Jac'], sobjs['ljacctx']._C_symbol])
+        shell_get_ctx = petsc_call('MatShellGetContext', [sobjs['Jac'], Byref(sobjs['ljacctx']._C_symbol)])
 
         dm_get_info = petsc_call('DMGetInfo', [sobjs['callbackdm'], Null, Byref(sobjs['M']), Byref(sobjs['N']), Null, Null, Null, Null, Byref(sobjs['dof']), Null, Null, Null, Null, Null])
         
@@ -585,13 +585,24 @@ class CCBBuilder(CBBuilder):
         mat_set_sizes = petsc_call('MatSetSizes', [sobjs['block'], 'PETSC_DECIDE', 'PETSC_DECIDE', sobjs['subblockrows'], sobjs['subblockcols']])
         mat_set_type = petsc_call('MatSetType', [sobjs['block'], 'MATSHELL'])
 
+        malloc = petsc_call('PetscMalloc', [1, Byref(sobjs['submat_ctx'])])
         i = Dimension(name='i')
-        iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type]), i, sobjs['n_submats']-1)
 
-        body = [mat_get_dm, shell_get_ctx, dm_get_info, subblock_rows, subblock_cols, BlankLine, iteration]
+        row_idx = DummyExpr(sobjs['row_idx'], IntDiv(i, sobjs['dof']))
+        col_idx = DummyExpr(sobjs['col_idx'], Mod(i, sobjs['dof']))
+
+        deref_subdm = Dereference(sobjs['subdms'], sobjs['ljacctx'])
+
+        set_dm = DummyExpr(sobjs['dm'], sobjs['subdms'])
+
+        iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type, malloc, row_idx, col_idx, set_dm]), i, sobjs['n_submats']-1)
+
+
+        body = [mat_get_dm, dm_get_info, subblock_rows, subblock_cols, BlankLine, iteration]
         body = CallableBody(
             List(body=tuple(body)),
             init=(petsc_func_begin_user,),
+            stacks=(shell_get_ctx, deref_subdm),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),))
         return body
 
@@ -753,6 +764,20 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         base_dict['block'] = Mat(self.sregistry.make_name(prefix='block_'))
         base_dict['subblockrows'] = PetscInt(self.sregistry.make_name(prefix='subblockrows_'))
         base_dict['subblockcols'] = PetscInt(self.sregistry.make_name(prefix='subblockcols_'))
+
+        base_dict['rows'] = IS(name=self.sregistry.make_name(prefix='rows_'), nindices=no_targets)
+        base_dict['cols'] = IS(name=self.sregistry.make_name(prefix='cols_'), nindices=no_targets)
+        # probably can just use the existing 'callbackdm'
+        base_dict['subdm'] = DM(self.sregistry.make_name(prefix='subdm_'), liveness='eager')
+
+        submatrix_ctx_fields = [base_dict['rows'], base_dict['cols'], base_dict['subdm']]
+        base_dict['submat_ctx'] = PETScStruct(
+            name='submat_ctx', pname='SubMatrixCtx',
+            fields=submatrix_ctx_fields, modifier=' *', liveness='eager'
+        )
+
+        base_dict['row_idx'] = PetscInt(self.sregistry.make_name(prefix='row_idx_'))
+        base_dict['col_idx'] = PetscInt(self.sregistry.make_name(prefix='col_idx_'))
         return base_dict
 
 

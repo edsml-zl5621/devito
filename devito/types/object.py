@@ -250,12 +250,10 @@ class CCompositeObject(CompositeObject, LocalType):
     __rargs__ = ('name', 'pname', 'pfields')
 
     def __init__(self, name, pname, pfields, modifier=None, liveness='lazy'):
-        # TODO: HAVE A SEPARATE PETSC struct for the ones that appear inside callback functions
-        # to make sure the * appears
         dtype = CustomDtype('struct %s' % pname, modifier=modifier)
         Object.__init__(self, name, dtype, None)
         self._pname = pname
-        # TODO: not sure if I really need the liveness
+        # TODO: not sure if I need the liveness now
         assert liveness in ['eager', 'lazy']
         self._liveness = liveness
 

@@ -211,6 +211,7 @@ class PETScStruct(CCompositeObject):
 
     _C_modifier = ' *'
 
+    # TODO: maybe this should move to CCompositeObject itself
     @property
     def _fields_(self):
         return [(i._C_name, i._C_ctype) for i in self.fields]

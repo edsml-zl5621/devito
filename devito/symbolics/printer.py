@@ -266,6 +266,14 @@ class CodePrinter(C99CodePrinter):
         PREC = precedence(expr)
         return self.parenthesize("%s / %s" % (lhs, rhs), PREC)
 
+    def _print_Mod(self, expr):
+        lhs = self._print(expr.lhs)
+        if not expr.lhs.is_Atom:
+            lhs = '(%s)' % (lhs)
+        rhs = self._print(expr.rhs)
+        PREC = precedence(expr)
+        return self.parenthesize("%s %% %s" % (lhs, rhs), PREC)
+
     def _print_InlineIf(self, expr):
         cond = self._print(expr.cond)
         true_expr = self._print(expr.true_expr)
