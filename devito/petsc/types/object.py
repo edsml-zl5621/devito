@@ -2,7 +2,7 @@ from ctypes import POINTER
 import ctypes
 
 from devito.tools import CustomDtype, dtype_to_cstr, as_tuple
-from devito.types import LocalObject, CCompositeObject, ModuloDimension, TimeDimension, ArrayObject, CustomDimension
+from devito.types import LocalObject, CCompositeObject, ModuloDimension, TimeDimension, ArrayObject, CustomDimension, PointerArray
 from devito.symbolics import Byref
 
 from devito.petsc.iet.utils import petsc_call
@@ -345,8 +345,48 @@ class SubDM(ArrayObject):
 
 
 
-class SubMats(ArrayObject):
+# class SubMats(ArrayObject):
 
+#     _data_alignment = False
+
+#     def __init_finalize__(self, *args, **kwargs):
+#         self._nindices = kwargs.pop('nindices', ())
+#         super().__init_finalize__(*args, **kwargs)
+
+#     @classmethod
+#     def __indices_setup__(cls, **kwargs):
+#         try:
+#             return as_tuple(kwargs['dimensions']), as_tuple(kwargs['dimensions'])
+#         except KeyError:
+#             nindices = kwargs.get('nindices', ())
+#             dim = CustomDimension(name='d', symbolic_size=nindices)
+#             return (dim,), (dim,)
+
+#     @property
+#     def dim(self):
+#         assert len(self.dimensions) == 1
+#         return self.dimensions[0]
+
+#     _C_modifier = ' *'
+
+#     @property
+#     def nindices(self):
+#         return self._nindices
+
+#     @property
+#     def dtype(self):
+#         return CustomDtype('Mat', modifier=' *')
+
+#     @property
+#     def _C_name(self):
+#         return self.name
+
+#     @property
+#     def _mem_stack(self):
+#         return False
+
+
+class SubMats(ArrayObject):
     _data_alignment = False
 
     def __init_finalize__(self, *args, **kwargs):
@@ -367,7 +407,7 @@ class SubMats(ArrayObject):
         assert len(self.dimensions) == 1
         return self.dimensions[0]
 
-    _C_modifier = ' *'
+    # _C_modifier = ' *'
 
     @property
     def nindices(self):
@@ -384,25 +424,3 @@ class SubMats(ArrayObject):
     @property
     def _mem_stack(self):
         return False
-
-    # @property
-    # def _C_ctype(self):
-    #     return self.dtype
-
-    # @property
-    # def _C_ctype(self):
-    #     return ctypes.c_void_p
-
-    # @property
-    # def _C_ctype(self):
-    #     return self.dtype
-
-    # # NOTE ADD THE FUNCTIONALITY SO THAT ARRAYOBJECTS CAN BE DESTROYED .. or re-think this class
-    # @property
-    # def _C_free(self):
-    #     destroy_calls = [
-    #         petsc_call('DMDestroy', [Byref(self.indexify().subs({self.dim: i}))])
-    #         for i in range(self._nindices)
-    #     ]
-    #     destroy_calls.append(petsc_call('PetscFree', [self.function]))
-    #     return destroy_calls

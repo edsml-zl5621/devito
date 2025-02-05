@@ -205,9 +205,9 @@ class CallFromPointer(sympy.Expr, Pickable, BasicWrapperMixin):
             pointer = Symbol(pointer)
         if isinstance(call, str):
             call = Symbol(call)
-        elif not isinstance(call, Basic):
-            raise ValueError("`call` must be a `devito.Basic` or a type "
-                             "with compatible interface")
+        # elif not isinstance(call, Basic):
+        #     raise ValueError("`call` must be a `devito.Basic` or a type "
+        #                      "with compatible interface")
         _params = []
         for p in as_tuple(params):
             if isinstance(p, str):

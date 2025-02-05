@@ -5,12 +5,13 @@ import numpy as np
 
 from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference, DummyExpr, BlankLine, Callable, FindNodes,
-                           retrieve_iteration_tree, filter_iterations, Iteration)
+                           retrieve_iteration_tree, filter_iterations, Iteration,
+                           PointerCast, Definition)
 from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
-                              FieldFromComposite, IntDiv, Mod)
+                              FieldFromComposite, IntDiv, Mod, Deref, IndexedPointer)
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
-from devito.types import Temp, Symbol, CustomDimension, Dimension
+from devito.types import Temp, Symbol, CustomDimension, Dimension, Scalar
 from devito.tools import filter_ordered
 
 from devito.petsc.types import PETScArray, PETScStruct
@@ -524,6 +525,7 @@ class CCBBuilder(CBBuilder):
 
     def __init__(self, injectsolve, objs, solver_objs, **kwargs):
         self._submatrices_callback = None
+        self._whole_matvec_callback = None
         super().__init__(injectsolve, objs, solver_objs, **kwargs)
         self._coupled_struct_callback = None
         self._populate_coupled_ctx()
@@ -531,6 +533,10 @@ class CCBBuilder(CBBuilder):
     @property
     def submatrices_callback(self):
         return self._submatrices_callback
+
+    @property
+    def whole_matvec_callback(self):
+        return self._whole_matvec_callback
 
     @property
     def coupled_struct_callback(self):
@@ -546,13 +552,69 @@ class CCBBuilder(CBBuilder):
         #     data = all_fielddata.get_field_data(t)
         #     self._make_matvec(objs, solver_objs)
 
-        data = all_fielddata.get_field_data(targets[0])
+        data0 = all_fielddata.get_field_data(targets[0])
+        data1 = all_fielddata.get_field_data(targets[1])
+
         # from IPython import embed; embed()
-        self._make_matvec(data)
-        self._make_formfunc(data)
-        self._make_formrhs(data)
+        # self._make_matvec(data)
+        # obvs it should take in all all_fielddata 
+        self._make_whole_matvec()
+
+        self._make_matvec(data0)
+        # self._make_matvec(data1)
+        
+        self._make_formfunc(data0)
+        self._make_formrhs(data0)
 
         self._create_submatrices()
+
+    def _make_whole_matvec(self):
+        sobjs = self.solver_objs
+
+        # obvs improve name
+        body = self._create_whole_matvec_callback_body()
+
+        whole_matvec_callback = PETScCallable(
+            self.sregistry.make_name(prefix='WholeMatMult'), List(body=body),
+            retval=self.objs['err'],
+            parameters=(
+                sobjs['Jac'], sobjs['X_global'], sobjs['Y_global']
+            )
+        )
+        self._whole_matvec_callback = whole_matvec_callback
+        self._efuncs[whole_matvec_callback.name] = whole_matvec_callback
+
+    def _create_whole_matvec_callback_body(self):
+        sobjs = self.solver_objs
+
+        mat_get_ctx_main = petsc_call('MatShellGetContext', [sobjs['Jac'], Byref(sobjs['jacctx']._C_symbol)])
+        # from IPython import embed; embed
+
+        # J00
+        deref_j00 = DummyExpr(sobjs['J00'], FieldFromPointer(sobjs['submats'].indexed[0], sobjs['jacctx']))
+        mat_get_ctx_j00 = petsc_call('MatShellGetContext', [sobjs['J00'], Byref(sobjs['j00ctx'])])
+        vec_get_x_j00 = petsc_call('VecGetSubVector', [sobjs['X_global'], Deref(FieldFromPointer(sobjs['cols'], sobjs['j00ctx'])), Byref(sobjs['j00X'])])
+        vec_get_y_j00 = petsc_call('VecGetSubVector', [sobjs['Y_global'], Deref(FieldFromPointer(sobjs['rows'], sobjs['j00ctx'])), Byref(sobjs['j00Y'])])
+        mat_mult_j00 = petsc_call('MatMult', [sobjs['J00'], sobjs['j00X'], sobjs['j00Y']])
+        vec_restore_x_j00 = petsc_call('VecRestoreSubVector', [sobjs['X_global'], Deref(FieldFromPointer(sobjs['cols'], sobjs['j00ctx'])), Byref(sobjs['j00X'])])
+        vec_restore_y_j00 = petsc_call('VecRestoreSubVector', [sobjs['Y_global'], Deref(FieldFromPointer(sobjs['rows'], sobjs['j00ctx'])), Byref(sobjs['j00Y'])])
+
+        # J11
+        deref_j11 = DummyExpr(sobjs['J11'], FieldFromPointer(sobjs['submats'].indexed[3], sobjs['jacctx']))
+        mat_get_ctx_j11 = petsc_call('MatShellGetContext', [sobjs['J11'], Byref(sobjs['j11ctx'])])
+        vec_get_x_j11 = petsc_call('VecGetSubVector', [sobjs['X_global'], Deref(FieldFromPointer(sobjs['cols'], sobjs['j11ctx'])), Byref(sobjs['j11X'])])
+        vec_get_y_j11 = petsc_call('VecGetSubVector', [sobjs['Y_global'], Deref(FieldFromPointer(sobjs['rows'], sobjs['j11ctx'])), Byref(sobjs['j11Y'])])
+        mat_mult_j11 = petsc_call('MatMult', [sobjs['J11'], sobjs['j11X'], sobjs['j11Y']])
+        vec_restore_x_j11 = petsc_call('VecRestoreSubVector', [sobjs['X_global'], Deref(FieldFromPointer(sobjs['cols'], sobjs['j11ctx'])), Byref(sobjs['j11X'])])
+        vec_restore_y_j11 = petsc_call('VecRestoreSubVector', [sobjs['Y_global'], Deref(FieldFromPointer(sobjs['rows'], sobjs['j11ctx'])), Byref(sobjs['j11Y'])])
+
+        body = [mat_get_ctx_main, BlankLine, deref_j00, mat_get_ctx_j00, vec_get_x_j00, vec_get_y_j00, mat_mult_j00, vec_restore_x_j00, vec_restore_y_j00,  BlankLine, deref_j11, mat_get_ctx_j11, vec_get_x_j11, vec_get_y_j11, mat_mult_j11, vec_restore_x_j11, vec_restore_y_j11]
+        body = CallableBody(
+            List(body=tuple(body)),
+            init=(petsc_func_begin_user,),
+            # stacks=(shell_get_ctx, deref_subdm),
+            retstmt=(Call('PetscFunctionReturn', arguments=[0]),))
+        return body
 
     def _create_submatrices(self):
         body = self._create_submat_callback_body()
@@ -562,7 +624,7 @@ class CCBBuilder(CBBuilder):
             self.sregistry.make_name(prefix='MatCreateSubMatrices_'), body,
             retval=self.objs['err'],
             parameters=(
-                sobjs['Jac'], sobjs['n_submats'], sobjs['submats']
+                sobjs['Jac'], sobjs['n_submats'], sobjs['all_IS_rows'], sobjs['all_IS_cols'], sobjs['submats']
             )
         )
         self._submatrices_callback = submatrices_callback
@@ -581,11 +643,13 @@ class CCBBuilder(CBBuilder):
         subblock_rows = DummyExpr(sobjs['subblockrows'], Mul(sobjs['M'], sobjs['N']))
         subblock_cols = DummyExpr(sobjs['subblockcols'], Mul(sobjs['M'], sobjs['N']))
 
+        ptr = DummyExpr(sobjs['submat_arr'], Deref(sobjs['submats']), init=True)
+
         mat_create = petsc_call('MatCreate', [self.objs['comm'], Byref(sobjs['block'])])
         mat_set_sizes = petsc_call('MatSetSizes', [sobjs['block'], 'PETSC_DECIDE', 'PETSC_DECIDE', sobjs['subblockrows'], sobjs['subblockcols']])
         mat_set_type = petsc_call('MatSetType', [sobjs['block'], 'MATSHELL'])
 
-        malloc = petsc_call('PetscMalloc', [1, Byref(sobjs['submat_ctx'])])
+        malloc = petsc_call('PetscMalloc', [1, Byref(sobjs['j00ctx'])])
         i = Dimension(name='i')
 
         row_idx = DummyExpr(sobjs['row_idx'], IntDiv(i, sobjs['dof']))
@@ -593,14 +657,28 @@ class CCBBuilder(CBBuilder):
 
         deref_subdm = Dereference(sobjs['subdms'], sobjs['ljacctx'])
 
-        set_dm = DummyExpr(FieldFromPointer(sobjs['subdm'], sobjs['submat_ctx']), sobjs['subdms'].indexed[sobjs['row_idx']])
+        set_dm = DummyExpr(FieldFromPointer(sobjs['subdm'], sobjs['j00ctx']), sobjs['subdms'].indexed[sobjs['row_idx']])
         # fix:todo: the SUBMAT_CTX doesn't appear in the ccode because it's not an argument to any function -> fix this in the cgen structure code
-        set_rows = DummyExpr(FieldFromPointer(sobjs['rows'], sobjs['submat_ctx']), Byref(sobjs['all_IS_rows'].indexed[sobjs['row_idx']]))
+        set_rows = DummyExpr(FieldFromPointer(sobjs['rows'], sobjs['j00ctx']), Byref(sobjs['all_IS_rows'].indexed[sobjs['row_idx']]))
+        set_cols = DummyExpr(FieldFromPointer(sobjs['cols'], sobjs['j00ctx']), Byref(sobjs['all_IS_cols'].indexed[sobjs['col_idx']]))
 
-        iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type, malloc, row_idx, col_idx, set_dm, set_rows]), i, sobjs['n_submats']-1)
+        set_ctx = petsc_call('MatShellSetContext', [sobjs['block'], sobjs['j00ctx']])
 
+        mat_setup = petsc_call('MatSetUp', [sobjs['block']])
 
-        body = [mat_get_dm, dm_get_info, subblock_rows, subblock_cols, BlankLine, iteration]
+        assign_block = DummyExpr(sobjs['submat_arr'].indexed[i], sobjs['block'])
+
+        iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type, malloc, row_idx, col_idx, set_dm, set_rows, set_cols, set_ctx, mat_setup, assign_block]), i, sobjs['n_submats']-1)
+
+        # self._make_matvec(data)
+
+        matvec_operation = petsc_call(
+            'MatShellSetOperation',
+            [sobjs['Jac'], 'MATOP_MULT',
+            MatShellSetOp(self.matvec_callback.name, void, void)]
+        )
+
+        body = [mat_get_dm, dm_get_info, subblock_rows, subblock_cols, ptr, BlankLine, iteration, matvec_operation]
         body = CallableBody(
             List(body=tuple(body)),
             init=(petsc_func_begin_user,),
@@ -676,6 +754,7 @@ class BaseObjectBuilder:
                    functions via `SNESGetDM`.
         """
         sreg = self.sregistry
+        # TODO: for any of the Vec objects used in callback funcs, I don't think need to use symbol registry for them..?
         base_dict = {
             'Jac': Mat(sreg.make_name(prefix='J_')),
             'x_global': GlobalVec(sreg.make_name(prefix='x_global_')),
@@ -730,24 +809,18 @@ class CoupledObjectBuilder(BaseObjectBuilder):
             name=self.sregistry.make_name(prefix='subdms_'), nindices=no_targets
             )
         # CHANGE THIS TO PETSCINT
-        base_dict['n_submats'] = Symbol(self.sregistry.make_name(prefix='n_submats_'), dtype=np.int32)
+        base_dict['n_submats'] = Scalar(self.sregistry.make_name(prefix='n_submats_'), dtype=np.int32)
+        # TODO: reevaluate-> don't think I really need both of these?
+        dim = Dimension(name='dim')
+        base_dict['submat_arr'] = SubMats(name=self.sregistry.make_name(prefix='submat_arr_'),
+                                          nindices=no_targets*no_targets)
+        # i = Dimension(name='i')
         base_dict['submats'] = SubMats(name=self.sregistry.make_name(prefix='submats_'),
                                        nindices=no_targets*no_targets)
 
-        fields = [base_dict['n_submats'], base_dict['subdms'], base_dict['fields'], base_dict['snes']]
+        fields = [base_dict['subdms'], base_dict['fields'], base_dict['snes'], base_dict['submats']]
         # from IPython import embed; embed()
-        # fields = [injectsolve.expr.rhs.fielddata.targets[0].grid.spacing_symbols[0]]
-        # fields = [base_dict['snes']]
 
-        # base_dict['jacctx'] = petsc_struct('whole_jac',
-        #     fields,
-        #     'JacobianContext',
-        # )
-        # base_dict['ljacctx'] = petsc_struct('whole_jac_local',
-        #     fields,
-        #     'JacobianContext',
-        #     liveness='eager'
-        # )
         #  TODO: use petsc_struct -> adapt it
         base_dict['jacctx'] = PETScStruct(
             name='whole_jac', pname='JacobianContext',
@@ -771,21 +844,38 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         base_dict['all_IS_cols'] = IS(name=self.sregistry.make_name(prefix='allcols_'), nindices=no_targets)
 
         # the single IS rows owned by each submatrix
+        # note: this acc don't need the symbol registry I'm pretty sure
         base_dict['rows'] = SingleIS(name=self.sregistry.make_name(prefix='rows_'))
         base_dict['cols'] = SingleIS(name=self.sregistry.make_name(prefix='cols_'))
+
+
+        base_dict['J00'] = Mat(self.sregistry.make_name(prefix='J00_'))
+        base_dict['J11'] = Mat(self.sregistry.make_name(prefix='J11_'))
 
 
         # probably can just use the existing 'callbackdm'
         base_dict['subdm'] = DM(self.sregistry.make_name(prefix='subdm_'), liveness='eager')
 
         submatrix_ctx_fields = [base_dict['rows'], base_dict['cols'], base_dict['subdm']]
-        base_dict['submat_ctx'] = PETScStruct(
-            name='submat_ctx', pname='SubMatrixCtx',
+        base_dict['j00ctx'] = PETScStruct(
+            name='j00ctx', pname='SubMatrixCtx',
+            fields=submatrix_ctx_fields, modifier=' *', liveness='eager'
+        )
+
+        base_dict['j11ctx'] = PETScStruct(
+            name='j11ctx', pname='SubMatrixCtx',
             fields=submatrix_ctx_fields, modifier=' *', liveness='eager'
         )
 
         base_dict['row_idx'] = PetscInt(self.sregistry.make_name(prefix='row_idx_'))
         base_dict['col_idx'] = PetscInt(self.sregistry.make_name(prefix='col_idx_'))
+
+        # not sure if it should be global or local yet
+        base_dict['j00X'] = GlobalVec(self.sregistry.make_name(prefix='j00X_'))
+        base_dict['j00Y'] = GlobalVec(self.sregistry.make_name(prefix='j00Y_'))
+
+        base_dict['j11X'] = GlobalVec(self.sregistry.make_name(prefix='j11X_'))
+        base_dict['j11Y'] = GlobalVec(self.sregistry.make_name(prefix='j11Y_'))
         
         return base_dict
 
@@ -1000,7 +1090,7 @@ class CoupledSetup(BaseSetup):
         matvec_operation = petsc_call(
             'MatShellSetOperation',
             [solver_objs['Jac'], 'MATOP_MULT',
-             MatShellSetOp(cbbuilder.matvec_callback.name, void, void)]
+             MatShellSetOp(cbbuilder.whole_matvec_callback.name, void, void)]
         )
 
         formfunc_operation = petsc_call(
@@ -1061,12 +1151,19 @@ class CoupledSetup(BaseSetup):
         # malloc_whole_jac = petsc_call('PetscMalloc1', [1, solver_objs['jacctx']])
         ffps = [DummyExpr(FieldFromComposite(i._C_symbol, solver_objs['jacctx']), i._C_symbol) for i in solver_objs['jacctx'].fields]
         # ffps
-        shell_set_ctx = petsc_call('MatShellSetContext', [solver_objs['Jac'], Byref(solver_objs['jacctx']._C_symbol)])
-        
+        # mat_set_dm
+        # this should probs be moved further up.. (or maybe dont even need a symbol for it since it is only used inside the call to MatCreateSubMatrices)
+        n_submats = DummyExpr(solver_objs['n_submats'], self.dof_per_node*self.dof_per_node)
+        malloc = petsc_call('PetscMalloc1', [solver_objs['n_submats'], Byref(solver_objs['submats'])])
         call_coupled_struct_callback = petsc_call(
             cbbuilder.coupled_struct_callback.name, [Byref(solver_objs['jacctx'])] + solver_objs['jacctx'].fields
         )
-        return [create_field_decomp, matop_create_submats_op] + [call_coupled_struct_callback, shell_set_ctx]
+
+        shell_set_ctx = petsc_call('MatShellSetContext', [solver_objs['Jac'], Byref(solver_objs['jacctx']._C_symbol)])
+
+        create_submats = petsc_call('MatCreateSubMatrices', [solver_objs['Jac'], solver_objs['n_submats'], solver_objs['fields'], solver_objs['fields'], 'MAT_INITIAL_MATRIX', Byref(solver_objs['submats'])])
+        
+        return [create_field_decomp, matop_create_submats_op] + [n_submats, malloc, call_coupled_struct_callback, shell_set_ctx, create_submats]
 
 
 class Solver:

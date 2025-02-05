@@ -670,6 +670,7 @@ class CGen(Visitor):
         xfilter = lambda i: xfilter1(i)
 
         candidates = o.parameters + tuple(o._dspace.parts)
+        # from IPython import embed; embed()
         typedecls = [self._gen_struct_decl(i) for i in candidates if xfilter(i)]
         # NOTE: the only reason my petsc structs appeared (previously) is because they were args to the populate callback
         # but they won'y appear in the ccode as structs if they weren't args to the populate callback
@@ -678,7 +679,7 @@ class CGen(Visitor):
                 continue
             # tmp = [j for j in i.root.parameters if xfilter(j)]
             # from IPython import embed; embed()
-            typedecls.extend([self._gen_struct_decl(j) for j in i.root.parameters
+            typedecls.extend([self._gen_struct_decl(j) for j in FindSymbols().visit(i.root)
                               if xfilter(j)])
         typedecls = filter_sorted(typedecls, key=lambda i: i.tpname)
         # from IPython import embed; embed()
