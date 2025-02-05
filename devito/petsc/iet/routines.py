@@ -8,7 +8,7 @@ from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            retrieve_iteration_tree, filter_iterations, Iteration,
                            PointerCast, Definition)
 from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
-                              FieldFromComposite, IntDiv, Mod, Deref, IndexedPointer)
+                              FieldFromComposite, IntDiv, Modulo, Deref, IndexedPointer)
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
 from devito.types import Temp, Symbol, CustomDimension, Dimension, Scalar
@@ -40,8 +40,8 @@ class CBBuilder:
         self._efuncs = OrderedDict()
         self._struct_params = {}
 
-        self._matvec_callback = None
-        self._matvecs = None
+        self._main_matvec_callback = None
+        self._matvecs = []
         self._formfunc_callback = None
         self._formrhs_callback = None
         self._struct_callback = None
@@ -75,13 +75,13 @@ class CBBuilder:
         self._struct_params[submatrix_name].extend(params)
 
     @property
-    def matvec_callback(self):
+    def main_matvec_callback(self):
         """
         This is the matvec callback associated with the whole Jacobian i.e
         is set in the main kernel via
         `PetscCall(MatShellSetOperation(J,MATOP_MULT,(void (*)(void))MyMatShellMult));`
         """
-        return self._matvecs
+        return self._matvecs.pop()
 
     @property
     def matvecs(self):
@@ -121,7 +121,7 @@ class CBBuilder:
                 sobjs['Jac'], sobjs['X_global'], sobjs['Y_global']
             )
         )
-        self._matvecs = matvec_callback
+        self._matvecs.append(matvec_callback)
         self._efuncs[matvec_callback.name] = matvec_callback
 
     def _create_matvec_body(self, body, data):
@@ -525,7 +525,6 @@ class CCBBuilder(CBBuilder):
 
     def __init__(self, injectsolve, objs, solver_objs, **kwargs):
         self._submatrices_callback = None
-        self._whole_matvec_callback = None
         super().__init__(injectsolve, objs, solver_objs, **kwargs)
         self._coupled_struct_callback = None
         self._populate_coupled_ctx()
@@ -534,9 +533,18 @@ class CCBBuilder(CBBuilder):
     def submatrices_callback(self):
         return self._submatrices_callback
 
+    # @property
+    # def whole_matvec_callback(self):
+    #     return self._whole_matvec_callback
+
     @property
-    def whole_matvec_callback(self):
-        return self._whole_matvec_callback
+    def main_matvec_callback(self):
+        """
+        This is the matvec callback associated with the whole Jacobian i.e
+        is set in the main kernel via
+        `PetscCall(MatShellSetOperation(J,MATOP_MULT,(void (*)(void))MyMatShellMult));`
+        """
+        return self._main_matvec_callback
 
     @property
     def coupled_struct_callback(self):
@@ -561,7 +569,7 @@ class CCBBuilder(CBBuilder):
         self._make_whole_matvec()
 
         self._make_matvec(data0)
-        # self._make_matvec(data1)
+        self._make_matvec(data1)
         
         self._make_formfunc(data0)
         self._make_formrhs(data0)
@@ -574,15 +582,16 @@ class CCBBuilder(CBBuilder):
         # obvs improve name
         body = self._create_whole_matvec_callback_body()
 
-        whole_matvec_callback = PETScCallable(
+        main_matvec_callback = PETScCallable(
             self.sregistry.make_name(prefix='WholeMatMult'), List(body=body),
             retval=self.objs['err'],
             parameters=(
                 sobjs['Jac'], sobjs['X_global'], sobjs['Y_global']
             )
         )
-        self._whole_matvec_callback = whole_matvec_callback
-        self._efuncs[whole_matvec_callback.name] = whole_matvec_callback
+        self._main_matvec_callback = main_matvec_callback
+        # from IPython import embed; embed()
+        self._efuncs[main_matvec_callback.name] = main_matvec_callback
 
     def _create_whole_matvec_callback_body(self):
         sobjs = self.solver_objs
@@ -643,7 +652,7 @@ class CCBBuilder(CBBuilder):
         subblock_rows = DummyExpr(sobjs['subblockrows'], Mul(sobjs['M'], sobjs['N']))
         subblock_cols = DummyExpr(sobjs['subblockcols'], Mul(sobjs['M'], sobjs['N']))
 
-        ptr = DummyExpr(sobjs['submat_arr'], Deref(sobjs['submats']), init=True)
+        ptr = DummyExpr(sobjs['submat_arr']._C_symbol, Deref(sobjs['submats']), init=True)
 
         mat_create = petsc_call('MatCreate', [self.objs['comm'], Byref(sobjs['block'])])
         mat_set_sizes = petsc_call('MatSetSizes', [sobjs['block'], 'PETSC_DECIDE', 'PETSC_DECIDE', sobjs['subblockrows'], sobjs['subblockcols']])
@@ -653,7 +662,7 @@ class CCBBuilder(CBBuilder):
         i = Dimension(name='i')
 
         row_idx = DummyExpr(sobjs['row_idx'], IntDiv(i, sobjs['dof']))
-        col_idx = DummyExpr(sobjs['col_idx'], Mod(i, sobjs['dof']))
+        col_idx = DummyExpr(sobjs['col_idx'], Modulo(i, sobjs['dof']))
 
         deref_subdm = Dereference(sobjs['subdms'], sobjs['ljacctx'])
 
@@ -671,14 +680,23 @@ class CCBBuilder(CBBuilder):
         iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type, malloc, row_idx, col_idx, set_dm, set_rows, set_cols, set_ctx, mat_setup, assign_block]), i, sobjs['n_submats']-1)
 
         # self._make_matvec(data)
+        # from IPython import embed; embed()
 
-        matvec_operation = petsc_call(
+        # J00
+        j00_op = petsc_call(
             'MatShellSetOperation',
-            [sobjs['Jac'], 'MATOP_MULT',
-            MatShellSetOp(self.matvec_callback.name, void, void)]
+            [sobjs['submat_arr'].indexed[0], 'MATOP_MULT',
+            MatShellSetOp(self.matvecs[0].name, void, void)]
         )
 
-        body = [mat_get_dm, dm_get_info, subblock_rows, subblock_cols, ptr, BlankLine, iteration, matvec_operation]
+        # J11
+        j11_op = petsc_call(
+            'MatShellSetOperation',
+            [sobjs['submat_arr'].indexed[3], 'MATOP_MULT',
+            MatShellSetOp(self.matvecs[1].name, void, void)]
+        )
+
+        body = [mat_get_dm, dm_get_info, subblock_rows, subblock_cols, ptr, BlankLine, iteration, j00_op, j11_op]
         body = CallableBody(
             List(body=tuple(body)),
             init=(petsc_func_begin_user,),
@@ -938,7 +956,7 @@ class BaseSetup:
         matvec_operation = petsc_call(
             'MatShellSetOperation',
             [solver_objs['Jac'], 'MATOP_MULT',
-             MatShellSetOp(cbbuilder.matvec_callback.name, void, void)]
+             MatShellSetOp(cbbuilder.main_matvec_callback.name, void, void)]
         )
 
         formfunc_operation = petsc_call(
@@ -1087,10 +1105,11 @@ class CoupledSetup(BaseSetup):
 
         ksp_set_from_ops = petsc_call('KSPSetFromOptions', [solver_objs['ksp']])
 
+        # from IPython import embed; embed()
         matvec_operation = petsc_call(
             'MatShellSetOperation',
             [solver_objs['Jac'], 'MATOP_MULT',
-             MatShellSetOp(cbbuilder.whole_matvec_callback.name, void, void)]
+             MatShellSetOp(cbbuilder.main_matvec_callback.name, void, void)]
         )
 
         formfunc_operation = petsc_call(

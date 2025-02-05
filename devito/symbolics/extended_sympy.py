@@ -14,7 +14,7 @@ from devito.tools import (Pickable, Bunch, as_tuple, is_integer, float2,  # noqa
 from devito.types import Symbol
 from devito.types.basic import Basic
 
-__all__ = ['CondEq', 'CondNe', 'IntDiv', 'Mod', 'CallFromPointer',  # noqa
+__all__ = ['CondEq', 'CondNe', 'IntDiv', 'Modulo', 'CallFromPointer',  # noqa
            'CallFromComposite', 'FieldFromPointer', 'FieldFromComposite',
            'ListInitializer', 'Byref', 'IndexedPointer', 'Cast', 'DefFunction',
            'MathFunction', 'InlineIf', 'ReservedWord', 'Keyword', 'String',
@@ -116,7 +116,7 @@ class IntDiv(sympy.Expr):
         return super().__mul__(other)
 
 
-class Mod(sympy.Expr):
+class Modulo(sympy.Expr):
 
     """
     """

@@ -47,7 +47,7 @@ def lower_petsc(iet, **kwargs):
         efuncs.update(builder.cbbuilder.efuncs)
 
     iet = Transformer(subs).visit(iet)
-
+    
     init = init_petsc(**kwargs)
     body = core + tuple(setup) + (BlankLine,) + iet.body.body
     body = iet.body._rebuild(
@@ -57,7 +57,7 @@ def lower_petsc(iet, **kwargs):
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
     metadata.update({'efuncs': tuple(efuncs.values())})
-
+    # from IPython import embed; embed()
     return iet, metadata
 
 
