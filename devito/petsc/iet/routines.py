@@ -456,7 +456,7 @@ class CBBuilder:
 
         return formrhs_body
 
-    def local_struct(self):
+    def _local_struct(self):
         """
         This is the struct used within callback functions,
         usually accessed via DMGetApplicationContext.
@@ -513,7 +513,7 @@ class CBBuilder:
 
     def _uxreplace_efuncs(self):
         # from IPython import embed; embed()
-        lstruct = self.local_struct()
+        lstruct = self._local_struct()
         mapper = {}
         visitor = Uxreplace({dummyctx: lstruct})
         for k, v in self._efuncs.items():
@@ -596,7 +596,7 @@ class CCBBuilder(CBBuilder):
     def _create_whole_matvec_callback_body(self):
         sobjs = self.solver_objs
 
-        mat_get_ctx_main = petsc_call('MatShellGetContext', [sobjs['Jac'], Byref(sobjs['jacctx']._C_symbol)])
+        mat_get_ctx_main = petsc_call('MatShellGetContext', [sobjs['Jac'], Byref(sobjs['ljacctx']._C_symbol)])
         # from IPython import embed; embed
 
         # J00
