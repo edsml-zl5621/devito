@@ -409,7 +409,7 @@ class SubMats(ArrayObject):
         assert len(self.dimensions) == 1
         return self.dimensions[0]
 
-    # _C_modifier = ' *'
+    _C_modifier = ' *'
 
     @property
     def nindices(self):

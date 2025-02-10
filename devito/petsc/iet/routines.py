@@ -708,7 +708,7 @@ class CCBBuilder(CBBuilder):
             self.sregistry.make_name(prefix='MatCreateSubMatrices_'), body,
             retval=self.objs['err'],
             parameters=(
-                sobjs['Jac'], sobjs['n_submats'], sobjs['all_IS_rows'], sobjs['all_IS_cols'], sobjs['submats']
+                sobjs['Jac'], sobjs['n_fields'], sobjs['all_IS_rows'], sobjs['all_IS_cols'], sobjs['submats']
             )
         )
         self._submatrices_callback = submatrices_callback
@@ -717,6 +717,8 @@ class CCBBuilder(CBBuilder):
     # TODO: obvs improve these names
     def _create_submat_callback_body(self):
         sobjs = self.solver_objs
+
+        n_submats = DummyExpr(sobjs['n_submats'], sobjs['n_fields']*sobjs['n_fields'])
 
         mat_get_dm = petsc_call('MatGetDM', [sobjs['Jac'], Byref(sobjs['callbackdm'])])
 
@@ -741,18 +743,24 @@ class CCBBuilder(CBBuilder):
 
         deref_subdm = Dereference(sobjs['subdms'], sobjs['ljacctx'])
 
+        deref_user = Dereference(sobjs['luserctx'], sobjs['ljacctx'])
+
         set_dm = DummyExpr(FieldFromPointer(sobjs['subdm'], sobjs['submatctx']), sobjs['subdms'].indexed[sobjs['row_idx']])
         # fix:todo: the SUBMAT_CTX doesn't appear in the ccode because it's not an argument to any function -> fix this in the cgen structure code
         set_rows = DummyExpr(FieldFromPointer(sobjs['rows'], sobjs['submatctx']), Byref(sobjs['all_IS_rows'].indexed[sobjs['row_idx']]))
         set_cols = DummyExpr(FieldFromPointer(sobjs['cols'], sobjs['submatctx']), Byref(sobjs['all_IS_cols'].indexed[sobjs['col_idx']]))
 
-        set_ctx = petsc_call('MatShellSetContext', [sobjs['block'], sobjs['submatctx']])
+        dm_set_app_ctx = petsc_call('DMSetApplicationContext', [sobjs['subdms'].indexed[sobjs['row_idx']], sobjs['luserctx']])
+
+        matset_dm = petsc_call('MatSetDM', [sobjs['block'], sobjs['subdms'].indexed[sobjs['row_idx']]])
+
+        set_ctx = petsc_call('MatShellSetContext', [sobjs['block'], sobjs['subdms'].indexed[sobjs['row_idx']]])
 
         mat_setup = petsc_call('MatSetUp', [sobjs['block']])
 
         assign_block = DummyExpr(sobjs['submat_arr'].indexed[i], sobjs['block'])
 
-        iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type, malloc, row_idx, col_idx, set_dm, set_rows, set_cols, set_ctx, mat_setup, assign_block]), i, sobjs['n_submats']-1)
+        iteration = Iteration(List(body=[mat_create, mat_set_sizes, mat_set_type, malloc, row_idx, col_idx, set_dm, set_rows, set_cols, dm_set_app_ctx, matset_dm, set_ctx, mat_setup, assign_block]), i, sobjs['n_submats']-1)
 
         # self._make_matvec(data)
         # from IPython import embed; embed()
@@ -771,11 +779,11 @@ class CCBBuilder(CBBuilder):
             MatShellSetOp(self.matvecs[1].name, void, void)]
         )
 
-        body = [mat_get_dm, dm_get_info, subblock_rows, subblock_cols, ptr, BlankLine, iteration, j00_op, j11_op]
+        body = [n_submats, mat_get_dm, dm_get_info, subblock_rows, subblock_cols, ptr, BlankLine, iteration, j00_op, j11_op]
         body = CallableBody(
             List(body=tuple(body)),
             init=(petsc_func_begin_user,),
-            stacks=(shell_get_ctx, deref_subdm),
+            stacks=(shell_get_ctx, deref_subdm, deref_user),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),))
         return body
 
@@ -791,6 +799,7 @@ class CCBBuilder(CBBuilder):
     def _make_local_coupled_ctx(self):
         objs = self.solver_objs
         # from IPython import embed; embed()
+        # TODO: can this struct just be combined with the user ctx? i.e I don't think i need two separate ones
         fields = objs['jacctx'].fields
         self.solver_objs['ljacctx'] = PETScStruct(
             name=objs['jacctx'].name, pname=objs['jacctx'].pname,
@@ -804,8 +813,10 @@ class CCBBuilder(CBBuilder):
         luser_ctx = self.solver_objs['luserctx']
         submats = self.solver_objs['submats']
 
-        filtered = [i for i in coupled_ctx.fields if i != (luser_ctx and submats)]
-        # filtered.append(user_ctx)
+        filtered = [i for i in coupled_ctx.fields if i != luser_ctx]
+        filtered = [i for i in filtered if i!= submats]
+        filtered.append(user_ctx)
+
         # from IPython import embed; embed()
 
         body = [
@@ -938,7 +949,7 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         base_dict['submats'] = SubMats(name=self.sregistry.make_name(prefix='submats'),
                                        nindices=no_targets*no_targets)
 
-        base_dict['n_fields'] = PetscInt(self.sregistry.make_name(prefix='nfields'))
+        base_dict['n_fields'] = Scalar(self.sregistry.make_name(prefix='nfields'), dtype=np.int32)
 
         fields = [base_dict['subdms'], base_dict['fields'], base_dict['snes'], base_dict['submats']]
         # from IPython import embed; embed()
@@ -980,7 +991,7 @@ class CoupledObjectBuilder(BaseObjectBuilder):
 
         pname=self.sregistry.make_name(prefix='SubMatrixCtx')
 
-        submatrix_ctx_fields = [base_dict['rows'], base_dict['cols'], base_dict['subdm']]
+        submatrix_ctx_fields = [base_dict['rows'], base_dict['cols']]
         base_dict['submatctx'] = PETScStruct(
             name='submatctx', pname=pname,
             fields=submatrix_ctx_fields, modifier=' *', liveness='eager'
@@ -1298,7 +1309,7 @@ class CoupledSetup(BaseSetup):
 
         # dm_set_ctx = petsc_call('DMSetApplicationContext', [dmda, Byref(solver_objs['jacctx'])])
 
-        create_submats = petsc_call('MatCreateSubMatrices', [solver_objs['Jac'], solver_objs['n_submats'], solver_objs['fields'], solver_objs['fields'], 'MAT_INITIAL_MATRIX', Byref(FieldFromComposite(solver_objs['submats'].base, solver_objs['jacctx']))])
+        create_submats = petsc_call('MatCreateSubMatrices', [solver_objs['Jac'], solver_objs['n_fields'], solver_objs['fields'], solver_objs['fields'], 'MAT_INITIAL_MATRIX', Byref(FieldFromComposite(solver_objs['submats'].base, solver_objs['jacctx']))])
         
         return [create_field_decomp, matop_create_submats_op] + [call_coupled_struct_callback, shell_set_ctx, create_submats]
 
