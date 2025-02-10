@@ -802,9 +802,11 @@ class CCBBuilder(CBBuilder):
         coupled_ctx = self.solver_objs['jacctx']
         user_ctx = self.solver_objs['userctx']
         luser_ctx = self.solver_objs['luserctx']
+        submats = self.solver_objs['submats']
 
-        filtered = [i for i in coupled_ctx.fields if i != luser_ctx]
-        filtered.append(user_ctx)
+        filtered = [i for i in coupled_ctx.fields if i != (luser_ctx and submats)]
+        # filtered.append(user_ctx)
+        # from IPython import embed; embed()
 
         body = [
             DummyExpr(FieldFromPointer(i._C_symbol, coupled_ctx), i._C_symbol)
@@ -936,6 +938,8 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         base_dict['submats'] = SubMats(name=self.sregistry.make_name(prefix='submats'),
                                        nindices=no_targets*no_targets)
 
+        base_dict['n_fields'] = PetscInt(self.sregistry.make_name(prefix='nfields'))
+
         fields = [base_dict['subdms'], base_dict['fields'], base_dict['snes'], base_dict['submats']]
         # from IPython import embed; embed()
 
@@ -983,12 +987,12 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         )
 
         base_dict['j00ctx'] = PETScStruct(
-            name='j00ctx', pname=self.sregistry.make_name(prefix='J00Ctx'),
+            name='j00ctx', pname=pname,
             fields=submatrix_ctx_fields, modifier=' *', liveness='eager'
         )
 
         base_dict['j11ctx'] = PETScStruct(
-            name='j11ctx', pname=self.sregistry.make_name(prefix='J11Ctx'),
+            name='j11ctx', pname=pname,
             fields=submatrix_ctx_fields, modifier=' *', liveness='eager'
         )
 
@@ -1269,7 +1273,7 @@ class CoupledSetup(BaseSetup):
         dmda = solver_objs['dmda']
         create_field_decomp = petsc_call(
             'DMCreateFieldDecomposition',
-            [dmda, Null, Null, Byref(solver_objs['fields']), Byref(solver_objs['subdms'])]
+            [dmda, Byref(solver_objs['n_fields']), Null, Byref(solver_objs['fields']), Byref(solver_objs['subdms'])]
             )
         matop_create_submats_op = petsc_call(
             'MatShellSetOperation',
@@ -1281,21 +1285,22 @@ class CoupledSetup(BaseSetup):
         # ffps
         # mat_set_dm
         # this should probs be moved further up.. (or maybe dont even need a symbol for it since it is only used inside the call to MatCreateSubMatrices)
-        n_submats = DummyExpr(solver_objs['n_submats'], self.dof_per_node*self.dof_per_node)
-        malloc = petsc_call('PetscMalloc1', [solver_objs['n_submats'], Byref(solver_objs['submats'])])
+        # n_submats = DummyExpr(solver_objs['n_submats'], self.dof_per_node*self.dof_per_node)
+        # malloc = petsc_call('PetscMalloc1', [solver_objs['n_submats'], Byref(solver_objs['submats'])])
         filtered = [i for i in solver_objs['jacctx'].fields if i != solver_objs['luserctx']]
-
+        filtered = [i for i in filtered if i != solver_objs['submats']]
+        # from IPython import embed; embed()
         call_coupled_struct_callback = petsc_call(
             cbbuilder.coupled_struct_callback.name, [Byref(solver_objs['jacctx'])] + filtered + [Byref(solver_objs['userctx'])]
         )
 
         shell_set_ctx = petsc_call('MatShellSetContext', [solver_objs['Jac'], Byref(solver_objs['jacctx']._C_symbol)])
 
-        dm_set_ctx = petsc_call('DMSetApplicationContext', [dmda, Byref(solver_objs['jacctx'])])
+        # dm_set_ctx = petsc_call('DMSetApplicationContext', [dmda, Byref(solver_objs['jacctx'])])
 
-        create_submats = petsc_call('MatCreateSubMatrices', [solver_objs['Jac'], solver_objs['n_submats'], solver_objs['fields'], solver_objs['fields'], 'MAT_INITIAL_MATRIX', Byref(solver_objs['submats'])])
+        create_submats = petsc_call('MatCreateSubMatrices', [solver_objs['Jac'], solver_objs['n_submats'], solver_objs['fields'], solver_objs['fields'], 'MAT_INITIAL_MATRIX', Byref(FieldFromComposite(solver_objs['submats'].base, solver_objs['jacctx']))])
         
-        return [create_field_decomp, matop_create_submats_op] + [n_submats, malloc, call_coupled_struct_callback, shell_set_ctx, dm_set_ctx, create_submats]
+        return [create_field_decomp, matop_create_submats_op] + [call_coupled_struct_callback, shell_set_ctx, create_submats]
 
 
 class Solver:
