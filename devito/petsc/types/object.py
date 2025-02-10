@@ -64,6 +64,10 @@ class Mat(LocalObject):
         return 1
 
 
+class LocalMat(LocalObject):
+    dtype = CustomDtype('Mat')
+
+
 class LocalVec(LocalObject):
     """
     PETSc local vector object (Vec).

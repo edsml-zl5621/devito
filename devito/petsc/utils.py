@@ -46,7 +46,7 @@ def core_metadata():
 
     return {
         # 'includes': ('petscksp.h', 'petscsnes.h', 'petscdmda.h'),
-        'includes': ('petscsnes.h', 'petscdmda.h'),
+        'includes': ('petscsnes.h', 'petscdm.h', 'petscdmda.h'),
         'include_dirs': include_dirs,
         'libs': ('petsc'),
         'lib_dirs': lib_dir,
