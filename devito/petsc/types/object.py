@@ -176,6 +176,10 @@ class DummyArg(LocalObject):
     dtype = CustomDtype('void', modifier='*')
 
 
+class MatReuse(LocalObject):
+    dtype = CustomDtype('MatReuse')
+
+
 class PETScStruct(CCompositeObject):
 
     __rargs__ = ('name', 'pname', 'fields')

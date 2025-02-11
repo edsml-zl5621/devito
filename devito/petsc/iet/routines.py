@@ -21,7 +21,7 @@ from devito.petsc.iet.utils import petsc_call, petsc_struct
 from devito.petsc.utils import solver_mapper
 from devito.petsc.types import (DM, CallbackDM, Mat, LocalVec, GlobalVec, KSP, PC, LocalMat,
                                 SNES, DummyArg, PetscInt, StartPtr, SingleIS, IS, SubDM, SubMats,
-                                )
+                                MatReuse)
 
 
 class CBBuilder:
@@ -709,7 +709,7 @@ class CCBBuilder(CBBuilder):
             self.sregistry.make_name(prefix='MatCreateSubMatrices_'), body,
             retval=self.objs['err'],
             parameters=(
-                sobjs['Jac'], sobjs['n_fields'], sobjs['all_IS_rows'], sobjs['all_IS_cols'], sobjs['submats']
+                sobjs['Jac'], sobjs['n_fields'], sobjs['all_IS_rows'], sobjs['all_IS_cols'], sobjs['matreuse'], sobjs['submats']
             )
         )
         self._submatrices_callback = submatrices_callback
@@ -1025,6 +1025,8 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         base_dict['j11X'] = LocalVec(self.sregistry.make_name(prefix='j11X'))
         base_dict['j11Y'] = LocalVec(self.sregistry.make_name(prefix='j11Y'))
         base_dict['j11F'] = LocalVec(self.sregistry.make_name(prefix='j11F'))
+
+        base_dict['matreuse'] = MatReuse(self.sregistry.make_name(prefix='scall'))
         
         return base_dict
 
