@@ -30,7 +30,7 @@ class DM(LocalObject):
 
     @property
     def _C_free_priority(self):
-        return 3
+        return 4
 
 
 class CallbackDM(LocalObject):
@@ -61,7 +61,7 @@ class Mat(LocalObject):
 
     @property
     def _C_free_priority(self):
-        return 1
+        return 2
 
 
 class LocalMat(LocalObject):
@@ -91,7 +91,7 @@ class GlobalVec(LocalObject):
 
     @property
     def _C_free_priority(self):
-        return 0
+        return 1
 
 
 class PetscMPIInt(LocalObject):
@@ -134,7 +134,7 @@ class SNES(LocalObject):
 
     @property
     def _C_free_priority(self):
-        return 2
+        return 3
 
 
 class PC(LocalObject):
@@ -296,6 +296,10 @@ class IS(ArrayObject):
     #     return ctypes.c_void_p
 
     @property
+    def _C_free_priority(self):
+        return 0
+
+    @property
     def _C_free(self):
         destroy_calls = [
             petsc_call('ISDestroy', [Byref(self.indexify().subs({self.dim: i}))])
@@ -342,6 +346,10 @@ class SubDM(ArrayObject):
     @property
     def _mem_stack(self):
         return False
+
+    @property
+    def _C_free_priority(self):
+        return 0
 
     # NOTE ADD THE FUNCTIONALITY SO THAT ARRAYOBJECTS CAN BE DESTROYED .. or re-think this class
     @property

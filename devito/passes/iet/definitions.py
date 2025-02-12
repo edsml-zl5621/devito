@@ -256,9 +256,15 @@ class DataManager:
         """
         Allocate an Array of Objects in the low latency memory.
         """
+        try:
+            frees = obj._C_free
+        except AttributeError:
+            frees = None
+
         decl = Definition(obj)
 
-        storage.update(obj, site, allocs=decl)
+        # storage.update(obj, site, allocs=decl)
+        storage.update(obj, site, allocs=decl, frees=frees)
 
     def _alloc_pointed_array_on_high_bw_mem(self, site, obj, storage):
         """
@@ -333,9 +339,13 @@ class DataManager:
                 init = self.lang['thread-num'](retobj=tid)
                 frees.append(Block(header=header, body=[init] + body))
             frees.extend(as_list(cbody.frees) + flatten(v.frees))
+            # frees = sorted(frees, key=lambda x: min(
+            #     (obj._C_free_priority for obj in FindSymbols().visit(x)
+            #      if obj.is_LocalObject), default=float('inf')
+            # ))
             frees = sorted(frees, key=lambda x: min(
                 (obj._C_free_priority for obj in FindSymbols().visit(x)
-                 if obj.is_LocalObject), default=float('inf')
+                if obj.is_LocalType), default=float('inf')
             ))
 
             # maps/unmaps
