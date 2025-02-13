@@ -46,7 +46,8 @@ class CBBuilder:
         self._matvecs = []
         self._formfuncs = []
         # self._formfunc_callback = None
-        self._formrhs_callback = None
+        self._formrhss = []
+        # self._formrhs_callback = None
         self._struct_callback = None
 
         # self._main_struct()
@@ -99,13 +100,17 @@ class CBBuilder:
     def formfuncs(self):
         return self._formfuncs
 
+    @property
+    def formrhss(self):
+        return self._formrhss
+
     # @property
     # def formfunc_callback(self):
     #     return self._formfunc_callback
 
-    @property
-    def formrhs_callback(self):
-        return self._formrhs_callback
+    # @property
+    # def formrhs_callback(self):
+    #     return self._formrhs_callback
 
     @property
     def struct_callback(self):
@@ -407,7 +412,7 @@ class CBBuilder:
                 self.solver_objs['snes'], self.solver_objs['b_local']
             )
         )
-        self._formrhs_callback = formrhs_callback
+        self._formrhss.append(formrhs_callback)
         self._efuncs[formrhs_callback.name] = formrhs_callback
 
     def _create_formrhs_body(self, body, fielddata):
@@ -596,7 +601,7 @@ class CCBBuilder(CBBuilder):
         self._make_formfunc(data0)
         self._make_formfunc(data1)
 
-        # self._make_formrhs(data0)
+        self._make_formrhs(data0)
 
         # self._create_submatrices()
 
@@ -1189,6 +1194,12 @@ class BaseObjectBuilder:
             base_dict['xglobal'+target.name] = GlobalVec(
                 sreg.make_name(prefix='xglobal%s' % target.name)
             )
+            base_dict['blocal'+target.name] = LocalVec(
+                sreg.make_name(prefix='blocal%s' % target.name), liveness='eager'
+            )
+            base_dict['bglobal'+target.name] = GlobalVec(
+                sreg.make_name(prefix='bglobal%s' % target.name)
+            )
         return base_dict
 
     def _extend_build(self, base_dict, injectsolve):
@@ -1299,6 +1310,8 @@ class CoupledObjectBuilder(BaseObjectBuilder):
 
         base_dict['scatterpn1'] = VecScatter(self.sregistry.make_name(prefix='scatterpn1'))
         base_dict['scatterpn2'] = VecScatter(self.sregistry.make_name(prefix='scatterpn2'))
+
+
         
         return base_dict
 
@@ -1485,8 +1498,13 @@ class CoupledSetup(BaseSetup):
         global_b = petsc_call('DMCreateGlobalVector',
                               [dmda, Byref(solver_objs['b_global'])])
 
-        local_b = petsc_call('DMCreateLocalVector',
-                             [dmda, Byref(solver_objs['b_local'])])
+        targets = injectsolve.expr.rhs.fielddata.targets
+
+        local_b_pn1 = petsc_call('DMCreateLocalVector',
+                             [dmda, Byref(solver_objs['blocal'+targets[0].name])])
+
+        local_b_pn2 = petsc_call('DMCreateLocalVector',
+                                [dmda, Byref(solver_objs['blocal'+targets[1].name])])
 
         snes_get_ksp = petsc_call('SNESGetKSP',
                                   [solver_objs['snes'], Byref(solver_objs['ksp'])])
@@ -1542,8 +1560,9 @@ class CoupledSetup(BaseSetup):
             snes_set_jac,
             snes_set_type,
             global_x,
-            # global_b,
-            # local_b,
+            global_b,
+            local_b_pn1,
+            local_b_pn2,
             snes_get_ksp,
             ksp_set_tols,
             ksp_set_type,
@@ -1600,6 +1619,7 @@ class CoupledSetup(BaseSetup):
         xglobal_pn2 = petsc_call('DMCreateGlobalVector',
                                 [solver_objs['subdms'].indexed[1], Byref(solver_objs['xglobal'+targets[1].name])])
 
+        # bglobal
 
         return [create_field_decomp, matop_create_submats_op] + [call_coupled_struct_callback, shell_set_ctx, create_submats, xglobal_pn1, xglobal_pn2]
 
@@ -1689,7 +1709,7 @@ class CoupledSolver(Solver):
 
         dmda = solver_objs['dmda']
 
-        # rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
+        rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
 
         # local_x = petsc_call('DMCreateLocalVector',
         #                      [dmda, Byref(solver_objs['x_local'])])
@@ -1751,7 +1771,7 @@ class CoupledSolver(Solver):
         )
 
         run_solver_calls = (struct_assignment,) + (
-            # rhs_call,
+            rhs_call,
             local_x_target1,
             local_x_target2,
         ) + vec_replace_array + (
