@@ -19,7 +19,7 @@ __all__ = ['CondEq', 'CondNe', 'IntDiv', 'Modulo', 'CallFromPointer',  # noqa
            'ListInitializer', 'Byref', 'IndexedPointer', 'Cast', 'DefFunction',
            'MathFunction', 'InlineIf', 'ReservedWord', 'Keyword', 'String',
            'Macro', 'Class', 'MacroArgument', 'CustomType', 'Deref', 'Namespace',
-           'Rvalue', 'INT', 'FLOAT', 'DOUBLE', 'VOID', 'Null', 'SizeOf', 'rfunc',
+           'Rvalue', 'INT', 'FLOAT', 'DOUBLE', 'VOID', 'VOIDP', 'Null', 'SizeOf', 'rfunc',
            'cast_mapper', 'BasicWrapperMixin', 'ValueLimit', 'limits_mapper']
 
 
@@ -859,6 +859,11 @@ class ULONG(Cast):
 
 class VOID(Cast):
     _base_typ = 'void'
+
+
+# this should use CastStar -> fix
+class VOIDP(Cast):
+    _base_typ = 'void*'
 
 
 class CHARP(CastStar):

@@ -7,7 +7,7 @@ from devito.ir.iet import (Call, FindSymbols, List, Uxreplace, CallableBody,
                            Dereference, DummyExpr, BlankLine, Callable, FindNodes,
                            retrieve_iteration_tree, filter_iterations, Iteration,
                            PointerCast, Definition)
-from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper,
+from devito.symbolics import (Byref, FieldFromPointer, Macro, cast_mapper, VOIDP, Cast,
                               FieldFromComposite, IntDiv, Modulo, Deref, IndexedPointer)
 from devito.symbolics.unevaluation import Mul
 from devito.types.basic import AbstractFunction
@@ -21,7 +21,7 @@ from devito.petsc.iet.utils import petsc_call, petsc_struct
 from devito.petsc.utils import solver_mapper
 from devito.petsc.types import (DM, CallbackDM, Mat, LocalVec, GlobalVec, KSP, PC, LocalMat,
                                 SNES, DummyArg, PetscInt, StartPtr, SingleIS, IS, SubDM, SubMats,
-                                MatReuse)
+                                MatReuse, VecScatter)
 
 
 class CBBuilder:
@@ -593,8 +593,8 @@ class CCBBuilder(CBBuilder):
         self._make_matvec(data0)
         self._make_matvec(data1)
         
-        # self._make_formfunc(data0)
-        # self._make_formfunc(data1)
+        self._make_formfunc(data0)
+        self._make_formfunc(data1)
 
         # self._make_formrhs(data0)
 
@@ -670,32 +670,34 @@ class CCBBuilder(CBBuilder):
 
         tmp = c.Line("struct JacobianCtx0 * jctx0 = (struct JacobianCtx0 *)dummy;")
 
-        snes_get_dm = petsc_call('SNESGetDM', [sobjs['snes'], Byref(sobjs['callbackdm'])])
+        # snes_get_dm = petsc_call('SNESGetDM', [sobjs['snes'], Byref(sobjs['callbackdm'])])
         # dm_get_app_ctx = petsc_call('DMGetApplicationContext', [sobjs['callbackdm'], Byref(sobjs['ljacctx'])])
         # from IPython import embed; embed
 
         # J00
         deref_j00 = DummyExpr(sobjs['J00'], FieldFromPointer(sobjs['submats'].indexed[0], sobjs['jacctx']))
+        mat_get_dm_j00 = petsc_call('MatGetDM', [sobjs['J00'], Byref(sobjs['dmpn1'])])
         mat_get_ctx_j00 = petsc_call('MatShellGetContext', [sobjs['J00'], Byref(sobjs['j00ctx'])])
         vec_get_x_j00 = petsc_call('VecGetSubVector', [sobjs['X_global'], Deref(FieldFromPointer(sobjs['cols'].base, sobjs['j00ctx'])), Byref(sobjs['j00X'])])
         vec_get_y_j00 = petsc_call('VecGetSubVector', [sobjs['F_global'], Deref(FieldFromPointer(sobjs['rows'].base, sobjs['j00ctx'])), Byref(sobjs['j00F'])])
-        # call_first_formfunc = petsc_call(self.formfuncs[0].name, [sobjs['snes'], sobjs['j00X'], sobjs['j00F'], dummyptr])
+        call_first_formfunc = petsc_call(self.formfuncs[0].name, [sobjs['snes'], sobjs['j00X'], sobjs['j00F'], VOIDP(sobjs['dmpn1'])])
         vec_restore_x_j00 = petsc_call('VecRestoreSubVector', [sobjs['X_global'], Deref(FieldFromPointer(sobjs['cols'].base, sobjs['j00ctx'])), Byref(sobjs['j00X'])])
         vec_restore_y_j00 = petsc_call('VecRestoreSubVector', [sobjs['F_global'], Deref(FieldFromPointer(sobjs['rows'].base, sobjs['j00ctx'])), Byref(sobjs['j00F'])])
 
         # J11
         deref_j11 = DummyExpr(sobjs['J11'], FieldFromPointer(sobjs['submats'].indexed[3], sobjs['jacctx']))
+        mat_get_dm_j11 = petsc_call('MatGetDM', [sobjs['J11'], Byref(sobjs['dmpn2'])])
         mat_get_ctx_j11 = petsc_call('MatShellGetContext', [sobjs['J11'], Byref(sobjs['j11ctx'])])
         vec_get_x_j11 = petsc_call('VecGetSubVector', [sobjs['X_global'], Deref(FieldFromPointer(sobjs['cols'].base, sobjs['j11ctx'])), Byref(sobjs['j11X'])])
         vec_get_y_j11 = petsc_call('VecGetSubVector', [sobjs['F_global'], Deref(FieldFromPointer(sobjs['rows'].base, sobjs['j11ctx'])), Byref(sobjs['j11F'])])
-        # call_second_formfunc = petsc_call(self.formfuncs[1].name, [sobjs['snes'], sobjs['j11X'], sobjs['j11F'], dummyptr])
+        call_second_formfunc = petsc_call(self.formfuncs[1].name, [sobjs['snes'], sobjs['j11X'], sobjs['j11F'], VOIDP(sobjs['dmpn2'])])
         vec_restore_x_j11 = petsc_call('VecRestoreSubVector', [sobjs['X_global'], Deref(FieldFromPointer(sobjs['cols'].base, sobjs['j11ctx'])), Byref(sobjs['j11X'])])
         vec_restore_y_j11 = petsc_call('VecRestoreSubVector', [sobjs['F_global'], Deref(FieldFromPointer(sobjs['rows'].base, sobjs['j11ctx'])), Byref(sobjs['j11F'])])
 
         # call_first_formfunc = petsc_call(self.formfuncs[0].name, list(self.formfuncs[0].parameters))
         # body = [snes_get_dm, call_first_formfunc]
 
-        body = [tmp, snes_get_dm, BlankLine, deref_j00, mat_get_ctx_j00, vec_get_x_j00, vec_get_y_j00, vec_restore_x_j00, vec_restore_y_j00,  BlankLine, deref_j11, mat_get_ctx_j11, vec_get_x_j11, vec_get_y_j11, vec_restore_x_j11, vec_restore_y_j11]
+        body = [tmp, BlankLine, deref_j00, mat_get_dm_j00, mat_get_ctx_j00, vec_get_x_j00, vec_get_y_j00, call_first_formfunc, vec_restore_x_j00, vec_restore_y_j00,  BlankLine, deref_j11, mat_get_dm_j11, mat_get_ctx_j11, vec_get_x_j11, vec_get_y_j11, call_second_formfunc, vec_restore_x_j11, vec_restore_y_j11]
 
         body = CallableBody(
             List(body=tuple(body)),
@@ -934,6 +936,128 @@ class CCBBuilder(CBBuilder):
         # from IPython import embed; embed()
         return matvec_body
 
+    # should not need to override this eventually
+    def _create_formfunc_body(self, body, fielddata):
+        linsolve_expr = self.injectsolve.expr.rhs
+        sobjs = self.solver_objs
+
+        # DON'T Think this should be callbackdm since it's always dm0 then?
+        dmda = sobjs['callbackdm']
+
+        body = self.timedep.uxreplace_time(body)
+
+        fields = self._dummy_fields(body)
+
+        f_formfunc = fielddata.arrays['f_formfunc']
+        x_formfunc = fielddata.arrays['x_formfunc']
+
+        # snes_get_dm = petsc_call('SNESGetDM', [sobjs['snes'], Byref(dmda)])
+
+        # obvs move
+        class DMCast(Cast):
+            _base_typ = 'DM'
+
+        tmp = DummyExpr(dmda, DMCast(dummyptr), init=True)
+
+        dm_get_app_context = petsc_call(
+            'DMGetApplicationContext', [dmda, Byref(jacctx._C_symbol)]
+        )
+
+        dm_get_local_xvec = petsc_call(
+            'DMGetLocalVector', [dmda, Byref(sobjs['X_local'])]
+        )
+
+        global_to_local_begin = petsc_call(
+            'DMGlobalToLocalBegin', [dmda, sobjs['X_global'],
+                                     'INSERT_VALUES', sobjs['X_local']]
+        )
+
+        global_to_local_end = petsc_call('DMGlobalToLocalEnd', [
+            dmda, sobjs['X_global'], 'INSERT_VALUES', sobjs['X_local']
+        ])
+
+        dm_get_local_yvec = petsc_call(
+            'DMGetLocalVector', [dmda, Byref(sobjs['F_local'])]
+        )
+
+        vec_get_array_y = petsc_call(
+            'VecGetArray', [sobjs['F_local'], Byref(f_formfunc._C_symbol)]
+        )
+
+        vec_get_array_x = petsc_call(
+            'VecGetArray', [sobjs['X_local'], Byref(x_formfunc._C_symbol)]
+        )
+
+        dm_get_local_info = petsc_call(
+            'DMDAGetLocalInfo', [dmda, Byref(linsolve_expr.localinfo)]
+        )
+
+        vec_restore_array_y = petsc_call(
+            'VecRestoreArray', [sobjs['F_local'], Byref(f_formfunc._C_symbol)]
+        )
+
+        vec_restore_array_x = petsc_call(
+            'VecRestoreArray', [sobjs['X_local'], Byref(x_formfunc._C_symbol)]
+        )
+
+        dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
+            dmda, sobjs['F_local'], 'INSERT_VALUES', sobjs['F_global']
+        ])
+
+        dm_local_to_global_end = petsc_call('DMLocalToGlobalEnd', [
+            dmda, sobjs['F_local'], 'INSERT_VALUES', sobjs['F_global']
+        ])
+
+        dm_restore_local_xvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(sobjs['X_local'])]
+        )
+
+        dm_restore_local_yvec = petsc_call(
+            'DMRestoreLocalVector', [dmda, Byref(sobjs['F_local'])]
+        )
+
+        body = body._rebuild(
+            body=body.body +
+            (vec_restore_array_y,
+             vec_restore_array_x,
+             dm_local_to_global_begin,
+             dm_local_to_global_end,
+             dm_restore_local_xvec,
+             dm_restore_local_yvec)
+        )
+
+        stacks = (
+            # snes_get_dm,
+            tmp,
+            dm_get_app_context,
+            dm_get_local_xvec,
+            global_to_local_begin,
+            global_to_local_end,
+            dm_get_local_yvec,
+            vec_get_array_y,
+            vec_get_array_x,
+            dm_get_local_info
+        )
+
+        # Dereference function data in struct
+        dereference_funcs = [Dereference(i, jacctx) for i in
+                             fields if isinstance(i.function, AbstractFunction)]
+
+        formfunc_body = CallableBody(
+            List(body=body),
+            init=(petsc_func_begin_user,),
+            stacks=stacks+tuple(dereference_funcs),
+            retstmt=(Call('PetscFunctionReturn', arguments=[0]),))
+
+        # Replace non-function data with pointer to data in struct
+        subs = {i._C_symbol: FieldFromPointer(i._C_symbol, jacctx) for i in fields}
+        formfunc_body = Uxreplace(subs).visit(formfunc_body)
+
+        # self._struct_params.extend(fields)
+        self.add_struct_params("J00", fields)
+
+        return formfunc_body
+
     def _make_local_coupled_ctx(self):
         objs = self.solver_objs
         # from IPython import embed; embed()
@@ -1061,6 +1185,10 @@ class BaseObjectBuilder:
             base_dict['xlocal'+target.name] = LocalVec(
                 sreg.make_name(prefix='xlocal%s' % target.name), liveness='eager'
             )
+            # should defo be moved since this is only needed for coupled solves?
+            base_dict['xglobal'+target.name] = GlobalVec(
+                sreg.make_name(prefix='xglobal%s' % target.name)
+            )
         return base_dict
 
     def _extend_build(self, base_dict, injectsolve):
@@ -1115,6 +1243,7 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         base_dict['subblockrows'] = PetscInt(self.sregistry.make_name(prefix='subblockrows'))
         base_dict['subblockcols'] = PetscInt(self.sregistry.make_name(prefix='subblockcols'))
 
+        # these don't need to be used -> think can just use fields?
         base_dict['all_IS_rows'] = IS(name=self.sregistry.make_name(prefix='allrows'), nindices=no_targets)
         base_dict['all_IS_cols'] = IS(name=self.sregistry.make_name(prefix='allcols'), nindices=no_targets)
 
@@ -1163,6 +1292,13 @@ class CoupledObjectBuilder(BaseObjectBuilder):
         base_dict['j11F'] = LocalVec(self.sregistry.make_name(prefix='j11F'))
 
         base_dict['matreuse'] = MatReuse(self.sregistry.make_name(prefix='scall'))
+
+        # obvs rethink -> probs don't need?
+        base_dict['dmpn1'] = CallbackDM(self.sregistry.make_name(prefix='dmpn1'), liveness='eager')
+        base_dict['dmpn2'] = CallbackDM(self.sregistry.make_name(prefix='dmpn2'), liveness='eager')
+
+        base_dict['scatterpn1'] = VecScatter(self.sregistry.make_name(prefix='scatterpn1'))
+        base_dict['scatterpn2'] = VecScatter(self.sregistry.make_name(prefix='scatterpn2'))
         
         return base_dict
 
@@ -1455,8 +1591,17 @@ class CoupledSetup(BaseSetup):
         # dm_set_ctx = petsc_call('DMSetApplicationContext', [dmda, Byref(solver_objs['jacctx'])])
 
         create_submats = petsc_call('MatCreateSubMatrices', [solver_objs['Jac'], solver_objs['n_fields'], solver_objs['fields'], solver_objs['fields'], 'MAT_INITIAL_MATRIX', Byref(FieldFromComposite(solver_objs['submats'].base, solver_objs['jacctx']))])
-        
-        return [create_field_decomp, matop_create_submats_op] + [call_coupled_struct_callback, shell_set_ctx, create_submats]
+
+        # probs shouldn't be here but..
+        targets = injectsolve.expr.rhs.fielddata.targets
+        xglobal_pn1 = petsc_call('DMCreateGlobalVector',
+                                [solver_objs['subdms'].indexed[0], Byref(solver_objs['xglobal'+targets[0].name])])
+
+        xglobal_pn2 = petsc_call('DMCreateGlobalVector',
+                                [solver_objs['subdms'].indexed[1], Byref(solver_objs['xglobal'+targets[1].name])])
+
+
+        return [create_field_decomp, matop_create_submats_op] + [call_coupled_struct_callback, shell_set_ctx, create_submats, xglobal_pn1, xglobal_pn2]
 
 
 class Solver:
@@ -1554,17 +1699,32 @@ class CoupledSolver(Solver):
         targets = injectsolve.expr.rhs.fielddata.targets
 
         local_x_target1 = petsc_call('DMCreateLocalVector',
-                                    [dmda, Byref(solver_objs['xlocal'+targets[0].name])])
+                                    [solver_objs['subdms'].indexed[0], Byref(solver_objs['xlocal'+targets[0].name])])
 
         local_x_target2 = petsc_call('DMCreateLocalVector',
-                                    [dmda, Byref(solver_objs['xlocal'+targets[1].name])])
+                                    [solver_objs['subdms'].indexed[1], Byref(solver_objs['xlocal'+targets[1].name])])
 
         vec_replace_array = self.timedep.replace_array(solver_objs)
 
-        dm_local_to_global_x = petsc_call(
-            'DMLocalToGlobal', [dmda, solver_objs['x_local'], 'INSERT_VALUES',
-                                solver_objs['x_global']]
+        dm_local_to_global_xpn1 = petsc_call(
+            'DMLocalToGlobal', [solver_objs['subdms'].indexed[0], solver_objs['xlocal'+targets[0].name], 'INSERT_VALUES',
+                                solver_objs['xglobal'+targets[0].name]]
         )
+
+        dm_local_to_global_xpn2 = petsc_call(
+            'DMLocalToGlobal', [solver_objs['subdms'].indexed[1], solver_objs['xlocal'+targets[1].name], 'INSERT_VALUES',
+                                solver_objs['xglobal'+targets[1].name]]
+        )
+
+        scatterpn1_create = petsc_call('VecScatterCreate', [solver_objs['x_global'], solver_objs['fields'].indexed[0], solver_objs['xglobal'+targets[0].name], Null, Byref(solver_objs['scatterpn1'])])
+        scatterpn2_create = petsc_call('VecScatterCreate', [solver_objs['x_global'], solver_objs['fields'].indexed[1], solver_objs['xglobal'+targets[1].name], Null, Byref(solver_objs['scatterpn2'])])
+        
+        vec_scatter_begin_pn1 = petsc_call('VecScatterBegin', [solver_objs['scatterpn1'], solver_objs['xglobal'+targets[0].name], solver_objs['x_global'], 'INSERT_VALUES', 'SCATTER_REVERSE'])
+        vec_scatter_end_pn1 = petsc_call('VecScatterEnd', [solver_objs['scatterpn1'], solver_objs['xglobal'+targets[0].name], solver_objs['x_global'], 'INSERT_VALUES', 'SCATTER_REVERSE'])
+
+        vec_scatter_begin_pn2 = petsc_call('VecScatterBegin', [solver_objs['scatterpn2'], solver_objs['xglobal'+targets[1].name], solver_objs['x_global'], 'INSERT_VALUES', 'SCATTER_REVERSE'])
+        vec_scatter_end_pn2 = petsc_call('VecScatterEnd', [solver_objs['scatterpn2'], solver_objs['xglobal'+targets[1].name], solver_objs['x_global'], 'INSERT_VALUES', 'SCATTER_REVERSE'])
+        
 
         dm_local_to_global_b = petsc_call(
             'DMLocalToGlobal', [dmda, solver_objs['b_local'], 'INSERT_VALUES',
@@ -1575,24 +1735,49 @@ class CoupledSolver(Solver):
             solver_objs['snes'], Null, solver_objs['x_global']]
         )
 
-        dm_global_to_local_x = petsc_call('DMGlobalToLocal', [
-            dmda, solver_objs['x_global'], 'INSERT_VALUES', solver_objs['x_local']]
+        vec_scatter_begin_forward_pn1 = petsc_call('VecScatterBegin', [solver_objs['scatterpn1'], solver_objs['x_global'], solver_objs['xglobal'+targets[0].name], 'INSERT_VALUES', 'SCATTER_FORWARD'])
+        vec_scatter_end_forward_pn1 = petsc_call('VecScatterEnd', [solver_objs['scatterpn1'], solver_objs['x_global'], solver_objs['xglobal'+targets[0].name], 'INSERT_VALUES', 'SCATTER_FORWARD'])
+
+        vec_scatter_begin_forward_pn2 = petsc_call('VecScatterBegin', [solver_objs['scatterpn2'], solver_objs['x_global'], solver_objs['xglobal'+targets[1].name], 'INSERT_VALUES', 'SCATTER_FORWARD'])
+        vec_scatter_end_forward_pn2 = petsc_call('VecScatterEnd', [solver_objs['scatterpn2'], solver_objs['x_global'], solver_objs['xglobal'+targets[1].name], 'INSERT_VALUES', 'SCATTER_FORWARD'])
+
+
+        dm_global_to_local_xpn1 = petsc_call('DMGlobalToLocal', [
+            solver_objs['subdms'].indexed[0], solver_objs['xglobal'+targets[0].name], 'INSERT_VALUES', solver_objs['xlocal'+targets[0].name]]
         )
 
-        # run_solver_calls = (struct_assignment,) + (
-        #     rhs_call,
-        #     local_x,
-        # ) + vec_replace_array + (
-        #     dm_local_to_global_x,
-        #     dm_local_to_global_b,
-        #     # snes_solve,
-        #     dm_global_to_local_x,
-        #     BlankLine,
-        # )
+        dm_global_to_local_xpn2 = petsc_call('DMGlobalToLocal', [
+            solver_objs['subdms'].indexed[1], solver_objs['xglobal'+targets[1].name], 'INSERT_VALUES', solver_objs['xlocal'+targets[1].name]]
+        )
 
-        run_solver_calls = (local_x_target1,local_x_target2) + vec_replace_array + (
+        run_solver_calls = (struct_assignment,) + (
+            # rhs_call,
+            local_x_target1,
+            local_x_target2,
+        ) + vec_replace_array + (
+            dm_local_to_global_xpn1,
+            dm_local_to_global_xpn2,
+            scatterpn1_create,
+            scatterpn2_create,
+            vec_scatter_begin_pn1,
+            vec_scatter_end_pn1,
+            vec_scatter_begin_pn2,
+            vec_scatter_end_pn2,
+            c.Line('PetscCall(VecView(xglobal0, PETSC_VIEWER_STDOUT_SELF));'),
+            # dm_local_to_global_b,
             snes_solve,
+            vec_scatter_begin_forward_pn1,
+            vec_scatter_end_forward_pn1,
+            vec_scatter_begin_forward_pn2,
+            vec_scatter_end_forward_pn2,
+            dm_global_to_local_xpn1,
+            dm_global_to_local_xpn2,
+            BlankLine,
         )
+
+        # run_solver_calls = (local_x_target1,local_x_target2) + vec_replace_array + (
+        #     snes_solve,
+        # )
         return List(body=run_solver_calls)
 
 
@@ -1833,6 +2018,9 @@ void = 'void'
 jacctx = Symbol('jctx')
 submatctx = Symbol('submatctx')
 dummyptr = DummyArg('dummy')
+
+#TODO: 
+# submatrix structs etc should be here -> they're not specific to each solve, they can be re-used
 
 
 # TODO: Don't use c.Line here?

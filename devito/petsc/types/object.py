@@ -48,6 +48,8 @@ class CallbackDM(LocalObject):
     def stencil_width(self):
         return self._stencil_width
 
+    # _C_modifier = '(void*)'
+
 
 class Mat(LocalObject):
     """
@@ -178,6 +180,10 @@ class DummyArg(LocalObject):
 
 class MatReuse(LocalObject):
     dtype = CustomDtype('MatReuse')
+
+
+class VecScatter(LocalObject):
+    dtype = CustomDtype('VecScatter')
 
 
 class PETScStruct(CCompositeObject):
