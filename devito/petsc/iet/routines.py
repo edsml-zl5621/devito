@@ -400,6 +400,7 @@ class CBBuilder:
     def _make_formrhs(self, fielddata):
         # Compile formrhs `eqns` into an IET via recursive compilation
         formrhs = fielddata.formrhs
+        # from IPython import embed; embed()
         irs_formrhs, _ = self.rcompile(
             formrhs, options={'mpi': False}, sregistry=self.sregistry
         )
@@ -409,7 +410,7 @@ class CBBuilder:
         formrhs_callback = PETScCallable(
             self.sregistry.make_name(prefix='FormRHS_'), body_formrhs, retval=self.objs['err'],
             parameters=(
-                self.solver_objs['snes'], self.solver_objs['b_local']
+                self.solver_objs['subdms'], self.solver_objs['bglobal%s' % fielddata.target.name]
             )
         )
         self._formrhss.append(formrhs_callback)
@@ -421,9 +422,30 @@ class CBBuilder:
 
         dmda = sobjs['callbackdm']
 
-        snes_get_dm = petsc_call('SNESGetDM', [sobjs['snes'], Byref(dmda)])
+        target = fielddata.target
+
+        # obvs should pass correct DMDA as a arg to function instead 
+        if target.name =='pn1':
+            bglobal = sobjs['bglobalpn1']
+            expr = DummyExpr(dmda, sobjs['subdms'].indexed[0])
+        else:
+            bglobal = sobjs['bglobalpn2']
+            expr = DummyExpr(dmda, sobjs['subdms'].indexed[1])
 
         b_arr = fielddata.arrays['b_tmp']
+
+        dm_get_local_bvec = petsc_call(
+            'DMGetLocalVector', [dmda, Byref(sobjs['b_local'])]
+        )
+
+        global_to_local_begin = petsc_call(
+            'DMGlobalToLocalBegin', [dmda, bglobal,
+                                     'INSERT_VALUES', sobjs['b_local']]
+        )
+
+        global_to_local_end = petsc_call('DMGlobalToLocalEnd', [
+            dmda, bglobal, 'INSERT_VALUES', sobjs['b_local']
+        ])
 
         vec_get_array = petsc_call(
             'VecGetArray', [sobjs['b_local'], Byref(b_arr._C_symbol)]
@@ -441,16 +463,31 @@ class CBBuilder:
             'DMGetApplicationContext', [dmda, Byref(jacctx._C_symbol)]
         )
 
+        dm_local_to_global_begin = petsc_call('DMLocalToGlobalBegin', [
+            dmda, sobjs['b_local'], 'INSERT_VALUES', bglobal
+        ])
+
+        dm_local_to_global_end = petsc_call('DMLocalToGlobalEnd', [
+            dmda, sobjs['b_local'], 'INSERT_VALUES', bglobal
+        ])
+
         vec_restore_array = petsc_call(
             'VecRestoreArray', [sobjs['b_local'], Byref(b_arr._C_symbol)]
         )
 
-        body = body._rebuild(body=body.body + (vec_restore_array,))
+        body = body._rebuild(body=body.body + (dm_local_to_global_begin, dm_local_to_global_end, vec_restore_array))
+        # body = body._rebuild(body=body.body)
 
         stacks = (
-            snes_get_dm,
-            dm_get_app_context,
+            # snes_get_dm,
+            expr,
+            dm_get_local_bvec,
+            global_to_local_begin,
+            global_to_local_end,
             vec_get_array,
+            dm_get_app_context,
+            # vec_get_array,
+            # dm_get_app_context,
             dm_get_local_info
         )
 
@@ -460,7 +497,7 @@ class CBBuilder:
 
         formrhs_body = CallableBody(
             List(body=[body]),
-            init=(petsc_func_begin_user,),
+            init=(petsc_func_begin_user),
             stacks=stacks+tuple(dereference_funcs),
             retstmt=(Call('PetscFunctionReturn', arguments=[0]),)
         )
@@ -602,6 +639,7 @@ class CCBBuilder(CBBuilder):
         self._make_formfunc(data1)
 
         self._make_formrhs(data0)
+        self._make_formrhs(data1)
 
         # self._create_submatrices()
 
@@ -829,15 +867,19 @@ class CCBBuilder(CBBuilder):
 
         # from IPython import embed; embed()
         # obvs change all this, it should eventually be J00 etc
-        mat_shell_get_ctx = petsc_call(
-            'MatShellGetContext', [sobjs['Jac'], Byref(jacctx._C_symbol)]
-        )
+        # mat_shell_get_ctx = petsc_call(
+        #     'MatShellGetContext', [sobjs['Jac'], Byref(jacctx._C_symbol)]
+        # )
 
         mat_get_dm = petsc_call('MatGetDM', [sobjs['Jac'], Byref(dmda)])
 
-        # dm_get_app_context = petsc_call(
-        #     'DMGetApplicationContext', [dmda, Byref(jacctx._C_symbol)]
+        # mat_shell_get_ctx = petsc_call(
+        #     'MatShellGetContext', [sobjs['Jac'], Byref(jacctx._C_symbol)]
         # )
+
+        dm_get_app_context = petsc_call(
+            'DMGetApplicationContext', [dmda, Byref(jacctx._C_symbol)]
+        )
 
         dm_get_local_xvec = petsc_call(
             'DMGetLocalVector', [dmda, Byref(sobjs['X_local'])]
@@ -910,9 +952,9 @@ class CCBBuilder(CBBuilder):
         )
 
         stacks = (
-            mat_shell_get_ctx,
+            # mat_shell_get_ctx,
             mat_get_dm,
-            # dm_get_app_context,
+            dm_get_app_context,
             dm_get_local_xvec,
             global_to_local_begin,
             global_to_local_end,
@@ -1500,11 +1542,7 @@ class CoupledSetup(BaseSetup):
 
         targets = injectsolve.expr.rhs.fielddata.targets
 
-        local_b_pn1 = petsc_call('DMCreateLocalVector',
-                             [dmda, Byref(solver_objs['blocal'+targets[0].name])])
-
-        local_b_pn2 = petsc_call('DMCreateLocalVector',
-                                [dmda, Byref(solver_objs['blocal'+targets[1].name])])
+        # from IPython import embed; embed()
 
         snes_get_ksp = petsc_call('SNESGetKSP',
                                   [solver_objs['snes'], Byref(solver_objs['ksp'])])
@@ -1561,8 +1599,10 @@ class CoupledSetup(BaseSetup):
             snes_set_type,
             global_x,
             global_b,
-            local_b_pn1,
-            local_b_pn2,
+            # local_b_pn1,
+            # local_b_pn2,
+            # global_b_pn1,
+            # global_b_pn2,
             snes_get_ksp,
             ksp_set_tols,
             ksp_set_type,
@@ -1619,9 +1659,13 @@ class CoupledSetup(BaseSetup):
         xglobal_pn2 = petsc_call('DMCreateGlobalVector',
                                 [solver_objs['subdms'].indexed[1], Byref(solver_objs['xglobal'+targets[1].name])])
 
-        # bglobal
+        global_b_pn1 = petsc_call('DMCreateGlobalVector',
+                             [solver_objs['subdms'].indexed[0], Byref(solver_objs['bglobal'+targets[0].name])])
 
-        return [create_field_decomp, matop_create_submats_op] + [call_coupled_struct_callback, shell_set_ctx, create_submats, xglobal_pn1, xglobal_pn2]
+        global_b_pn2 = petsc_call('DMCreateGlobalVector',
+                                [solver_objs['subdms'].indexed[1], Byref(solver_objs['bglobal'+targets[1].name])])
+
+        return [create_field_decomp, matop_create_submats_op] + [call_coupled_struct_callback, shell_set_ctx, create_submats, xglobal_pn1, xglobal_pn2, global_b_pn1, global_b_pn2]
 
 
 class Solver:
@@ -1705,11 +1749,13 @@ class CoupledSolver(Solver):
         """
         struct_assignment = self.timedep.assign_time_iters(solver_objs['userctx'])
 
-        rhs_callback = cbbuilder.formrhs_callback
+        rhs_callbacks = cbbuilder.formrhss
 
         dmda = solver_objs['dmda']
+    
+        rhs_call_pn1 = petsc_call(rhs_callbacks[0].name, list(rhs_callbacks[0].parameters))
 
-        rhs_call = petsc_call(rhs_callback.name, list(rhs_callback.parameters))
+        rhs_call_pn2 = petsc_call(rhs_callbacks[1].name, list(rhs_callbacks[1].parameters))
 
         # local_x = petsc_call('DMCreateLocalVector',
         #                      [dmda, Byref(solver_objs['x_local'])])
@@ -1746,13 +1792,20 @@ class CoupledSolver(Solver):
         vec_scatter_end_pn2 = petsc_call('VecScatterEnd', [solver_objs['scatterpn2'], solver_objs['xglobal'+targets[1].name], solver_objs['x_global'], 'INSERT_VALUES', 'SCATTER_REVERSE'])
         
 
-        dm_local_to_global_b = petsc_call(
-            'DMLocalToGlobal', [dmda, solver_objs['b_local'], 'INSERT_VALUES',
-                                solver_objs['b_global']]
-        )
+        vec_scatter_begin_b_pn1 = petsc_call('VecScatterBegin', [solver_objs['scatterpn1'], solver_objs['bglobal'+targets[0].name], solver_objs['b_global'], 'INSERT_VALUES', 'SCATTER_REVERSE'])
+        vec_scatter_end__bpn1 = petsc_call('VecScatterEnd', [solver_objs['scatterpn1'], solver_objs['bglobal'+targets[0].name], solver_objs['b_global'], 'INSERT_VALUES', 'SCATTER_REVERSE'])
+        
+        vec_scatter_begin_b_pn2 = petsc_call('VecScatterBegin', [solver_objs['scatterpn2'], solver_objs['bglobal'+targets[1].name], solver_objs['b_global'], 'INSERT_VALUES', 'SCATTER_REVERSE'])
+        vec_scatter_end_b_pn2 = petsc_call('VecScatterEnd', [solver_objs['scatterpn2'], solver_objs['bglobal'+targets[1].name], solver_objs['b_global'], 'INSERT_VALUES', 'SCATTER_REVERSE'])
+        
+
+        # dm_local_to_global_b = petsc_call(
+        #     'DMLocalToGlobal', [dmda, solver_objs['b_local'], 'INSERT_VALUES',
+        #                         solver_objs['b_global']]
+        # )
 
         snes_solve = petsc_call('SNESSolve', [
-            solver_objs['snes'], Null, solver_objs['x_global']]
+            solver_objs['snes'], solver_objs['b_global'], solver_objs['x_global']]
         )
 
         vec_scatter_begin_forward_pn1 = petsc_call('VecScatterBegin', [solver_objs['scatterpn1'], solver_objs['x_global'], solver_objs['xglobal'+targets[0].name], 'INSERT_VALUES', 'SCATTER_FORWARD'])
@@ -1771,7 +1824,8 @@ class CoupledSolver(Solver):
         )
 
         run_solver_calls = (struct_assignment,) + (
-            rhs_call,
+            rhs_call_pn1,
+            rhs_call_pn2,
             local_x_target1,
             local_x_target2,
         ) + vec_replace_array + (
@@ -1783,8 +1837,13 @@ class CoupledSolver(Solver):
             vec_scatter_end_pn1,
             vec_scatter_begin_pn2,
             vec_scatter_end_pn2,
-            c.Line('PetscCall(VecView(xglobal0, PETSC_VIEWER_STDOUT_SELF));'),
+            # c.Line('PetscCall(VecView(xglobal0, PETSC_VIEWER_STDOUT_SELF));'),
             # dm_local_to_global_b,
+            vec_scatter_begin_b_pn1,
+            vec_scatter_end__bpn1,
+            vec_scatter_begin_b_pn2,
+            vec_scatter_end_b_pn2,
+            c.Line('PetscCall(VecView(bglobal0, PETSC_VIEWER_STDOUT_SELF));'),
             snes_solve,
             vec_scatter_begin_forward_pn1,
             vec_scatter_end_forward_pn1,
