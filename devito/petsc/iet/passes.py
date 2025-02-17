@@ -165,6 +165,11 @@ class Builder:
 
 
 def populate_matrix_context(efuncs, objs):
+    name = 'PopulateMatContext'
+
+    if not efuncs[name]:
+        return
+
     subdms_expr = DummyExpr(
         FieldFromPointer(Subdms._C_symbol, jctx), Subdms._C_symbol
     )
@@ -176,12 +181,10 @@ def populate_matrix_context(efuncs, objs):
         init=(c.Line('PetscFunctionBeginUser;'),),
         retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
     )
-    cb = Callable('PopulateMatContext',
-        body, objs['err'],
+    efuncs[name] = Callable(
+        name, body, objs['err'],
         parameters=[jctx, Subdms, Fields]
     )
-    # todo: only want to add this if a coupled solver is used
-    efuncs['PopulateMatContext'] = cb
 
 
 

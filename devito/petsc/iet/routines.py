@@ -581,12 +581,13 @@ class CCBBuilder(CBBuilder):
     def __init__(self, injectsolve, objs, solver_objs, **kwargs):
         self._submatrices_callback = None
         super().__init__(injectsolve, objs, solver_objs, **kwargs)
-        self._coupled_struct_callback = None
+        # self._coupled_struct_callback = None
         self._make_coupled_ctx()
         self._make_local_coupled_ctx()
         self._make_whole_matvec()
         self._make_whole_formfunc()
         self._create_submatrices()
+        self._efuncs['PopulateMatContext'] = Symbol('dummy')
         # self._populate_coupled_ctx()
 
     @property
@@ -610,9 +611,9 @@ class CCBBuilder(CBBuilder):
     def main_formfunc_callback(self):
         return self._main_formfunc_callback
 
-    @property
-    def coupled_struct_callback(self):
-        return self._coupled_struct_callback
+    # @property
+    # def coupled_struct_callback(self):
+    #     return self._coupled_struct_callback
 
     def _make_core(self):
         # let's just start by generating the diagonal sub matrices, then will extend to off diags
