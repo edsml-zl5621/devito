@@ -1,9 +1,10 @@
 import cgen as c
 
 from devito.passes.iet.engine import iet_pass
-from devito.ir.iet import Transformer, MapNodes, Iteration, BlankLine
-from devito.symbolics import Byref, Macro
-from devito.petsc.types import (PetscMPIInt, PetscErrorCode, FieldData, MultipleFieldData)
+from devito.ir.iet import Transformer, MapNodes, Iteration, BlankLine, DummyExpr, CallableBody, List, Call, Callable
+from devito.symbolics import Byref, Macro, FieldFromPointer
+from devito.petsc.types import (PetscMPIInt, PetscErrorCode, FieldData, MultipleFieldData,
+                                SubDM, IS, PETScStruct)
 from devito.petsc.iet.nodes import InjectSolveDummy
 from devito.petsc.utils import core_metadata
 from devito.petsc.iet.routines import (CBBuilder, CCBBuilder, BaseObjectBuilder, CoupledObjectBuilder,
@@ -46,6 +47,9 @@ def lower_petsc(iet, **kwargs):
 
         efuncs.update(builder.cbbuilder.efuncs)
 
+    # TODO: Only add this efunc if actually required
+    populate_matrix_context(efuncs, objs)
+
     iet = Transformer(subs).visit(iet)
     
     init = init_petsc(**kwargs)
@@ -57,7 +61,6 @@ def lower_petsc(iet, **kwargs):
     iet = iet._rebuild(body=body)
     metadata = core_metadata()
     metadata.update({'efuncs': tuple(efuncs.values())})
-    # from IPython import embed; embed()
     return iet, metadata
 
 
@@ -161,9 +164,41 @@ class Builder:
             )
 
 
+def populate_matrix_context(efuncs, objs):
+    subdms_expr = DummyExpr(
+        FieldFromPointer(Subdms._C_symbol, jctx), Subdms._C_symbol
+    )
+    fields_expr = DummyExpr(
+        FieldFromPointer(Fields._C_symbol, jctx), Fields._C_symbol
+    )
+    body = CallableBody(
+        List(body=[subdms_expr, fields_expr]),
+        init=(c.Line('PetscFunctionBeginUser;'),),
+        retstmt=tuple([Call('PetscFunctionReturn', arguments=[0])])
+    )
+    cb = Callable('PopulateMatContext',
+        body, objs['err'],
+        parameters=[jctx, Subdms, Fields]
+    )
+    # todo: only want to add this if a coupled solver is used
+    efuncs['PopulateMatContext'] = cb
+
+
+
 Null = Macro('NULL')
 void = 'void'
 
 
 # TODO: Don't use c.Line here?
 petsc_func_begin_user = c.Line('PetscFunctionBeginUser;')
+
+
+# JacMatrixCtx struct members
+Subdms = SubDM(name='subdms', nindices=1)
+Fields = IS(name='fields', nindices=1)
+
+jctx = PETScStruct(
+    name='jctx', pname='JacobianCtx',
+    fields=[Subdms, Fields], liveness='lazy'
+)
+
