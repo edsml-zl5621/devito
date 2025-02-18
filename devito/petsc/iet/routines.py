@@ -13,7 +13,6 @@ from devito.petsc.types import PETScArray
 from devito.petsc.iet.nodes import (PETScCallable, FormFunctionCallback,
                                     MatVecCallback)
 from devito.petsc.iet.utils import petsc_call, petsc_struct
-from devito.ir.support import SymbolRegistry
 
 
 class PETScCallbackBuilder:
