@@ -17,7 +17,8 @@ from devito.symbolics import (retrieve_functions, retrieve_indexed, evalrel,  # 
                               retrieve_derivatives, sympy_dtype)
 from devito.tools import as_tuple
 from devito.types import (Array, Bundle, FIndexed, LocalObject, Object,
-                          Symbol as dSymbol, CompositeObject)
+                          ComponentAccess, StencilDimension, Symbol as dSymbol,
+                          CompositeObject)
 from devito.types.basic import AbstractSymbol
 
 
