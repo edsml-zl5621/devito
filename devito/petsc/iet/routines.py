@@ -352,8 +352,8 @@ class CallbackBuilder:
         irs_formrhs, _ = self.rcompile(injectsolve.expr.rhs.formrhs,
                                        options={'mpi': False}, sregistry=self.sregistry)
         body_formrhs = self._create_form_rhs_body(injectsolve,
-                                                 List(body=irs_formrhs.uiet.body),
-                                                 solver_objs, objs)
+                                                  List(body=irs_formrhs.uiet.body),
+                                                  solver_objs, objs)
 
         formrhs_callback = PETScCallable(
             self.sregistry.make_name(prefix='FormRHS_'), body_formrhs, retval=objs['err'],
