@@ -263,7 +263,6 @@ class Operator(Callable):
         """
         # Create a symbol registry
         kwargs.setdefault('sregistry', SymbolRegistry())
-        kwargs.setdefault('concretize_mapper', {})
 
         expressions = as_tuple(expressions)
 
