@@ -5,7 +5,7 @@ import pytest
 from conftest import skipif
 from devito import Grid, Function, TimeFunction, Eq, Operator, switchconfig
 from devito.ir.iet import (Call, ElementalFunction, Definition, DummyExpr,
-                           FindNodes, PointerCast, retrieve_iteration_tree)
+                           FindNodes, retrieve_iteration_tree)
 from devito.types import Constant, CCompositeObject
 from devito.passes.iet.languages.C import CDataManager
 from devito.petsc.types import (DM, Mat, LocalVec, PetscMPIInt, KSP,
@@ -51,28 +51,22 @@ def test_petsc_functions():
     grid = Grid((2, 2))
     x, y = grid.dimensions
 
-    ptr0 = PETScArray(name='ptr0', dimensions=grid.dimensions, dtype=np.float32)
-    ptr1 = PETScArray(name='ptr1', dimensions=grid.dimensions, dtype=np.float32,
-                      is_const=True)
-    ptr2 = PETScArray(name='ptr2', dimensions=grid.dimensions, dtype=np.float64,
-                      is_const=True)
-    ptr3 = PETScArray(name='ptr3', dimensions=grid.dimensions, dtype=np.int32)
-    ptr4 = PETScArray(name='ptr4', dimensions=grid.dimensions, dtype=np.int64,
-                      is_const=True)
+    f0 = Function(name='f', grid=grid, space_order=2, dtype=np.float32)
+    f1 = Function(name='f', grid=grid, space_order=2, dtype=np.float64)
+
+    ptr0 = PETScArray(name='ptr0', target=f0)
+    ptr1 = PETScArray(name='ptr1', target=f0, is_const=True)
+    ptr2 = PETScArray(name='ptr2', target=f1, is_const=True)
 
     defn0 = Definition(ptr0)
     defn1 = Definition(ptr1)
     defn2 = Definition(ptr2)
-    defn3 = Definition(ptr3)
-    defn4 = Definition(ptr4)
 
     expr = DummyExpr(ptr0.indexed[x, y], ptr1.indexed[x, y] + 1)
 
     assert str(defn0) == 'float *restrict ptr0_vec;'
     assert str(defn1) == 'const float *restrict ptr1_vec;'
     assert str(defn2) == 'const double *restrict ptr2_vec;'
-    assert str(defn3) == 'int *restrict ptr3_vec;'
-    assert str(defn4) == 'const long *restrict ptr4_vec;'
     assert str(expr) == 'ptr0[x][y] = ptr1[x][y] + 1;'
 
 
@@ -86,7 +80,7 @@ def test_petsc_subs():
     f1 = Function(name='f1', grid=grid, space_order=2)
     f2 = Function(name='f2', grid=grid, space_order=2)
 
-    arr = PETScArray(name='arr', dimensions=f2.dimensions, dtype=f2.dtype)
+    arr = PETScArray(name='arr', target=f2)
 
     eqn = Eq(f1, f2.laplace)
     eqn_subs = eqn.subs(f2, arr)
@@ -129,12 +123,12 @@ def test_petsc_solve():
     rhs_expr = FindNodes(Expression).visit(formrhs_callback[0])
 
     assert str(action_expr[-1].expr.rhs) == \
-        'matvec->h_x**(-2)*x_matvec_f[x + 1, y + 2]' + \
-        ' - 2.0*matvec->h_x**(-2)*x_matvec_f[x + 2, y + 2]' + \
-        ' + matvec->h_x**(-2)*x_matvec_f[x + 3, y + 2]' + \
-        ' + matvec->h_y**(-2)*x_matvec_f[x + 2, y + 1]' + \
-        ' - 2.0*matvec->h_y**(-2)*x_matvec_f[x + 2, y + 2]' + \
-        ' + matvec->h_y**(-2)*x_matvec_f[x + 2, y + 3]'
+        'x_matvec_f[x + 1, y + 2]/lctx->h_x**2' + \
+        ' - 2.0*x_matvec_f[x + 2, y + 2]/lctx->h_x**2' + \
+        ' + x_matvec_f[x + 3, y + 2]/lctx->h_x**2' + \
+        ' + x_matvec_f[x + 2, y + 1]/lctx->h_y**2' + \
+        ' - 2.0*x_matvec_f[x + 2, y + 2]/lctx->h_y**2' + \
+        ' + x_matvec_f[x + 2, y + 3]/lctx->h_y**2'
 
     assert str(rhs_expr[-1].expr.rhs) == 'g[x + 2, y + 2]'
 
@@ -174,9 +168,8 @@ def test_multiple_petsc_solves():
 
     callable_roots = [meta_call.root for meta_call in op._func_table.values()]
 
-    # One FormRHS, one MatShellMult and one FormFunction per solve
-    # One PopulateMatContext for all solves
-    assert len(callable_roots) == 7
+    # One FormRHS, MatShellMult, FormFunction, PopulateMatContext per solve
+    assert len(callable_roots) == 8
 
 
 @skipif('petsc')
@@ -184,33 +177,37 @@ def test_petsc_cast():
     """
     Test casting of PETScArray.
     """
-    g0 = Grid((2))
-    g1 = Grid((2, 2))
-    g2 = Grid((2, 2, 2))
+    grid1 = Grid((2))
+    grid2 = Grid((2, 2))
+    grid3 = Grid((4, 5, 6))
 
-    arr0 = PETScArray(name='arr0', dimensions=g0.dimensions, shape=g0.shape)
-    arr1 = PETScArray(name='arr1', dimensions=g1.dimensions, shape=g1.shape)
-    arr2 = PETScArray(name='arr2', dimensions=g2.dimensions, shape=g2.shape)
+    f1 = Function(name='f1', grid=grid1, space_order=2)
+    f2 = Function(name='f2', grid=grid2, space_order=4)
+    f3 = Function(name='f3', grid=grid3, space_order=6)
 
-    arr3 = PETScArray(name='arr3', dimensions=g1.dimensions,
-                      shape=g1.shape, space_order=4)
+    eqn1 = Eq(f1.laplace, 10)
+    eqn2 = Eq(f2.laplace, 10)
+    eqn3 = Eq(f3.laplace, 10)
 
-    cast0 = PointerCast(arr0)
-    cast1 = PointerCast(arr1)
-    cast2 = PointerCast(arr2)
-    cast3 = PointerCast(arr3)
+    petsc1 = PETScSolve(eqn1, f1)
+    petsc2 = PETScSolve(eqn2, f2)
+    petsc3 = PETScSolve(eqn3, f3)
 
-    assert str(cast0) == \
-        'float (*restrict arr0) = (float (*)) arr0_vec;'
-    assert str(cast1) == \
-        'float (*restrict arr1)[da_so_1_info.gxm] = ' + \
-        '(float (*)[da_so_1_info.gxm]) arr1_vec;'
-    assert str(cast2) == \
-        'float (*restrict arr2)[da_so_1_info.gym][da_so_1_info.gxm] = ' + \
-        '(float (*)[da_so_1_info.gym][da_so_1_info.gxm]) arr2_vec;'
-    assert str(cast3) == \
-        'float (*restrict arr3)[da_so_4_info.gxm] = ' + \
-        '(float (*)[da_so_4_info.gxm]) arr3_vec;'
+    with switchconfig(openmp=False):
+        op1 = Operator(petsc1, opt='noop')
+        op2 = Operator(petsc2, opt='noop')
+        op3 = Operator(petsc3, opt='noop')
+
+    cb1 = [meta_call.root for meta_call in op1._func_table.values()]
+    cb2 = [meta_call.root for meta_call in op2._func_table.values()]
+    cb3 = [meta_call.root for meta_call in op3._func_table.values()]
+
+    assert 'float (*restrict x_matvec_f1) = ' + \
+        '(float (*)) x_matvec_f1_vec;' in str(cb1[0])
+    assert 'float (*restrict x_matvec_f2)[info.gxm] = ' + \
+        '(float (*)[info.gxm]) x_matvec_f2_vec;' in str(cb2[0])
+    assert 'float (*restrict x_matvec_f3)[info.gym][info.gxm] = ' + \
+        '(float (*)[info.gym][info.gxm]) x_matvec_f3_vec;' in str(cb3[0])
 
 
 @skipif('petsc')
@@ -229,8 +226,8 @@ def test_LinearSolveExpr():
     assert linsolveexpr.target == f
     # Check the solver parameters
     assert linsolveexpr.solver_parameters == \
-        {'ksp_type': 'gmres', 'pc_type': 'jacobi', 'ksp_rtol': 1e-07,
-         'ksp_atol': 1e-50, 'ksp_divtol': 10000.0, 'ksp_max_it': 10000}
+        {'ksp_type': 'gmres', 'pc_type': 'jacobi', 'ksp_rtol': 1e-05,
+         'ksp_atol': 1e-50, 'ksp_divtol': 100000.0, 'ksp_max_it': 10000}
 
 
 @skipif('petsc')
@@ -258,23 +255,15 @@ def test_dmda_create():
         op3 = Operator(petsc3, opt='noop')
 
     assert 'PetscCall(DMDACreate1d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
-        '2,1,2,NULL,&(da_so_2)));' in str(op1)
+        '2,1,2,NULL,&(da_0)));' in str(op1)
 
     assert 'PetscCall(DMDACreate2d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
-        'DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,2,2,1,1,1,4,NULL,NULL,&(da_so_4)));' \
+        'DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,2,2,1,1,1,4,NULL,NULL,&(da_0)));' \
         in str(op2)
 
     assert 'PetscCall(DMDACreate3d(PETSC_COMM_SELF,DM_BOUNDARY_GHOSTED,' + \
         'DM_BOUNDARY_GHOSTED,DM_BOUNDARY_GHOSTED,DMDA_STENCIL_BOX,6,5,4' + \
-        ',1,1,1,1,6,NULL,NULL,NULL,&(da_so_6)));' in str(op3)
-
-    # Check unique DMDA is created per grid, per space_order
-    f4 = Function(name='f4', grid=grid2, space_order=6)
-    eqn4 = Eq(f4.laplace, 10)
-    petsc4 = PETScSolve(eqn4, f4)
-    with switchconfig(openmp=False):
-        op4 = Operator(petsc2+petsc2+petsc4, opt='noop')
-    assert str(op4).count('DMDACreate2d') == 2
+        ',1,1,1,1,6,NULL,NULL,NULL,&(da_0)));' in str(op3)
 
 
 @skipif('petsc')
@@ -302,8 +291,8 @@ def test_cinterface_petsc_struct():
     assert 'include "%s.h"' % name in ccode
 
     # The public `struct MatContext` only appears in the header file
-    assert 'struct MatContext\n{' not in ccode
-    assert 'struct MatContext\n{' in hcode
+    assert 'struct J_0_ctx\n{' not in ccode
+    assert 'struct J_0_ctx\n{' in hcode
 
 
 @skipif('petsc')
@@ -578,7 +567,7 @@ def test_callback_arguments():
     assert len(ff.parameters) == 4
 
     assert str(mv.parameters) == '(J_0, X_global_0, Y_global_0)'
-    assert str(ff.parameters) == '(snes_0, X_global_0, Y_global_0, dummy_0)'
+    assert str(ff.parameters) == '(snes_0, X_global_0, F_global_0, dummy)'
 
 
 @skipif('petsc')
@@ -662,7 +651,7 @@ def test_petsc_frees():
     assert str(frees[1]) == 'PetscCall(VecDestroy(&(x_global_0)));'
     assert str(frees[2]) == 'PetscCall(MatDestroy(&(J_0)));'
     assert str(frees[3]) == 'PetscCall(SNESDestroy(&(snes_0)));'
-    assert str(frees[4]) == 'PetscCall(DMDestroy(&(da_so_2)));'
+    assert str(frees[4]) == 'PetscCall(DMDestroy(&(da_0)));'
 
 
 @skipif('petsc')
@@ -739,10 +728,10 @@ def test_time_loop():
     body1 = str(op1.body)
     rhs1 = str(op1._func_table['FormRHS_0'].root.ccode)
 
-    assert 'ctx.t0 = t0' in body1
-    assert 'ctx.t1 = t1' not in body1
-    assert 'formrhs->t0' in rhs1
-    assert 'formrhs->t1' not in rhs1
+    assert 'ctx0.t0 = t0' in body1
+    assert 'ctx0.t1 = t1' not in body1
+    assert 'lctx->t0' in rhs1
+    assert 'lctx->t1' not in rhs1
 
     # Non-modulo time stepping
     u2 = TimeFunction(name='u2', grid=grid, space_order=2, save=5)
@@ -754,8 +743,8 @@ def test_time_loop():
     body2 = str(op2.body)
     rhs2 = str(op2._func_table['FormRHS_0'].root.ccode)
 
-    assert 'ctx.time = time' in body2
-    assert 'formrhs->time' in rhs2
+    assert 'ctx0.time = time' in body2
+    assert 'lctx->time' in rhs2
 
     # Modulo time stepping with more than one time step
     # used in one of the callback functions
@@ -766,10 +755,10 @@ def test_time_loop():
     body3 = str(op3.body)
     rhs3 = str(op3._func_table['FormRHS_0'].root.ccode)
 
-    assert 'ctx.t0 = t0' in body3
-    assert 'ctx.t1 = t1' in body3
-    assert 'formrhs->t0' in rhs3
-    assert 'formrhs->t1' in rhs3
+    assert 'ctx0.t0 = t0' in body3
+    assert 'ctx0.t1 = t1' in body3
+    assert 'lctx->t0' in rhs3
+    assert 'lctx->t1' in rhs3
 
     # Multiple petsc solves within the same time loop
     v2 = Function(name='v2', grid=grid, space_order=2)
@@ -781,5 +770,5 @@ def test_time_loop():
         op4 = Operator(petsc4 + petsc5)
     body4 = str(op4.body)
 
-    assert 'ctx.t0 = t0' in body4
-    assert body4.count('ctx.t0 = t0') == 1
+    assert 'ctx0.t0 = t0' in body4
+    assert body4.count('ctx0.t0 = t0') == 1

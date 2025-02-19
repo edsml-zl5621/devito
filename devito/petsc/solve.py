@@ -9,23 +9,22 @@ from devito.types.equation import InjectSolveEq
 from devito.operations.solve import eval_time_derivatives
 from devito.symbolics import retrieve_functions
 from devito.tools import as_tuple
-from devito.petsc.types import LinearSolveExpr, PETScArray
+from devito.petsc.types import LinearSolveExpr, PETScArray, DMDALocalInfo
 
 
 __all__ = ['PETScSolve']
 
 
 def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
-    prefixes = ['y_matvec', 'x_matvec', 'y_formfunc', 'x_formfunc', 'b_tmp']
+    prefixes = ['y_matvec', 'x_matvec', 'f_formfunc', 'x_formfunc', 'b_tmp']
+
+    localinfo = DMDALocalInfo(name='info', liveness='eager')
 
     arrays = {
         p: PETScArray(name='%s_%s' % (p, target.name),
-                           dtype=target.dtype,
-                           dimensions=target.space_dimensions,
-                           shape=target.grid.shape,
-                           liveness='eager',
-                           halo=[target.halo[d] for d in target.space_dimensions],
-                           space_order=target.space_order)
+                      target=target,
+                      liveness='eager',
+                      localinfo=localinfo)
         for p in prefixes
     }
 
@@ -47,7 +46,7 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         ))
 
         formfuncs.append(Eq(
-            arrays['y_formfunc'],
+            arrays['f_formfunc'],
             F_target.subs(targets_to_arrays(arrays['x_formfunc'], targets)),
             subdomain=eq.subdomain
         ))
@@ -60,8 +59,9 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
 
     funcs = retrieve_functions(eqns)
     time_mapper = generate_time_mapper(funcs)
+
     matvecs, formfuncs, formrhs = (
-        [eq.subs(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
+        [eq.xreplace(time_mapper) for eq in lst] for lst in (matvecs, formfuncs, formrhs)
     )
     # Placeholder equation for inserting calls to the solver and generating
     # correct time loop etc
@@ -74,7 +74,8 @@ def PETScSolve(eqns, target, solver_parameters=None, **kwargs):
         formrhs=formrhs,
         arrays=arrays,
         time_mapper=time_mapper,
-    ), subdomain=eq.subdomain)
+        localinfo=localinfo
+    ))
 
     return [inject_solve]
 
@@ -211,12 +212,24 @@ def generate_time_mapper(funcs):
     Replace time indices with `Symbols` in equations used within
     PETSc callback functions. These symbols are Uxreplaced at the IET
     level to align with the `TimeDimension` and `ModuloDimension` objects
-    present in the inital lowering.
+    present in the initial lowering.
     NOTE: All functions used in PETSc callback functions are attached to
     the `LinearSolveExpr` object, which is passed through the initial lowering
     (and subsequently dropped and replaced with calls to run the solver).
     Therefore, the appropriate time loop will always be correctly generated inside
     the main kernel.
+
+    Examples
+    --------
+    >>> funcs = [
+    >>>     f1(t + dt, x, y),
+    >>>     g1(t + dt, x, y),
+    >>>     g2(t, x, y),
+    >>>     f1(t, x, y)
+    >>> ]
+    >>> generate_time_mapper(funcs)
+    {t + dt: tau0, t: tau1}
+
     """
     time_indices = list({
         i if isinstance(d, SteppingDimension) else d

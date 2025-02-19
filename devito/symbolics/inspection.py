@@ -295,10 +295,10 @@ def sympy_dtype(expr, base=None):
     """
     Infer the dtype of the expression.
     """
+    # TODO: Edit/fix/update according to PR #2513
     dtypes = {base} - {None}
-    for i in expr.free_symbols:
-        try:
-            dtypes.add(i.dtype)
-        except AttributeError:
-            pass
+    for i in expr.args:
+        dtype = getattr(i, 'dtype', None)
+        if dtype:
+            dtypes.add(dtype)
     return infer_dtype(dtypes)
